@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}День 1. Первый запрос к LLM · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01-homework.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 01</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>API · HTTP · JSON</span>
+    </div>
+    <h1>День 1.<br><span>Первый запрос к LLM</span></h1>
+
+    <section class="homework-brief" aria-label="Домашнее задание первого дня">
+      <p class="homework-brief__prelude">Сначала посмотрите видео</p>
+      <p class="homework-brief__intro">Напишите минимальный код, который:</p>
+      <ul class="homework-brief__steps">
+        <li>отправляет запрос в LLM через API;</li>
+        <li>получает ответ;</li>
+        <li>выводит его в консоль или простой интерфейс (CLI/Web).</li>
+      </ul>
+
+      <div class="homework-brief__meta">
+        <div>
+          <span>Результат</span>
+          <p>Код, который отправляет запрос в LLM через API и получает ответ.</p>
+        </div>
+        <div>
+          <span>Формат</span>
+          <p>Видео + код</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="hero-facts" aria-label="Параметры задания">
+      <div class="hero-fact">
+        <span>Модель</span>
+        <strong>{{ model }}</strong>
+      </div>
+      <div class="hero-fact">
+        <span>Метод</span>
+        <strong><i class="live-dot" aria-hidden="true"></i> POST</strong>
+      </div>
+      <div class="hero-fact hero-fact--wide">
+        <span>Endpoint</span>
+        <strong>/chat/completions</strong>
+      </div>
+    </div>
+  </header>
+
+  <section class="composer" aria-labelledby="form-title">
+    <div class="section-heading">
+      <div>
+        <p class="section-kicker">Playground</p>
+        <h2 id="form-title">Новый запрос</h2>
+      </div>
+      <span class="model-badge">{{ model }}</span>
+    </div>
+
+    <form id="prompt-form" data-chat-url="{{ url_for('day01.chat') }}">
+      <label for="prompt">Сообщение для модели</label>
+      <textarea
+        id="prompt"
+        name="prompt"
+        rows="5"
+        placeholder="Например: Объясни простыми словами, что такое API"
+        required
+      ></textarea>
+      <div class="form-footer">
+        <span class="hint"><kbd>⌘ / Ctrl</kbd> + <kbd>Enter</kbd> — отправить</span>
+        <button id="submit-button" type="submit">
+          <span class="button-label">
+            Отправить
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M4 10h11M11 6l4 4-4 4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+          </span>
+          <span class="spinner" aria-hidden="true"></span>
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="history" aria-labelledby="history-title">
+    <div class="history__heading">
+      <div>
+        <p class="section-kicker">Локальная сессия</p>
+        <h2 id="history-title">Запросы и ответы</h2>
+      </div>
+      <span id="request-count" class="counter">0 запросов</span>
+    </div>
+
+    <div id="empty-state" class="empty-state">
+      <span class="empty-state__icon" aria-hidden="true">
+        <span>{</span><i></i><span>}</span>
+      </span>
+      <h3>Пока здесь тихо</h3>
+      <p>Первый отправленный запрос появится здесь вместе с ответом и полным JSON.</p>
+    </div>
+    <div id="request-list" class="request-list" aria-live="polite"></div>
+  </section>
+
+  <template id="request-template">
+    <article class="request-card">
+      <div class="request-card__topline">
+        <time class="request-time"></time>
+        <span class="request-status"></span>
+      </div>
+      <h3 class="request-card__label">Запрос</h3>
+      <p class="request-prompt"></p>
+      <div class="answer-block">
+        <h3>Ответ модели</h3>
+        <p class="assistant-answer"></p>
+      </div>
+      <details class="json-details">
+        <summary>
+          <span>JSON-ответ</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="json-content">
+          <div class="json-heading">
+            <span>Полный ответ API</span>
+            <button class="copy-button" type="button">Копировать</button>
+          </div>
+          <pre><code class="response-json"></code></pre>
+        </div>
+      </details>
+    </article>
+  </template>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/day01.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080a09">
+    <title>{% block title %}AI Advent · Домашние задания{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/shell.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/accessibility.css') }}">
+    {% block styles %}{% endblock %}
+  </head>
+  <body>
+    <a class="skip-link" href="#day-content">К содержимому</a>
+
+    <div class="ambient ambient--lime" aria-hidden="true"></div>
+    <div class="ambient ambient--violet" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="{{ url_for('day01.index') }}" aria-label="AI Advent — на главную">
+          <span class="brand__mark" aria-hidden="true">A</span>
+          <span class="brand__copy">
+            <strong>AI Advent</strong>
+            <small>Homework lab</small>
+          </span>
+        </a>
+
+        {% include "components/day_nav.html" %}
+
+        <div class="sidebar__footer">
+          <div class="progress-copy">
+            <span>Прогресс</span>
+            <strong>{{ completed_days }} / {{ advent_days|length }}</strong>
+          </div>
+          <progress value="{{ completed_days }}" max="{{ advent_days|length }}">
+            {{ completed_days }} из {{ advent_days|length }}
+          </progress>
+          <p>Каждый день — отдельная маленькая лаборатория.</p>
+        </div>
+      </aside>
+
+      <main id="day-content" class="workspace" tabindex="-1">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

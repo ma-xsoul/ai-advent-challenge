@@ -1,0 +1,25 @@
+<nav class="day-nav" aria-label="Дни челленджа">
+  <p class="day-nav__label">Маршрут</p>
+  <div class="day-nav__list">
+    {% for day in advent_days %}
+      <a
+        class="day-nav__item{% if day.number == active_day.number %} is-active{% endif %}"
+        href="{{ url_for(day.endpoint) }}"
+        {% if day.number == active_day.number %}aria-current="page"{% endif %}
+        {% if not day.visible %}hidden{% endif %}
+      >
+        <span class="day-nav__number">{{ "%02d"|format(day.number) }}</span>
+        <span class="day-nav__copy">
+          <strong>Day {{ day.number }}</strong>
+          <small>{{ day.title }}</small>
+        </span>
+        <span
+          class="day-nav__status day-nav__status--{{ 'done' if day.status == 'Готово' else 'soon' }}"
+          title="{{ day.status }}"
+        >
+          <span class="sr-only">{{ day.status }}</span>
+        </span>
+      </a>
+    {% endfor %}
+  </div>
+</nav>

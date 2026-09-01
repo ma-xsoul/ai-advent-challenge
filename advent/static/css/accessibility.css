@@ -1,0 +1,33 @@
+/*
+ * Keeps long navigation usable and restores an explicit focus target for the
+ * skip link. This layer loads after shell.css so interaction rules stay
+ * independent from the visual shell.
+ */
+
+.workspace:focus-visible {
+  border-radius: 10px;
+  outline: 2px solid var(--accent);
+  outline-offset: 7px;
+}
+
+@media (min-width: 901px) {
+  .day-nav {
+    flex: 1;
+    margin-right: -4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    scrollbar-color: rgba(184, 243, 108, 0.22) transparent;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+  }
+
+  .day-nav::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .day-nav::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(184, 243, 108, 0.22);
+  }
+}

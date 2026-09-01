@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Day 2 — Скоро · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day02.css') }}">
+{% endblock %}
+
+{% block content %}
+  <section class="day-two">
+    <div class="day-two__copy">
+      <div class="day-hero__eyebrow">
+        <span class="day-pill day-pill--violet">Day 02</span>
+        <span class="eyebrow-separator" aria-hidden="true"></span>
+        <span>Следующая глава</span>
+      </div>
+      <h1>Место готово.<br><span>Задание — на подходе.</span></h1>
+      <p>
+        У второго дня уже есть собственный маршрут, шаблон и пространство для логики. Когда появится задание, Day 1 останется полностью независимым.
+      </p>
+    </div>
+
+    <div class="day-two__visual" aria-hidden="true">
+      <div class="orbit orbit--outer"></div>
+      <div class="orbit orbit--inner"></div>
+      <span class="day-two__number">02</span>
+      <i class="satellite satellite--one"></i>
+      <i class="satellite satellite--two"></i>
+    </div>
+  </section>
+
+  <section class="ready-card" aria-labelledby="ready-title">
+    <div class="ready-card__heading">
+      <span class="ready-card__icon" aria-hidden="true">↳</span>
+      <div>
+        <p class="section-kicker">Архитектура готова</p>
+        <h2 id="ready-title">Новый день добавляется без переделки старых</h2>
+      </div>
+    </div>
+
+    <div class="ready-grid">
+      <article>
+        <span>01</span>
+        <h3>Свой маршрут</h3>
+        <code>/days/2/</code>
+      </article>
+      <article>
+        <span>02</span>
+        <h3>Свой шаблон</h3>
+        <code>day02.html</code>
+      </article>
+      <article>
+        <span>03</span>
+        <h3>Свои стили</h3>
+        <code>day02.css</code>
+      </article>
+    </div>
+  </section>
+{% endblock %}

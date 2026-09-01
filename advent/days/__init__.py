@@ -1,0 +1,1 @@
+"""Independent homework-day modules."""
