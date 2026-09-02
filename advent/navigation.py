@@ -21,11 +21,11 @@ DAYS = (
     ),
     AdventDay(
         number=2,
-        title="Новый челлендж",
-        description="Следующее задание",
+        title="Формат ответа",
+        description="Контроль ответа через API",
         endpoint="day02.index",
-        status="Скоро",
-        visible=False,
+        status="Оформлено",
+        visible=True,
     ),
 )
 

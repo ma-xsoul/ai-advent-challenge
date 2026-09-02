@@ -4,6 +4,7 @@
   justify-content: center;
   gap: clamp(36px, 5vw, 76px);
   width: min(100% - 48px, 1400px);
+  min-height: 100vh;
   margin: 0 auto;
 }
 
@@ -181,18 +182,16 @@
 .day-nav__status {
   width: 7px;
   height: 7px;
+  border: 1px solid #5c645d;
   border-radius: 50%;
+  background: transparent;
   box-shadow: 0 0 0 4px transparent;
 }
 
-.day-nav__status--done {
+.day-nav__item[aria-current="page"] .day-nav__status {
+  border-color: transparent;
   background: var(--accent);
   box-shadow: 0 0 0 4px rgba(184, 243, 108, 0.08);
-}
-
-.day-nav__status--soon {
-  border: 1px solid #5c645d;
-  background: transparent;
 }
 
 .sidebar__footer {

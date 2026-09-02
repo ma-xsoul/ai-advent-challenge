@@ -1,59 +1,208 @@
 {% extends "base.html" %}
 
-{% block title %}Day 2 — Скоро · AI Advent{% endblock %}
+{% block title %}День 2. Формат ответа · AI Advent{% endblock %}
 
 {% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day02.css') }}">
 {% endblock %}
 
 {% block content %}
-  <section class="day-two">
-    <div class="day-two__copy">
-      <div class="day-hero__eyebrow">
-        <span class="day-pill day-pill--violet">Day 02</span>
-        <span class="eyebrow-separator" aria-hidden="true"></span>
-        <span>Следующая глава</span>
+  {% set active_model = model if model in ['deepseek-v4-flash', 'deepseek-v4-pro'] else 'deepseek-v4-flash' %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 02</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Format · Length · Stop</span>
+    </div>
+    <h1>День 2.<br><span>Формат ответа</span></h1>
+
+    <section class="homework-brief" aria-label="Домашнее задание второго дня">
+      <h2 class="homework-brief__title">Домашнее задание</h2>
+      <ul class="homework-brief__steps">
+        <li>Отправьте один и тот же запрос.</li>
+        <li>Добавьте явное описание формата ответа.</li>
+        <li>Добавьте ограничение на длину ответа.</li>
+        <li>Добавьте условие завершения: <code>stop sequence</code> или явную инструкцию.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Один и тот же запрос с разным уровнем контроля ответа через API.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </section>
+
+    <hr class="homework-divider">
+
+    <section class="day2-lab" aria-labelledby="comparison-form-title">
+      <div class="day2-lab__intro">
+        <p class="day2-kicker">Практика</p>
+        <h2 id="comparison-form-title">Сравнить два ответа</h2>
+        <p>Сервис отвечает только по странам: сначала с выбранными параметрами API, затем — без них.</p>
       </div>
-      <h1>Место готово.<br><span>Задание — на подходе.</span></h1>
-      <p>
-        У второго дня уже есть собственный маршрут, шаблон и пространство для логики. Когда появится задание, Day 1 останется полностью независимым.
-      </p>
-    </div>
 
-    <div class="day-two__visual" aria-hidden="true">
-      <div class="orbit orbit--outer"></div>
-      <div class="orbit orbit--inner"></div>
-      <span class="day-two__number">02</span>
-      <i class="satellite satellite--one"></i>
-      <i class="satellite satellite--two"></i>
-    </div>
-  </section>
+      <form id="comparison-form" class="day2-form" data-compare-url="{{ url_for('day02.compare') }}">
+        <label class="day2-field day2-field--wide" for="comparison-prompt">
+          <span>Запрос</span>
+          <textarea id="comparison-prompt" name="prompt" rows="5" required placeholder="Например: все страны Латинской Америки."></textarea>
+        </label>
 
-  <section class="ready-card" aria-labelledby="ready-title">
-    <div class="ready-card__heading">
-      <span class="ready-card__icon" aria-hidden="true">↳</span>
-      <div>
-        <p class="section-kicker">Архитектура готова</p>
-        <h2 id="ready-title">Новый день добавляется без переделки старых</h2>
+        <div class="day2-form__controls">
+          <div class="day2-field">
+            <span id="model-label">Модель</span>
+            <div class="custom-select" data-custom-select="model">
+              <input id="model" name="model" type="hidden" value="{{ active_model }}">
+              <button id="model-trigger" class="custom-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="model-label model-value">
+                <span id="model-value">{{ active_model }}</span>
+                <span class="custom-select__chevron" aria-hidden="true"></span>
+              </button>
+              <div class="custom-select__menu" role="listbox" aria-labelledby="model-label" hidden>
+                <button class="custom-select__option" type="button" role="option" data-value="deepseek-v4-flash" data-label="deepseek-v4-flash" aria-selected="{{ 'true' if active_model == 'deepseek-v4-flash' else 'false' }}">
+                  <strong>deepseek-v4-flash</strong>
+                  <small>Быстрее и дешевле</small>
+                </button>
+                <button class="custom-select__option" type="button" role="option" data-value="deepseek-v4-pro" data-label="deepseek-v4-pro" aria-selected="{{ 'true' if active_model == 'deepseek-v4-pro' else 'false' }}">
+                  <strong>deepseek-v4-pro</strong>
+                  <small>Точнее для сложных критериев</small>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="day2-field">
+            <span id="output-format-label">Формат ответа</span>
+            <div class="custom-select" data-custom-select="format">
+              <input id="output-format" name="output_format" type="hidden" value="json">
+              <button id="output-format-trigger" class="custom-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="output-format-label output-format-value">
+                <span id="output-format-value">Строгий JSON</span>
+                <span class="custom-select__chevron" aria-hidden="true"></span>
+              </button>
+              <div class="custom-select__menu" role="listbox" aria-labelledby="output-format-label" hidden>
+                <button class="custom-select__option" type="button" role="option" data-value="json" data-label="Строгий JSON" aria-selected="true">
+                  <strong>Строгий JSON</strong>
+                  <small>Точная схема: query + result.countries</small>
+                </button>
+                <button class="custom-select__option" type="button" role="option" data-value="text" data-label="Обычный текст" aria-selected="false">
+                  <strong>Обычный текст</strong>
+                  <small>Ответ без JSON-схемы</small>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <label class="day2-field" for="max-tokens">
+            <span>Максимум токенов</span>
+            <input id="max-tokens" name="max_tokens" type="number" min="16" max="16384" value="4096" inputmode="numeric" required>
+          </label>
+
+          <div class="day2-field">
+            <span id="stop-sequence-label">Stop sequence</span>
+            <div class="custom-select is-disabled" data-custom-select="stop">
+              <input id="stop-sequence" name="stop_sequence" type="hidden" value="" disabled>
+              <button id="stop-sequence-trigger" class="custom-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="stop-sequence-label stop-sequence-value" aria-describedby="stop-help" disabled>
+                <span id="stop-sequence-value">Недоступно для JSON</span>
+                <span class="custom-select__chevron" aria-hidden="true"></span>
+              </button>
+              <div class="custom-select__menu" role="listbox" aria-labelledby="stop-sequence-label" hidden>
+                <button class="custom-select__option" type="button" role="option" data-value="" data-label="Не использовать" aria-selected="true">
+                  <strong>Не использовать</strong>
+                  <small>Модель завершит ответ сама</small>
+                </button>
+                <button class="custom-select__option" type="button" role="option" data-value="### END ###" data-label="### END ###" aria-selected="false">
+                  <strong>### END ###</strong>
+                  <small>Явный текстовый маркер конца</small>
+                </button>
+                <button class="custom-select__option" type="button" role="option" data-value="&lt;END&gt;" data-label="&lt;END&gt;" aria-selected="false">
+                  <strong>&lt;END&gt;</strong>
+                  <small>Короткий технический маркер</small>
+                </button>
+                <button class="custom-select__option" type="button" role="option" data-value="[STOP]" data-label="[STOP]" aria-selected="false">
+                  <strong>[STOP]</strong>
+                  <small>Наглядный маркер для сравнения</small>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p id="stop-help" class="day2-form__hint">Для строгого JSON stop выключен: он может оборвать JSON на середине.</p>
+
+        <div class="day2-form__actions">
+          <button id="comparison-submit" class="day2-submit" type="submit">Отправить запрос и сравнить ответы <span aria-hidden="true">→</span></button>
+          <span id="comparison-status" class="day2-status" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="comparison-results" class="comparison-results" aria-labelledby="comparison-results-title" tabindex="-1" hidden>
+      <div class="comparison-results__heading">
+        <div>
+          <p class="day2-kicker">Результат</p>
+          <h2 id="comparison-results-title">Сравнение</h2>
+        </div>
+        <p>Один запрос, два ответа.</p>
       </div>
-    </div>
 
-    <div class="ready-grid">
-      <article>
-        <span>01</span>
-        <h3>Свой маршрут</h3>
-        <code>/days/2/</code>
-      </article>
-      <article>
-        <span>02</span>
-        <h3>Свой шаблон</h3>
-        <code>day02.html</code>
-      </article>
-      <article>
-        <span>03</span>
-        <h3>Свои стили</h3>
-        <code>day02.css</code>
-      </article>
-    </div>
-  </section>
+      <p id="comparison-error" class="comparison-error" role="alert" hidden></p>
+
+      <details id="request-preview" class="request-preview" hidden>
+        <summary>Показать отправленные запросы</summary>
+        <div class="request-preview__grid">
+          <article>
+            <h3>С параметрами</h3>
+            <pre id="controlled-payload"></pre>
+          </article>
+          <article>
+            <h3>Без параметров</h3>
+            <pre id="baseline-payload"></pre>
+          </article>
+        </div>
+      </details>
+
+      <div class="comparison-columns">
+        <article class="comparison-answer">
+          <header>
+            <p>С параметрами</p>
+            <h3>Контролируемый ответ</h3>
+          </header>
+          <dl class="answer-meta">
+            <div><dt>Модель</dt><dd id="controlled-model">—</dd></div>
+            <div><dt>Финиш</dt><dd id="controlled-finish">—</dd></div>
+            <div><dt>Токены</dt><dd id="controlled-tokens">—</dd></div>
+          </dl>
+          <p id="controlled-warning" class="answer-warning" hidden></p>
+          <pre id="controlled-answer" class="answer-output"></pre>
+        </article>
+
+        <article class="comparison-answer">
+          <header>
+            <p>Без параметров</p>
+            <h3>Базовый ответ</h3>
+          </header>
+          <dl class="answer-meta">
+            <div><dt>Модель</dt><dd id="baseline-model">—</dd></div>
+            <div><dt>Финиш</dt><dd id="baseline-finish">—</dd></div>
+            <div><dt>Токены</dt><dd id="baseline-tokens">—</dd></div>
+          </dl>
+          <pre id="baseline-answer" class="answer-output"></pre>
+        </article>
+      </div>
+
+      <aside class="comparison-analysis" aria-labelledby="comparison-analysis-title">
+        <h3 id="comparison-analysis-title">Короткая аналитика</h3>
+        <ul id="comparison-analysis-list"></ul>
+      </aside>
+    </section>
+  </header>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/day02.js') }}"></script>
 {% endblock %}

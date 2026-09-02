@@ -4,7 +4,7 @@
 
 {% block styles %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01-homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -17,40 +17,26 @@
     <h1>День 1.<br><span>Первый запрос к LLM</span></h1>
 
     <section class="homework-brief" aria-label="Домашнее задание первого дня">
-      <p class="homework-brief__prelude">Сначала посмотрите видео</p>
-      <p class="homework-brief__intro">Напишите минимальный код, который:</p>
+      <h2 class="homework-brief__title">Домашнее задание</h2>
       <ul class="homework-brief__steps">
-        <li>отправляет запрос в LLM через API;</li>
-        <li>получает ответ;</li>
-        <li>выводит его в консоль или простой интерфейс (CLI/Web).</li>
+        <li>Посмотрите видео.</li>
+        <li>Отправьте запрос в LLM через API.</li>
+        <li>Получите ответ и выведите его в консоль или простой интерфейс (CLI/Web).</li>
       </ul>
 
-      <div class="homework-brief__meta">
+      <dl class="homework-brief__details">
         <div>
-          <span>Результат</span>
-          <p>Код, который отправляет запрос в LLM через API и получает ответ.</p>
+          <dt>Ожидаемый результат</dt>
+          <dd>Код, который отправляет запрос в LLM через API и получает ответ.</dd>
         </div>
         <div>
-          <span>Формат</span>
-          <p>Видео + код</p>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
         </div>
-      </div>
+      </dl>
     </section>
 
-    <div class="hero-facts" aria-label="Параметры задания">
-      <div class="hero-fact">
-        <span>Модель</span>
-        <strong>{{ model }}</strong>
-      </div>
-      <div class="hero-fact">
-        <span>Метод</span>
-        <strong><i class="live-dot" aria-hidden="true"></i> POST</strong>
-      </div>
-      <div class="hero-fact hero-fact--wide">
-        <span>Endpoint</span>
-        <strong>/chat/completions</strong>
-      </div>
-    </div>
+    <hr class="homework-divider">
   </header>
 
   <section class="composer" aria-labelledby="form-title">
