@@ -101,7 +101,7 @@
       <p class="request-prompt"></p>
       <div class="answer-block">
         <h3>Ответ модели</h3>
-        <p class="assistant-answer"></p>
+        <div class="assistant-answer md-body"></div>
       </div>
       <details class="json-details">
         <summary>
@@ -121,5 +121,6 @@
 {% endblock %}
 
 {% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
   <script src="{{ url_for('static', filename='js/day01.js') }}"></script>
 {% endblock %}

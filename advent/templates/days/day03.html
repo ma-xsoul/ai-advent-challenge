@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}День 3. Способы рассуждения · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day03.css') }}">
+{% endblock %}
+
+{% block content %}
+  {% set active_model = model if model in ['deepseek-v4-flash', 'deepseek-v4-pro'] else 'deepseek-v4-flash' %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 03</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Reasoning · Prompt · Experts</span>
+    </div>
+    <h1>День 3.<br><span>Способы рассуждения</span></h1>
+
+    <section class="homework-brief" aria-label="Домашнее задание третьего дня">
+      <h2 class="homework-brief__title">Домашнее задание</h2>
+      <ul class="homework-brief__steps">
+        <li>Возьмите одну логическую, алгоритмическую или аналитическую задачу.</li>
+        <li>Получите прямой ответ без дополнительных инструкций.</li>
+        <li>Добавьте в промпт инструкцию «решай пошагово».</li>
+        <li>Попросите модель сначала составить промпт для решения задачи, а затем используйте его.</li>
+        <li>Создайте в промпте группу экспертов — например, аналитика, инженера и критика — и получите решение от каждого.</li>
+        <li>Сравните ответы и определите, какой способ дал наиболее точный результат.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Несколько решений одной задачи и их сравнение.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </section>
+
+    <hr class="homework-divider">
+
+    <section class="day3-lab" aria-labelledby="day3-form-title">
+      <div class="day3-lab__intro">
+        <p class="day3-kicker">Практика</p>
+        <h2 id="day3-form-title">Решить одну задачу разными способами</h2>
+        <p>Введите задачу, выберите один подход или запустите все четыре для сравнения.</p>
+      </div>
+
+      <form id="reasoning-form" class="day3-form" data-solve-url="{{ url_for('day03.solve') }}" data-task-url="{{ url_for('day03.generate_task') }}">
+        <div class="day3-field day3-field--wide">
+          <div class="day3-task-heading">
+            <label for="reasoning-task">Задача</label>
+            <button id="task-generator" class="day3-task-generator" type="button"><span aria-hidden="true">*</span> Сгенерировать задачу</button>
+          </div>
+          <div class="day3-task-input">
+            <textarea id="reasoning-task" name="task" rows="6" maxlength="10000" required placeholder="Например: есть 12 монет, одна отличается по весу. Как найти её за три взвешивания?"></textarea>
+            <p id="task-loading" class="task-loading" hidden>Идёт генерация задачи<span class="task-loading__dots" aria-hidden="true"></span></p>
+          </div>
+        </div>
+
+        <div class="day3-form__controls">
+          <div class="day3-field">
+            <span id="day3-model-label">Модель</span>
+            <div class="day3-select" data-day3-select>
+              <input id="day3-model" name="model" type="hidden" value="{{ active_model }}">
+              <button class="day3-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="day3-model-label day3-model-value">
+                <span id="day3-model-value">{{ active_model }}</span>
+                <span class="day3-select__chevron" aria-hidden="true"></span>
+              </button>
+              <div class="day3-select__menu" role="listbox" aria-labelledby="day3-model-label" hidden>
+                <button class="day3-select__option" type="button" role="option" data-value="deepseek-v4-flash" data-label="deepseek-v4-flash" aria-selected="{{ 'true' if active_model == 'deepseek-v4-flash' else 'false' }}">
+                  <strong>deepseek-v4-flash</strong>
+                  <small>Быстрее для простых задач</small>
+                </button>
+                <button class="day3-select__option" type="button" role="option" data-value="deepseek-v4-pro" data-label="deepseek-v4-pro" aria-selected="{{ 'true' if active_model == 'deepseek-v4-pro' else 'false' }}">
+                  <strong>deepseek-v4-pro</strong>
+                  <small>Точнее для сложных рассуждений</small>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="day3-field">
+            <span id="approach-label">Способ решения</span>
+            <div class="day3-select" data-day3-select>
+              <input id="reasoning-approach" name="approach" type="hidden" value="direct">
+              <button class="day3-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="approach-label approach-value">
+                <span id="approach-value">Без инструкции</span>
+                <span class="day3-select__chevron" aria-hidden="true"></span>
+              </button>
+              <div class="day3-select__menu" role="listbox" aria-labelledby="approach-label" hidden>
+                <button class="day3-select__option" type="button" role="option" data-value="direct" data-label="Без инструкции" aria-selected="true">
+                  <strong>Без инструкции</strong>
+                  <small>Прямой запрос к модели</small>
+                </button>
+                <button class="day3-select__option" type="button" role="option" data-value="step_by_step" data-label="Решай пошагово" aria-selected="false">
+                  <strong>Решай пошагово</strong>
+                  <small>Инструкция в системном промпте</small>
+                </button>
+                <button class="day3-select__option" type="button" role="option" data-value="generated_prompt" data-label="Промпт от модели" aria-selected="false">
+                  <strong>Промпт от модели</strong>
+                  <small>Сначала промпт, затем решение</small>
+                </button>
+                <button class="day3-select__option" type="button" role="option" data-value="experts" data-label="Группа экспертов" aria-selected="false">
+                  <strong>Группа экспертов</strong>
+                  <small>Аналитик, инженер и критик</small>
+                </button>
+                <button class="day3-select__option" type="button" role="option" data-value="all" data-label="Все четыре способа" aria-selected="false">
+                  <strong>Все четыре способа</strong>
+                  <small>Четыре решения + мета-анализ</small>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p class="day3-form__hint">Режим «Все четыре способа» выполняет шесть API-запросов, включая создание промпта и итоговый анализ.</p>
+
+        <div class="day3-form__actions">
+          <button id="reasoning-submit" class="day3-submit" type="submit">Решить и сравнить <span aria-hidden="true">→</span></button>
+          <span id="reasoning-status" class="day3-status" aria-live="polite"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="reasoning-results" class="reasoning-results" aria-labelledby="reasoning-results-title" tabindex="-1" hidden>
+      <div class="reasoning-results__heading">
+        <div>
+          <p class="day3-kicker">Результат</p>
+          <h2 id="reasoning-results-title">Сравнение подходов</h2>
+        </div>
+        <p>Одна задача — разные способы рассуждения.</p>
+      </div>
+
+      <p id="reasoning-error" class="reasoning-error" role="alert" hidden></p>
+
+      <div class="reasoning-grid">
+        <article class="reasoning-card" data-approach-card="direct" hidden>
+          <header><span>01</span><h3>Без инструкции</h3></header>
+          <p class="reasoning-card__description">Прямой ответ модели без дополнительного системного промпта.</p>
+          <div class="card-prompt" data-prompt-block hidden>
+            <p class="card-prompt__label">Системный промпт</p>
+            <pre class="card-prompt__text" data-system-prompt></pre>
+          </div>
+          <dl class="reasoning-meta"><div><dt>Токены</dt><dd data-meta="tokens">—</dd></div><div><dt>Финиш</dt><dd data-meta="finish">—</dd></div></dl>
+          <details class="answer-fold" open>
+            <summary>Решение</summary>
+            <div class="reasoning-answer md-body" data-answer></div>
+          </details>
+        </article>
+
+        <article class="reasoning-card" data-approach-card="step_by_step" hidden>
+          <header><span>02</span><h3>Решай пошагово</h3></header>
+          <p class="reasoning-card__description">Основные этапы решения показываются и проверяются последовательно.</p>
+          <div class="card-prompt" data-prompt-block hidden>
+            <p class="card-prompt__label">Системный промпт</p>
+            <pre class="card-prompt__text" data-system-prompt></pre>
+          </div>
+          <dl class="reasoning-meta"><div><dt>Токены</dt><dd data-meta="tokens">—</dd></div><div><dt>Финиш</dt><dd data-meta="finish">—</dd></div></dl>
+          <details class="answer-fold" open>
+            <summary>Решение</summary>
+            <div class="reasoning-answer md-body" data-answer></div>
+          </details>
+        </article>
+
+        <article class="reasoning-card" data-approach-card="generated_prompt" hidden>
+          <header><span>03</span><h3>Промпт от модели</h3></header>
+          <p class="reasoning-card__description">Первая генерация создаёт промпт, вторая использует его для решения.</p>
+          <div class="card-prompt" data-prompt-block hidden>
+            <p class="card-prompt__label">Промпт для создания промпта</p>
+            <pre class="card-prompt__text" data-system-prompt></pre>
+          </div>
+          <details class="generated-prompt" hidden>
+            <summary>Показать созданный промпт</summary>
+            <pre data-generated-prompt></pre>
+          </details>
+          <dl class="reasoning-meta"><div><dt>Токены ответа</dt><dd data-meta="tokens">—</dd></div><div><dt>Финиш</dt><dd data-meta="finish">—</dd></div></dl>
+          <details class="answer-fold" open>
+            <summary>Решение</summary>
+            <div class="reasoning-answer md-body" data-answer></div>
+          </details>
+        </article>
+
+        <article class="reasoning-card" data-approach-card="experts" hidden>
+          <header><span>04</span><h3>Группа экспертов</h3></header>
+          <p class="reasoning-card__description">Аналитик, инженер и критик дают свои версии в одном ответе.</p>
+          <div class="card-prompt" data-prompt-block hidden>
+            <p class="card-prompt__label">Системный промпт</p>
+            <pre class="card-prompt__text" data-system-prompt></pre>
+          </div>
+          <dl class="reasoning-meta"><div><dt>Токены</dt><dd data-meta="tokens">—</dd></div><div><dt>Финиш</dt><dd data-meta="finish">—</dd></div></dl>
+          <details class="answer-fold" open>
+            <summary>Решение</summary>
+            <div class="reasoning-answer md-body" data-answer></div>
+          </details>
+        </article>
+      </div>
+
+      <aside id="reasoning-analysis" class="reasoning-analysis" hidden>
+        <p class="day3-kicker">Мета-анализ</p>
+        <h3>Рейтинг подходов</h3>
+        <div id="reasoning-analysis-text" class="md-body"></div>
+      </aside>
+    </section>
+  </header>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day03.js') }}"></script>
+{% endblock %}

@@ -24,7 +24,15 @@ DAYS = (
         title="Формат ответа",
         description="Контроль ответа через API",
         endpoint="day02.index",
-        status="Оформлено",
+        status="Готово",
+        visible=True,
+    ),
+    AdventDay(
+        number=3,
+        title="Способы рассуждения",
+        description="Сравнение подходов к решению",
+        endpoint="day03.index",
+        status="Готово",
         visible=True,
     ),
 )

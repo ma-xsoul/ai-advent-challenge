@@ -8,7 +8,10 @@ from advent.services.deepseek import (
     DEEPSEEK_BETA_API_URL,
     request_day_two_comparison,
     request_day_two_meta_analysis,
+    request_day_three_solutions,
+    request_day_three_task,
     stream_day_two_answer,
+    stream_day_three_solutions,
 )
 
 
@@ -19,7 +22,186 @@ def make_response(payload):
     return response
 
 
+def text_completion(content, *, tokens=10, model="deepseek-v4-flash"):
+    return {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {"content": content},
+            }
+        ],
+        "usage": {"completion_tokens": tokens},
+        "model": model,
+    }
+
+
+def make_stream_response(content, *, tokens=10, model="deepseek-v4-flash"):
+    chunks = [
+        {
+            "model": model,
+            "choices": [
+                {
+                    "finish_reason": None,
+                    "delta": {"content": content},
+                }
+            ],
+        },
+        {
+            "choices": [{"finish_reason": "stop", "delta": {}}],
+            "usage": {"completion_tokens": tokens},
+        },
+    ]
+    response = Mock()
+    response.status_code = 200
+    response.iter_lines.return_value = [
+        ("data: " + json.dumps(chunk, ensure_ascii=False)).encode("utf-8")
+        for chunk in chunks
+    ] + [b"data: [DONE]"]
+    return response
+
+
 class DeepSeekServiceTestCase(unittest.TestCase):
+    @patch("advent.services.deepseek._post_to_deepseek")
+    def test_day_three_task_generator_requests_only_a_problem_statement(self, post):
+        post.return_value = (
+            text_completion("Нужно спланировать приготовление ужина."),
+            200,
+        )
+
+        result, status = request_day_three_task(model="deepseek-v4-pro")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(result["content"], "Нужно спланировать приготовление ужина.")
+        payload = post.call_args.args[1]
+        self.assertEqual(payload["model"], "deepseek-v4-pro")
+        self.assertEqual(payload["max_tokens"], 300)
+        self.assertIn("бытовую алгоритмическую задачу", payload["messages"][0]["content"])
+        self.assertIn("Не давай решение", payload["messages"][0]["content"])
+
+    @patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key"})
+    @patch("advent.services.deepseek.requests.post")
+    def test_day_three_all_mode_streams_every_stage(self, post):
+        post.side_effect = [
+            make_stream_response("Прямой", tokens=11),
+            make_stream_response("По шагам", tokens=22),
+            make_stream_response("Готовый промпт", tokens=8),
+            make_stream_response("По промпту", tokens=33),
+            make_stream_response("Эксперты", tokens=44),
+            make_stream_response("Итоговый анализ", tokens=25),
+        ]
+
+        events = list(
+            stream_day_three_solutions(
+                "Найди решение",
+                model="deepseek-v4-flash",
+                approach="all",
+            )
+        )
+
+        completed_approaches = [
+            event["approach"]
+            for event in events
+            if event["type"] == "approach_done"
+        ]
+        self.assertEqual(
+            completed_approaches,
+            ["direct", "step_by_step", "generated_prompt", "experts"],
+        )
+        prompt_event = next(
+            event for event in events if event["type"] == "generated_prompt_done"
+        )
+        self.assertEqual(prompt_event["prompt"]["content"], "Готовый промпт")
+        analysis_event = next(
+            event for event in events if event["type"] == "analysis_done"
+        )
+        self.assertEqual(analysis_event["analysis"]["content"], "Итоговый анализ")
+        self.assertEqual(events[-1], {"type": "complete", "results_count": 4})
+        self.assertEqual(post.call_count, 6)
+        self.assertTrue(all(call.kwargs["stream"] for call in post.call_args_list))
+        self.assertTrue(
+            all(call.kwargs["json"]["stream"] for call in post.call_args_list)
+        )
+
+    @patch("advent.services.deepseek._post_to_deepseek")
+    def test_day_three_all_mode_runs_four_approaches_and_analysis(self, post):
+        post.side_effect = [
+            (text_completion("Прямой ответ", tokens=11), 200),
+            (text_completion("Пошаговый ответ", tokens=22), 200),
+            (text_completion("Улучшенный промпт", tokens=8), 200),
+            (text_completion("Решение по промпту", tokens=33), 200),
+            (text_completion("Решение экспертов", tokens=44), 200),
+            (text_completion("Лучше всего пошаговый подход", tokens=25), 200),
+        ]
+
+        result, status = request_day_three_solutions(
+            "Найди закономерность",
+            model="deepseek-v4-flash",
+            approach="all",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            list(result["results"]),
+            ["direct", "step_by_step", "generated_prompt", "experts"],
+        )
+        self.assertEqual(
+            result["results"]["generated_prompt"]["generated_prompt"],
+            "Улучшенный промпт",
+        )
+        self.assertEqual(result["analysis"]["content"], "Лучше всего пошаговый подход")
+        self.assertIsNone(result["analysis_error"])
+        self.assertEqual(post.call_count, 6)
+
+        payloads = [call.args[1] for call in post.call_args_list]
+        self.assertEqual(
+            payloads[0]["messages"],
+            [{"role": "user", "content": "Найди закономерность"}],
+        )
+        self.assertIn("пошагово", payloads[1]["messages"][0]["content"])
+        self.assertIn("Саму задачу не решай", payloads[2]["messages"][0]["content"])
+        self.assertEqual(payloads[3]["messages"][-1]["content"], "Улучшенный промпт")
+        self.assertIn("трёх экспертов", payloads[4]["messages"][0]["content"])
+        self.assertEqual(payloads[5]["max_tokens"], 500)
+        self.assertIn("Прямой ответ", payloads[5]["messages"][-1]["content"])
+        self.assertIn("Решение экспертов", payloads[5]["messages"][-1]["content"])
+
+    @patch("advent.services.deepseek._post_to_deepseek")
+    def test_day_three_individual_mode_only_runs_selected_approach(self, post):
+        post.return_value = (text_completion("Короткий ответ"), 200)
+
+        result, status = request_day_three_solutions(
+            "Задача",
+            model="deepseek-v4-pro",
+            approach="direct",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(list(result["results"]), ["direct"])
+        self.assertIsNone(result["analysis"])
+        self.assertEqual(post.call_count, 1)
+
+    @patch("advent.services.deepseek._post_to_deepseek")
+    def test_day_three_keeps_solutions_when_analysis_fails(self, post):
+        post.side_effect = [
+            (text_completion("Прямой"), 200),
+            (text_completion("По шагам"), 200),
+            (text_completion("Готовый промпт"), 200),
+            (text_completion("По промпту"), 200),
+            (text_completion("Эксперты"), 200),
+            ({"error": {"message": "Лимит API"}}, 429),
+        ]
+
+        result, status = request_day_three_solutions(
+            "Задача",
+            model="deepseek-v4-flash",
+            approach="all",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(len(result["results"]), 4)
+        self.assertIsNone(result["analysis"])
+        self.assertEqual(result["analysis_error"], "Лимит API")
+
     @patch.dict(os.environ, {"DEEPSEEK_API_KEY": "test-key"})
     @patch("advent.services.deepseek.requests.post")
     def test_meta_analysis_is_limited_and_receives_both_variants(self, post):

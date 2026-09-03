@@ -113,7 +113,12 @@
   }
 
   function renderMessage(message) {
-    const escaped = String(message).replace(
+    if (typeof window.renderMarkdown === "function") {
+      return window.renderMarkdown(message);
+    }
+
+    // Запасной вариант, если общий рендерер не загрузился.
+    return String(message).replace(
       /[&<>"']/g,
       (character) =>
         ({
@@ -124,12 +129,6 @@
           "'": "&#039;",
         })[character],
     );
-
-    return escaped
-      .replace(/^#{1,6}\s+(.+)$/gm, "<strong>$1</strong>")
-      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
-      .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-      .replace(/`([^`\n]+)`/g, "<code>$1</code>");
   }
 
   function getAssistantAnswer(data) {

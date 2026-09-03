@@ -1,0 +1,135 @@
+/*
+ * Оформление Markdown-разметки в ответах модели.
+ * Класс .md-body ставится на контейнер, куда рендерится ответ.
+ */
+
+.md-body > :first-child {
+  margin-top: 0;
+}
+
+.md-body > :last-child {
+  margin-bottom: 0;
+}
+
+.md-body p {
+  margin: 0 0 10px;
+  line-height: 1.7;
+}
+
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  margin: 18px 0 8px;
+  color: var(--text-bright);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.md-body h4 {
+  font-size: 1.1em;
+}
+
+.md-body h5,
+.md-body h6 {
+  font-size: 1em;
+}
+
+.md-body ul,
+.md-body ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+
+.md-body li {
+  margin-bottom: 5px;
+  line-height: 1.65;
+}
+
+.md-body li::marker {
+  color: var(--accent);
+}
+
+.md-body code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+  line-height: 1.35;
+}
+
+.md-body pre.md-code {
+  max-height: 340px;
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 12px;
+}
+
+.md-body pre.md-code code {
+  border: 0;
+  padding: 0;
+  color: var(--muted-bright);
+  font-size: 0.94em;
+  line-height: 1.6;
+}
+
+.md-body blockquote {
+  margin: 0 0 12px;
+  border-left: 2px solid var(--line-strong);
+  padding-left: 14px;
+  color: var(--muted);
+}
+
+.md-body hr {
+  height: 1px;
+  margin: 16px 0;
+  border: 0;
+  background: var(--line);
+}
+
+.md-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.md-body strong {
+  color: var(--text-bright);
+  font-weight: 700;
+}
+
+.md-body em {
+  font-style: normal;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.md-body del {
+  color: var(--muted);
+}
+
+.md-table-scroll {
+  margin: 0 0 12px;
+  overflow-x: auto;
+}
+
+.md-body table.md-table {
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.md-body table.md-table th,
+.md-body table.md-table td {
+  border: 1px solid var(--line);
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-body table.md-table th {
+  background: var(--surface-soft);
+  color: var(--text-bright);
+  font-weight: 700;
+  white-space: nowrap;
+}

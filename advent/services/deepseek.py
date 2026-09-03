@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from typing import Any
 
 import requests
@@ -38,6 +38,88 @@ META_ANALYSIS_SYSTEM_PROMPT = (
     "двух коротких предложений. Целевой объём — 150–220 токенов. Сформулируй "
     "полностью завершённый мета-анализ не более чем за 400 токенов."
 )
+DAY_THREE_STEP_SYSTEM_PROMPT = (
+    "Решай задачу пошагово. Покажи основные проверяемые этапы решения, не пропускай "
+    "важные вычисления или допущения и в конце дай ясный итоговый ответ."
+)
+DAY_THREE_PROMPT_BUILDER_SYSTEM_PROMPT = """\
+Твой ответ — это готовый промпт для другой модели, которая будет решать переданную \
+задачу. Саму задачу не решай и не пиши рассуждений о том, как составляются промпты.
+
+Верни текст строго по этому шаблону, заполнив его под конкретную задачу:
+
+Ты — эксперт по алгоритмам и логике. Реши следующую задачу.
+
+## Условие задачи:
+<полный текст задачи со всеми числами и ограничениями>
+
+## Требования к решению:
+1. Опиши алгоритм решения на естественном языке (пошагово).
+2. Обоснуй корректность решения — почему оно работает.
+3. Оцени сложность решения или объём необходимого перебора.
+4. Приведи примеры входных и выходных данных, включая крайние случаи.
+
+## Формат ответа:
+- Раздел «Алгоритм»
+- Раздел «Доказательство корректности»
+- Раздел «Сложность»
+- Раздел «Ответ»
+- Раздел «Примеры»
+
+## Дополнительные указания:
+<2–4 пункта под конкретную задачу: подводные камни, ограничения из условия, \
+выбор структуры данных или способа перебора>
+
+Условие вставь полностью и дословно, не пересказывай его своими словами. \
+Заполнители вроде «вставьте текст задачи сюда» недопустимы. \
+Верни только текст промпта, без вступления и пояснений.
+"""
+DAY_THREE_EXPERTS_SYSTEM_PROMPT = (
+    "Реши задачу от лица трёх экспертов. Аналитик предлагает логический подход, инженер "
+    "проверяет практичность и вычисления, критик ищет ошибки и слабые места. Покажи "
+    "короткое решение каждого эксперта, затем сформулируй общий итоговый ответ."
+)
+DAY_THREE_ANALYSIS_SYSTEM_PROMPT = (
+    "Тебе дают одну задачу и четыре её решения разными подходами. Оцени каждое по "
+    "корректности, проверяемости и ясности; более длинный ответ не считай автоматически "
+    "более точным. "
+    "Составь рейтинг подходов от лучшего к худшему — с 1-го по 4-е место. Ответь строго "
+    "нумерованным списком ровно из четырёх пунктов в формате: "
+    "`N. **<название подхода>** — краткое обоснование места`. Названия подходов бери "
+    "дословно из входных данных (ключи объекта solutions). Каждый подход упомяни ровно "
+    "один раз, места с 1 по 4 не повторяй. "
+    "После списка добавь одну итоговую строку «Итог: …» — какой подход победил и почему. "
+    "Пиши по-русски и кратко, уложись в 500 токенов."
+)
+DAY_THREE_TASK_GENERATOR_SYSTEM_PROMPT = (
+    "Сгенерируй ровно одну понятную бытовую алгоритмическую задачу на русском языке. "
+    "Это должна быть практическая ситуация: планирование времени, приготовление еды, "
+    "маршрут, распределение ресурсов, покупки или похожий повседневный сценарий. "
+    "Выбирай простую или среднюю сложность, давай все необходимые числа и ограничения, "
+    "чтобы задачу можно было решить однозначно и проверить. Не используй программирование "
+    "и классические загадки. Не давай решение, подсказки, заголовок или вступление — верни "
+    "только условие задачи одним компактным текстом."
+)
+
+DAY_THREE_APPROACHES = ("direct", "step_by_step", "generated_prompt", "experts")
+
+# Названия подходов для мета-анализа: совпадают с подписями в интерфейсе,
+# чтобы рейтинг ссылался на понятные пользователю формулировки.
+DAY_THREE_APPROACH_LABELS = {
+    "direct": "Без инструкции",
+    "step_by_step": "Решай пошагово",
+    "generated_prompt": "Промпт от модели",
+    "experts": "Группа экспертов",
+}
+
+# Системный промпт запроса на решение. У "direct" его нет намеренно — в этом суть
+# подхода; "generated_prompt" решает по промпту модели, который уходит как
+# пользовательское сообщение, поэтому системного промпта там тоже нет.
+DAY_THREE_SOLUTION_SYSTEM_PROMPTS: dict[str, str | None] = {
+    "direct": None,
+    "step_by_step": DAY_THREE_STEP_SYSTEM_PROMPT,
+    "experts": DAY_THREE_EXPERTS_SYSTEM_PROMPT,
+}
 
 STRUCTURED_COUNTRY_TOOL = {
     "type": "function",
@@ -265,6 +347,385 @@ def request_day_two_meta_analysis(
     if error:
         return {"error": error}, 502
     return analysis, 200
+
+
+def request_day_three_solutions(
+    task: str,
+    *,
+    model: str,
+    approach: str,
+) -> tuple[dict[str, Any], int]:
+    """Решает одну задачу выбранным способом или всеми четырьмя способами."""
+    selected_approaches = DAY_THREE_APPROACHES if approach == "all" else (approach,)
+    results: dict[str, dict[str, Any]] = {}
+
+    for selected_approach in selected_approaches:
+        result, status_code = _request_day_three_approach(
+            task,
+            model=model,
+            approach=selected_approach,
+        )
+        if not 200 <= status_code < 300:
+            response = dict(result)
+            response["completed_results"] = results
+            return response, status_code
+        results[selected_approach] = result
+
+    analysis = None
+    analysis_error = None
+    if approach == "all":
+        analysis, status_code = _request_day_three_analysis(
+            task,
+            model=model,
+            results=results,
+        )
+        if not 200 <= status_code < 300:
+            analysis_error = _deepseek_error_message(analysis)
+            analysis = None
+
+    return {
+        "task": task,
+        "model": model,
+        "approach": approach,
+        "results": results,
+        "analysis": analysis,
+        "analysis_error": analysis_error,
+    }, 200
+
+
+def request_day_three_task(*, model: str) -> tuple[dict[str, Any], int]:
+    """Создаёт одну бытовую задачу для демонстрации подходов Day 3."""
+    payload = _base_payload(
+        "Сгенерируй новую задачу для сравнения разных способов рассуждения.",
+        model=model,
+        system_prompt=DAY_THREE_TASK_GENERATOR_SYSTEM_PROMPT,
+    )
+    payload["max_tokens"] = 300
+    return _request_text_summary(payload)
+
+
+def stream_day_three_solutions(
+    task: str,
+    *,
+    model: str,
+    approach: str,
+) -> Iterator[dict[str, Any]]:
+    """Последовательно отдаёт части решений Day 3 по мере генерации DeepSeek."""
+    selected_approaches = DAY_THREE_APPROACHES if approach == "all" else (approach,)
+    results: dict[str, dict[str, Any]] = {}
+
+    for selected_approach in selected_approaches:
+        yield {
+            "type": "approach_start",
+            "approach": selected_approach,
+            "model": model,
+            "system_prompt": DAY_THREE_SOLUTION_SYSTEM_PROMPTS.get(selected_approach),
+        }
+
+        generated_prompt = None
+        if selected_approach == "generated_prompt":
+            builder_payload = _base_payload(
+                task,
+                model=model,
+                system_prompt=DAY_THREE_PROMPT_BUILDER_SYSTEM_PROMPT,
+            )
+            builder_payload["max_tokens"] = 1000
+            yield {
+                "type": "generated_prompt_start",
+                "approach": selected_approach,
+                "system_prompt": DAY_THREE_PROMPT_BUILDER_SYSTEM_PROMPT,
+            }
+            generated_prompt, error = yield from _stream_day_three_text(
+                builder_payload,
+                approach=selected_approach,
+                target="generated_prompt",
+            )
+            if error:
+                yield {
+                    "type": "error",
+                    "approach": selected_approach,
+                    "phase": "generated_prompt",
+                    "error": error,
+                }
+                return
+            yield {
+                "type": "generated_prompt_done",
+                "approach": selected_approach,
+                "prompt": generated_prompt,
+            }
+
+            solution_payload = _base_payload(generated_prompt["content"], model=model)
+            solution_payload["max_tokens"] = 1200
+        else:
+            solution_payload = _day_three_solution_payload(
+                task,
+                model=model,
+                approach=selected_approach,
+            )
+            if solution_payload is None:
+                yield {
+                    "type": "error",
+                    "approach": selected_approach,
+                    "error": "Неизвестный способ решения",
+                }
+                return
+
+        answer, error = yield from _stream_day_three_text(
+            solution_payload,
+            approach=selected_approach,
+            target="answer",
+        )
+        if error:
+            yield {
+                "type": "error",
+                "approach": selected_approach,
+                "phase": "answer",
+                "error": error,
+            }
+            return
+
+        if generated_prompt is not None:
+            answer["generated_prompt"] = generated_prompt["content"]
+        results[selected_approach] = answer
+        yield {
+            "type": "approach_done",
+            "approach": selected_approach,
+            "answer": answer,
+        }
+
+    if approach == "all":
+        yield {"type": "analysis_start", "model": model}
+        analysis_payload = _day_three_analysis_payload(
+            task,
+            model=model,
+            results=results,
+        )
+        analysis, error = yield from _stream_day_three_text(
+            analysis_payload,
+            approach=None,
+            target="analysis",
+        )
+        if error:
+            yield {"type": "analysis_error", "error": error}
+        else:
+            yield {"type": "analysis_done", "analysis": analysis}
+
+    yield {"type": "complete", "results_count": len(results)}
+
+
+def _request_day_three_approach(
+    task: str,
+    *,
+    model: str,
+    approach: str,
+) -> tuple[dict[str, Any], int]:
+    if approach == "direct":
+        payload = _day_three_solution_payload(task, model=model, approach=approach)
+        return _request_text_summary(payload)
+
+    if approach == "step_by_step":
+        payload = _day_three_solution_payload(task, model=model, approach=approach)
+        return _request_text_summary(payload)
+
+    if approach == "generated_prompt":
+        builder_payload = _base_payload(
+            task,
+            model=model,
+            system_prompt=DAY_THREE_PROMPT_BUILDER_SYSTEM_PROMPT,
+        )
+        builder_payload["max_tokens"] = 1000
+        generated_prompt, status_code = _request_text_summary(builder_payload)
+        if not 200 <= status_code < 300:
+            return generated_prompt, status_code
+
+        solution_payload = _base_payload(generated_prompt["content"], model=model)
+        solution_payload["max_tokens"] = 1200
+        solution, status_code = _request_text_summary(solution_payload)
+        if not 200 <= status_code < 300:
+            return solution, status_code
+        solution["generated_prompt"] = generated_prompt["content"]
+        return solution, 200
+
+    if approach == "experts":
+        payload = _day_three_solution_payload(task, model=model, approach=approach)
+        return _request_text_summary(payload)
+
+    return {"error": "Неизвестный способ решения"}, 400
+
+
+def _request_day_three_analysis(
+    task: str,
+    *,
+    model: str,
+    results: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], int]:
+    return _request_text_summary(
+        _day_three_analysis_payload(task, model=model, results=results)
+    )
+
+
+def _day_three_solution_payload(
+    task: str,
+    *,
+    model: str,
+    approach: str,
+) -> dict[str, Any] | None:
+    if approach not in DAY_THREE_SOLUTION_SYSTEM_PROMPTS:
+        return None
+
+    payload = _base_payload(
+        task,
+        model=model,
+        system_prompt=DAY_THREE_SOLUTION_SYSTEM_PROMPTS[approach],
+    )
+    payload["max_tokens"] = 800
+    return payload
+
+
+def _day_three_analysis_payload(
+    task: str,
+    *,
+    model: str,
+    results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    comparison = {
+        "task": task,
+        "solutions": {
+            DAY_THREE_APPROACH_LABELS.get(approach, approach): result.get("content", "")[:4000]
+            for approach, result in results.items()
+        },
+    }
+    payload = _base_payload(
+        json.dumps(comparison, ensure_ascii=False, indent=2),
+        model=model,
+        system_prompt=DAY_THREE_ANALYSIS_SYSTEM_PROMPT,
+    )
+    payload["max_tokens"] = 500
+    return payload
+
+
+def _request_text_summary(payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    response_json, status_code = _post_to_deepseek(DEEPSEEK_API_URL, payload)
+    if not 200 <= status_code < 300:
+        return response_json, status_code
+
+    summary, error = _normalize_text_response(response_json)
+    if error:
+        return {"error": error}, 502
+    return summary, 200
+
+
+def _stream_day_three_text(
+    payload: dict[str, Any],
+    *,
+    approach: str | None,
+    target: str,
+) -> Generator[
+    dict[str, Any],
+    None,
+    tuple[dict[str, Any] | None, str | None],
+]:
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        return None, "Не задан DEEPSEEK_API_KEY в файле .env"
+
+    stream_payload = dict(payload)
+    stream_payload["stream"] = True
+    try:
+        response = requests.post(
+            DEEPSEEK_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=stream_payload,
+            stream=True,
+            timeout=120,
+        )
+    except requests.RequestException as error:
+        return None, "Не удалось связаться с DeepSeek: " + str(error)
+
+    if not 200 <= response.status_code < 300:
+        message = _stream_error_message(response)
+        response.close()
+        return None, message
+
+    content_parts: list[str] = []
+    finish_reason: str | None = None
+    response_model: str | None = None
+    usage: dict[str, Any] | None = None
+
+    try:
+        for raw_line in response.iter_lines(chunk_size=1):
+            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+            if not isinstance(line, str) or not line.startswith("data:"):
+                continue
+
+            data = line[5:].strip()
+            if not data or data == "[DONE]":
+                continue
+
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+
+            if isinstance(chunk.get("model"), str):
+                response_model = chunk["model"]
+            if isinstance(chunk.get("usage"), dict):
+                usage = chunk["usage"]
+
+            choices = chunk.get("choices")
+            if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                continue
+
+            choice = choices[0]
+            if isinstance(choice.get("finish_reason"), str):
+                finish_reason = choice["finish_reason"]
+            delta = choice.get("delta")
+            content = delta.get("content") if isinstance(delta, dict) else None
+            if not isinstance(content, str) or not content:
+                continue
+
+            content_parts.append(content)
+            event: dict[str, Any] = {
+                "type": "delta",
+                "target": target,
+                "content": content,
+            }
+            if approach is not None:
+                event["approach"] = approach
+            yield event
+    except requests.RequestException as error:
+        return None, "Поток DeepSeek был прерван: " + str(error)
+    finally:
+        response.close()
+
+    response_json: dict[str, Any] = {
+        "model": response_model or payload.get("model"),
+        "choices": [
+            {
+                "finish_reason": finish_reason,
+                "message": {"content": "".join(content_parts)},
+            }
+        ],
+    }
+    if usage is not None:
+        response_json["usage"] = usage
+
+    summary, error = _normalize_text_response(response_json)
+    return summary, error
+
+
+def _deepseek_error_message(response: dict[str, Any]) -> str:
+    error = response.get("error")
+    if isinstance(error, str):
+        return error
+    if isinstance(error, dict) and isinstance(error.get("message"), str):
+        return error["message"]
+    if isinstance(response.get("details"), str):
+        return response["details"]
+    return "DeepSeek не вернул мета-анализ"
 
 
 def stream_day_two_answer(
