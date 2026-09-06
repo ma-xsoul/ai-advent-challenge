@@ -3,6 +3,7 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
+from advent.services import deepseek
 from advent.services.deepseek import (
     DEEPSEEK_API_URL,
     DEEPSEEK_BETA_API_URL,
@@ -544,3 +545,45 @@ class DeepSeekServiceTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DayFourPayloadTestCase(unittest.TestCase):
+    """
+    Температура работает только при выключенном thinking: DeepSeek документирует,
+    что в режиме размышления параметр молча игнорируется. Тест держит эту связку.
+    """
+
+    def test_answer_payload_carries_temperature_and_disables_thinking(self):
+        payload = deepseek._day_four_answer_payload(
+            "Придумай слоган",
+            model="deepseek-v4-flash",
+            temperature=1.2,
+        )
+
+        self.assertEqual(payload["temperature"], 1.2)
+        self.assertEqual(payload["thinking"], {"type": "disabled"})
+
+    def test_answer_payload_has_no_system_prompt(self):
+        payload = deepseek._day_four_answer_payload(
+            "Придумай слоган",
+            model="deepseek-v4-flash",
+            temperature=0.0,
+        )
+
+        roles = [message["role"] for message in payload["messages"]]
+        self.assertEqual(roles, ["user"])
+
+    def test_analysis_payload_judges_at_zero_temperature(self):
+        payload = deepseek._day_four_analysis_payload(
+            "Придумай слоган",
+            model="deepseek-v4-flash",
+            results={"0": {"content": "А"}, "1.2": {"content": "Б"}},
+        )
+
+        self.assertEqual(payload["temperature"], 0.0)
+        self.assertEqual(payload["thinking"], {"type": "disabled"})
+
+    def test_temperatures_of_the_homework_are_formatted_for_the_interface(self):
+        labels = [deepseek.format_temperature(v) for v in deepseek.DAY_FOUR_TEMPERATURES]
+
+        self.assertEqual(labels, ["0", "0.7", "1.4", "2"])

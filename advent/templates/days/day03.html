@@ -5,6 +5,7 @@
 {% block styles %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day03.css') }}">
 {% endblock %}
 
@@ -18,8 +19,10 @@
     </div>
     <h1>День 3.<br><span>Способы рассуждения</span></h1>
 
-    <section class="homework-brief" aria-label="Домашнее задание третьего дня">
-      <h2 class="homework-brief__title">Домашнее задание</h2>
+    <details class="homework-brief" aria-label="Домашнее задание третьего дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
       <ul class="homework-brief__steps">
         <li>Возьмите одну логическую, алгоритмическую или аналитическую задачу.</li>
         <li>Получите прямой ответ без дополнительных инструкций.</li>
@@ -39,7 +42,7 @@
           <dd>Видео + код</dd>
         </div>
       </dl>
-    </section>
+    </details>
 
     <hr class="homework-divider">
 

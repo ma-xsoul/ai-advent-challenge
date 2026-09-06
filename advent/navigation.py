@@ -35,6 +35,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=4,
+        title="Температура",
+        description="Влияние temperature на ответ",
+        endpoint="day04.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

@@ -34,7 +34,9 @@ advent/
 ├── navigation.py            # единый список дней для меню
 ├── days/
 │   ├── day01/routes.py      # страница и API первого дня
-│   └── day02/routes.py      # страница второго дня
+│   ├── day02/routes.py      # страница и API второго дня
+│   ├── day03/routes.py      # страница и API третьего дня
+│   └── day04/routes.py      # страница и API четвёртого дня
 ├── services/deepseek.py     # интеграция с DeepSeek
 ├── templates/
 │   ├── base.html            # общая оболочка и меню
@@ -47,7 +49,9 @@ advent/
 - `/` перенаправляет на `/days/1/`.
 - Day 1 использует `POST /days/1/api/chat`.
 - Старый `POST /api/chat` оставлен как совместимый адрес.
-- Day 2 — самостоятельная заготовка под следующее задание.
+- Day 2 использует `POST /days/2/api/compare` и потоковый `POST /days/2/api/compare/stream`.
+- Day 3 использует `POST /days/3/api/solve`, `POST /days/3/api/solve/stream` и `POST /days/3/api/task`.
+- Day 4 использует `POST /days/4/api/answer`, потоковый `POST /days/4/api/answer/stream` и `POST /days/4/api/prompt`.
 
 ## Как добавить новый день
 

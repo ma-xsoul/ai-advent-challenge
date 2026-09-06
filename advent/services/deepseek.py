@@ -101,6 +101,37 @@ DAY_THREE_TASK_GENERATOR_SYSTEM_PROMPT = (
     "только условие задачи одним компактным текстом."
 )
 
+DAY_FOUR_PROMPT_GENERATOR_SYSTEM_PROMPT = (
+    "Сгенерируй ровно один короткий запрос к языковой модели, на котором будет хорошо "
+    "заметна разница между низкой и высокой температурой сэмплирования. Подходят открытые "
+    "творческие задания, у которых много равноправных вариантов ответа: придумать название, "
+    "слоган, метафору, необычное применение обычного предмета, короткое описание или начало "
+    "истории. Не подходят фактические вопросы, арифметика, определения, переводы и любые "
+    "задачи с единственным правильным ответом — на них разница температур не видна. "
+    "Запрос должен требовать короткий ответ: не больше трёх предложений или пяти пунктов. "
+    "Не выполняй задание, не давай пояснений, заголовка или вступления — верни только текст "
+    "самого запроса одной компактной формулировкой на русском языке."
+)
+DAY_FOUR_ANALYSIS_SYSTEM_PROMPT = (
+    "Тебе дают один и тот же запрос и несколько ответов на него, полученных при разной "
+    "температуре сэмплирования. Сравни ответы по трём критериям: точность, креативность и "
+    "разнообразие формулировок. Более длинный ответ не считай автоматически лучшим. "
+    "Ответь строго нумерованным списком: ровно один пункт на каждую температуру, в формате: "
+    "`N. **temperature = <значение>** — что видно по точности, креативности и разнообразию`. "
+    "Значения температур бери дословно из ключей объекта answers, каждое упомяни ровно один "
+    "раз, иди от меньшей температуры к большей. "
+    "После списка добавь строку «Итог: …» — для каких задач подходит каждая настройка. "
+    "Пиши по-русски и кратко, уложись в 600 токенов."
+)
+
+# Четыре точки шкалы: оба края диапазона DeepSeek плюс два рабочих значения.
+DAY_FOUR_TEMPERATURES = (0.0, 0.7, 1.4, 2.0)
+DAY_FOUR_TEMPERATURE_MIN = 0.0
+DAY_FOUR_TEMPERATURE_MAX = 2.0
+
+# Ответы держим короткими: три штуки должны читаться рядом без прокрутки.
+DAY_FOUR_ANSWER_MAX_TOKENS = 500
+
 DAY_THREE_APPROACHES = ("direct", "step_by_step", "generated_prompt", "experts")
 
 # Названия подходов для мета-анализа: совпадают с подписями в интерфейсе,
@@ -513,6 +544,156 @@ def stream_day_three_solutions(
     yield {"type": "complete", "results_count": len(results)}
 
 
+def format_temperature(value: float) -> str:
+    """`0.0 -> "0"`, `0.70 -> "0.7"` — подпись температуры одинакова на сервере и в UI."""
+    return f"{value:g}"
+
+
+def request_day_four_answers(
+    prompt: str,
+    *,
+    model: str,
+    temperature: float | str,
+) -> tuple[dict[str, Any], int]:
+    """Отправляет один и тот же запрос при одной или всех температурах задания."""
+    selected = DAY_FOUR_TEMPERATURES if temperature == "all" else (float(temperature),)
+    results: dict[str, dict[str, Any]] = {}
+
+    for value in selected:
+        answer, status_code = _request_text_summary(
+            _day_four_answer_payload(prompt, model=model, temperature=value)
+        )
+        if not 200 <= status_code < 300:
+            response = dict(answer)
+            response["completed_results"] = results
+            return response, status_code
+        answer["temperature"] = value
+        results[format_temperature(value)] = answer
+
+    analysis = None
+    analysis_error = None
+    if temperature == "all":
+        analysis, status_code = _request_text_summary(
+            _day_four_analysis_payload(prompt, model=model, results=results)
+        )
+        if not 200 <= status_code < 300:
+            analysis_error = _deepseek_error_message(analysis)
+            analysis = None
+
+    return {
+        "prompt": prompt,
+        "model": model,
+        "temperature": temperature,
+        "results": results,
+        "analysis": analysis,
+        "analysis_error": analysis_error,
+    }, 200
+
+
+def request_day_four_prompt(*, model: str) -> tuple[dict[str, Any], int]:
+    """Создаёт запрос, на котором разница температур заметна."""
+    payload = _base_payload(
+        "Сгенерируй новый запрос для демонстрации разницы температур.",
+        model=model,
+        system_prompt=DAY_FOUR_PROMPT_GENERATOR_SYSTEM_PROMPT,
+    )
+    payload["max_tokens"] = 300
+    # Сам генератор запросов держим тёплым, иначе он предлагает одно и то же.
+    payload["temperature"] = 1.3
+    return _request_text_summary(payload)
+
+
+def stream_day_four_answers(
+    prompt: str,
+    *,
+    model: str,
+    temperature: float | str,
+) -> Iterator[dict[str, Any]]:
+    """Последовательно отдаёт ответы по мере генерации, от холодной температуры к горячей."""
+    selected = DAY_FOUR_TEMPERATURES if temperature == "all" else (float(temperature),)
+    results: dict[str, dict[str, Any]] = {}
+
+    for value in selected:
+        label = format_temperature(value)
+        yield {
+            "type": "answer_start",
+            "temperature": value,
+            "label": label,
+            "model": model,
+        }
+
+        answer, error = yield from _stream_day_three_text(
+            _day_four_answer_payload(prompt, model=model, temperature=value),
+            approach=None,
+            target="answer",
+            extra={"label": label},
+        )
+        if error:
+            yield {"type": "error", "label": label, "phase": "answer", "error": error}
+            return
+
+        answer["temperature"] = value
+        results[label] = answer
+        yield {"type": "answer_done", "label": label, "answer": answer}
+
+    if temperature == "all":
+        yield {"type": "analysis_start", "model": model}
+        analysis, error = yield from _stream_day_three_text(
+            _day_four_analysis_payload(prompt, model=model, results=results),
+            approach=None,
+            target="analysis",
+        )
+        if error:
+            yield {"type": "analysis_error", "error": error}
+        else:
+            yield {"type": "analysis_done", "analysis": analysis}
+
+    yield {"type": "complete", "results_count": len(results)}
+
+
+def _day_four_answer_payload(
+    prompt: str,
+    *,
+    model: str,
+    temperature: float,
+) -> dict[str, Any]:
+    """
+    Системного промпта здесь нет намеренно: три запроса должны отличаться
+    ровно одним параметром, иначе сравнение перестаёт быть честным.
+
+    `_base_payload` выключает thinking — без этого DeepSeek молча игнорирует
+    temperature, и весь день превращается в три одинаковых ответа.
+    """
+    payload = _base_payload(prompt, model=model)
+    payload["temperature"] = temperature
+    payload["max_tokens"] = DAY_FOUR_ANSWER_MAX_TOKENS
+    return payload
+
+
+def _day_four_analysis_payload(
+    prompt: str,
+    *,
+    model: str,
+    results: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    comparison = {
+        "prompt": prompt,
+        "answers": {
+            f"temperature = {label}": answer.get("content", "")[:4000]
+            for label, answer in results.items()
+        },
+    }
+    payload = _base_payload(
+        json.dumps(comparison, ensure_ascii=False, indent=2),
+        model=model,
+        system_prompt=DAY_FOUR_ANALYSIS_SYSTEM_PROMPT,
+    )
+    payload["max_tokens"] = 600
+    # Судью держим холодным: оценка не должна меняться от запуска к запуску.
+    payload["temperature"] = 0.0
+    return payload
+
+
 def _request_day_three_approach(
     task: str,
     *,
@@ -620,11 +801,13 @@ def _stream_day_three_text(
     *,
     approach: str | None,
     target: str,
+    extra: dict[str, Any] | None = None,
 ) -> Generator[
     dict[str, Any],
     None,
     tuple[dict[str, Any] | None, str | None],
 ]:
+    """Отдаёт куски текста из DeepSeek. `extra` добавляется в каждое событие delta."""
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         return None, "Не задан DEEPSEEK_API_KEY в файле .env"
@@ -695,6 +878,8 @@ def _stream_day_three_text(
             }
             if approach is not None:
                 event["approach"] = approach
+            if extra:
+                event.update(extra)
             yield event
     except requests.RequestException as error:
         return None, "Поток DeepSeek был прерван: " + str(error)

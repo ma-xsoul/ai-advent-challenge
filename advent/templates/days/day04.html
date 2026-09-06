@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}День 4. Температура · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day04.css') }}">
+{% endblock %}
+
+{% block content %}
+  {% set active_model = model if model in ['deepseek-v4-flash', 'deepseek-v4-pro'] else 'deepseek-v4-flash' %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 04</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Temperature · Accuracy · Diversity</span>
+    </div>
+    <h1>День 4.<br><span>Температура</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание четвёртого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <ul class="homework-brief__steps">
+        <li>Выполните запрос с параметром <code>temperature = 0</code>.</li>
+        <li>Повторите тот же запрос с <code>temperature = 0.7</code>.</li>
+        <li>Повторите тот же запрос с <code>temperature = 1.2</code>.</li>
+        <li>Сравните ответы по точности, креативности и разнообразию.</li>
+        <li>Сформулируйте, для каких задач лучше подходит каждая настройка.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Примеры ответов с разной температурой и выводы по их использованию.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <details class="theory-brief">
+      <summary class="theory-brief__title">
+        <h2>Теория · что такое температура</h2>
+      </summary>
+
+      <div class="theory-brief__body">
+        <p class="theory-brief__lead">
+          <code>temperature</code> — параметр сэмплирования. Он не меняет знания модели
+          и не влияет на то, что она «понимает»: он управляет только тем, насколько
+          случайно выбирается каждый следующий токен.
+        </p>
+
+        <section class="theory-block">
+          <h3 class="theory-block__label">Как это работает</h3>
+          <p>
+            На каждом шаге модель выдаёт логиты — оценки для всех токенов словаря.
+            Перед выбором они превращаются в вероятности через <code>softmax</code>,
+            и температура делит логиты до этого: <code>p = softmax(z / T)</code>.
+          </p>
+          <ul class="theory-list">
+            <li><strong>T &lt; 1</strong> — разрыв между оценками растёт, распределение заостряется: лидер забирает почти всю вероятность.</li>
+            <li><strong>T = 1</strong> — распределение остаётся таким, каким его посчитала модель.</li>
+            <li><strong>T &gt; 1</strong> — разрыв сжимается, распределение сглаживается: у маловероятных токенов появляется реальный шанс.</li>
+          </ul>
+        </section>
+
+        <section class="theory-block">
+          <h3 class="theory-block__label">Где какая настройка уместна</h3>
+          <dl class="theory-scale">
+            <div>
+              <dt>0 — 0.3</dt>
+              <dd>Извлечение данных, классификация, код, строгий JSON, ответы по документу — всё, что проверяется по эталону.</dd>
+            </div>
+            <div>
+              <dt>0.5 — 0.8</dt>
+              <dd>Диалог, объяснения, письма, документация — нужен живой текст без потери смысла.</dd>
+            </div>
+            <div>
+              <dt>1.0 — 1.5</dt>
+              <dd>Брейншторм, названия, слоганы, варианты сюжета — нужен разброс, а лучший вариант отбирает человек.</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="theory-block">
+          <h3 class="theory-block__label">Что важно помнить</h3>
+          <ul class="theory-list">
+            <li>Температура не повышает точность: на высоких значениях модель охотнее берёт токен, в котором сама менее уверена.</li>
+            <li><code>T = 0</code> даёт воспроизводимость на практике, но не гарантирует её строго — порядок вычислений с плавающей точкой и батчинг на сервере дают расхождения.</li>
+            <li><code>temperature</code> и <code>top_p</code> решают близкую задачу: обычно меняют что-то одно, а второе оставляют по умолчанию.</li>
+            <li>Один запуск ничего не доказывает — разброс виден только на нескольких повторах одного и того же запроса.</li>
+          </ul>
+        </section>
+      </div>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day4-lab" aria-labelledby="day4-lab-title">
+    <div class="day4-lab__intro">
+      <p class="day4-kicker">Практика</p>
+      <h2 id="day4-lab-title">Один запрос при разной температуре</h2>
+      <p>Двигайте ползунок и отправляйте один и тот же запрос — либо сравните сразу все четыре точки шкалы.</p>
+    </div>
+
+    <form
+      id="temperature-form"
+      class="day4-form"
+      data-answer-url="{{ url_for('day04.answer') }}"
+      data-prompt-url="{{ url_for('day04.generate_prompt') }}"
+      data-temperatures="{{ temperatures | map(attribute='label') | join(',') }}"
+    >
+      <div class="day4-field day4-field--wide day4-field--heat" style="--t: 0.35">
+        <div class="day4-heat-heading">
+          <label for="temperature-slider">Температура</label>
+          <output id="temperature-readout" for="temperature-slider">0.7</output>
+        </div>
+
+        <div class="day4-heat">
+          <div class="day4-heat__rail" aria-hidden="true">
+            <span class="day4-heat__fill"></span>
+          </div>
+          <input
+            id="temperature-slider"
+            name="temperature"
+            type="range"
+            min="{{ temperature_min }}"
+            max="{{ temperature_max }}"
+            step="0.01"
+            value="0.7"
+            aria-describedby="temperature-scale"
+          >
+        </div>
+
+        <div id="temperature-scale" class="day4-heat__ticks">
+          {% for tick in temperatures %}
+            <button
+              class="day4-heat__tick"
+              type="button"
+              data-temperature="{{ tick.label }}"
+              style="--tick: {{ tick.value / temperature_max }}"
+            >{{ tick.label }}</button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="day4-field day4-field--wide">
+        <div class="day4-prompt-heading">
+          <label for="temperature-prompt">Запрос</label>
+          <button id="prompt-generator" class="day4-prompt-generator" type="button"><span aria-hidden="true">*</span> Сгенерировать запрос</button>
+        </div>
+        <div class="day4-prompt-input">
+          <textarea id="temperature-prompt" name="prompt" rows="5" maxlength="10000" required placeholder="Например: придумай три названия для кофейни в старом книжном магазине"></textarea>
+          <p id="prompt-loading" class="task-loading" hidden>Придумываю запрос<span class="task-loading__dots" aria-hidden="true"></span></p>
+        </div>
+      </div>
+
+      <div class="day4-form__controls">
+        <div class="day4-field">
+          <span id="day4-model-label">Модель</span>
+          <div class="day4-select" data-day4-select>
+            <input id="day4-model" name="model" type="hidden" value="{{ active_model }}">
+            <button class="day4-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="day4-model-label day4-model-value">
+              <span id="day4-model-value">{{ active_model }}</span>
+              <span class="day4-select__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="day4-select__menu" role="listbox" aria-labelledby="day4-model-label" hidden>
+              <button class="day4-select__option" type="button" role="option" data-value="deepseek-v4-flash" data-label="deepseek-v4-flash" aria-selected="{{ 'true' if active_model == 'deepseek-v4-flash' else 'false' }}">
+                <strong>deepseek-v4-flash</strong>
+                <small>Быстрее для простых запросов</small>
+              </button>
+              <button class="day4-select__option" type="button" role="option" data-value="deepseek-v4-pro" data-label="deepseek-v4-pro" aria-selected="{{ 'true' if active_model == 'deepseek-v4-pro' else 'false' }}">
+                <strong>deepseek-v4-pro</strong>
+                <small>Точнее для сложных запросов</small>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="day4-form__hint">Запрос уходит без системного промпта: все обращения отличаются ровно одним параметром. Повторите один и тот же запрос дважды при одной температуре — так видно разнообразие.</p>
+
+      <div class="day4-form__actions">
+        <button id="temperature-submit" class="day4-submit" type="submit">Отправить запрос <span aria-hidden="true">→</span></button>
+        <span id="temperature-status" class="day4-status" aria-live="polite"></span>
+      </div>
+
+      <div class="day4-form__compare">
+        <button id="temperature-compare" class="day4-compare" type="button">Сравнить все четыре температуры</button>
+        <p>{{ temperatures | map(attribute='label') | join(' · ') }} — четыре ответа и мета-анализ, пять запросов к API</p>
+      </div>
+    </form>
+
+    <section id="temperature-results" class="temperature-results" aria-labelledby="temperature-results-title" tabindex="-1" hidden>
+      <div class="temperature-results__heading">
+        <div>
+          <p class="day4-kicker">Результат</p>
+          <h2 id="temperature-results-title">Ответы по возрастанию температуры</h2>
+        </div>
+        <p>Один запрос — разная степень случайности выбора токенов.</p>
+      </div>
+
+      <p id="temperature-error" class="temperature-error" role="alert" hidden></p>
+
+      <div id="temperature-grid" class="temperature-grid"></div>
+
+      <aside id="temperature-analysis" class="temperature-analysis" hidden>
+        <p class="day4-kicker">Мета-анализ</p>
+        <h3>Точность, креативность, разнообразие</h3>
+        <div id="temperature-analysis-text" class="md-body"></div>
+      </aside>
+    </section>
+
+    <template id="temperature-card-template">
+      <article class="temperature-card" data-temperature-card>
+        <header>
+          <span data-card-value>—</span>
+          <h3>temperature = <span data-card-label>—</span></h3>
+          <span class="temperature-card__badge" data-card-badge></span>
+        </header>
+        <p class="temperature-card__description" data-card-description></p>
+        <dl class="temperature-meta">
+          <div><dt>Токены</dt><dd data-meta="tokens">—</dd></div>
+          <div><dt>Финиш</dt><dd data-meta="finish">—</dd></div>
+        </dl>
+        <details class="answer-fold" open>
+          <summary>Ответ</summary>
+          <div class="temperature-answer md-body" data-answer></div>
+        </details>
+      </article>
+    </template>
+  </section>
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day04.js') }}"></script>
+{% endblock %}

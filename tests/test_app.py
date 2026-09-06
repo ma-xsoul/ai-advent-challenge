@@ -89,6 +89,43 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_four_renders_the_temperature_homework(self):
+        response = self.client.get("/days/4/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 4.", html)
+        self.assertIn("Температура", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("temperature = 0", html)
+        self.assertIn("temperature = 0.7", html)
+        self.assertIn("temperature = 1.2", html)
+        self.assertIn("точности, креативности и разнообразию", html)
+        self.assertIn(
+            "Примеры ответов с разной температурой и выводы по их использованию",
+            html,
+        )
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day04.css", html)
+        self.assertIn('href="/days/4/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_four_theory_block_is_collapsed_by_default(self):
+        response = self.client.get("/days/4/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<details class="theory-brief">', html)
+        self.assertNotIn('<details class="theory-brief" open>', html)
+        self.assertIn('class="theory-brief__title"', html)
+        self.assertIn("Теория", html)
+        self.assertIn("softmax(z / T)", html)
+        self.assertIn("Как это работает", html)
+        self.assertIn("Где какая настройка уместна", html)
+        self.assertIn("Что важно помнить", html)
+
     @patch("advent.days.day03.routes.request_day_three_solutions")
     def test_day_three_forwards_selected_reasoning_approach(self, solve_request):
         solve_request.return_value = (
@@ -186,6 +223,162 @@ class AdventAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"error": "Выберите способ решения"})
+
+    def test_every_day_collapses_its_homework_block_by_default(self):
+        for number in (1, 2, 3, 4):
+            with self.subTest(day=number):
+                response = self.client.get(f"/days/{number}/")
+                html = response.get_data(as_text=True)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('<details class="homework-brief" aria-label=', html)
+                self.assertNotIn('<details class="homework-brief" open', html)
+                self.assertIn('<summary class="homework-brief__title">', html)
+                self.assertNotIn('<section class="homework-brief"', html)
+                self.assertIn("<h2>Домашнее задание</h2>", html)
+
+    def test_day_four_renders_the_temperature_lab(self):
+        response = self.client.get("/days/4/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('id="temperature-slider"', html)
+        self.assertIn('type="range"', html)
+        self.assertIn('min="0.0"', html)
+        self.assertIn('max="2.0"', html)
+        self.assertIn("Сгенерировать запрос", html)
+        self.assertIn("Отправить запрос", html)
+        self.assertIn("Сравнить все четыре температуры", html)
+        self.assertIn('data-answer-url="/days/4/api/answer"', html)
+        self.assertIn('data-prompt-url="/days/4/api/prompt"', html)
+        self.assertIn('id="temperature-card-template"', html)
+        self.assertIn("Мета-анализ", html)
+        self.assertIn("css/lab.css", html)
+        self.assertIn("css/day04.css", html)
+        self.assertIn("js/day04.js", html)
+        self.assertNotIn("js/day03.js", html)
+        for label in ("0", "0.7", "1.4", "2"):
+            self.assertIn(f'data-temperature="{label}"', html)
+        self.assertIn("Сравнить все четыре температуры", html)
+
+    @patch("advent.days.day04.routes.request_day_four_answers")
+    def test_day_four_forwards_a_single_temperature(self, answer_request):
+        answer_request.return_value = ({"results": {}}, 200)
+
+        response = self.client.post(
+            "/days/4/api/answer",
+            json={
+                "prompt": "  Придумай слоган  ",
+                "model": "deepseek-v4-pro",
+                "temperature": 1.2,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        answer_request.assert_called_once_with(
+            "Придумай слоган",
+            model="deepseek-v4-pro",
+            temperature=1.2,
+        )
+
+    @patch("advent.days.day04.routes.request_day_four_answers")
+    def test_day_four_forwards_the_all_temperatures_run(self, answer_request):
+        answer_request.return_value = ({"results": {}}, 200)
+
+        response = self.client.post(
+            "/days/4/api/answer",
+            json={
+                "prompt": "Придумай слоган",
+                "model": "deepseek-v4-flash",
+                "temperature": "all",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        answer_request.assert_called_once_with(
+            "Придумай слоган",
+            model="deepseek-v4-flash",
+            temperature="all",
+        )
+
+    @patch("advent.days.day04.routes.stream_day_four_answers")
+    def test_day_four_proxies_answer_events_as_ndjson(self, stream_answers):
+        stream_answers.return_value = iter(
+            [
+                {"type": "answer_start", "label": "0", "temperature": 0.0},
+                {"type": "delta", "label": "0", "target": "answer", "content": "Ответ"},
+                {"type": "answer_done", "label": "0", "answer": {"content": "Ответ"}},
+                {"type": "complete", "results_count": 1},
+            ]
+        )
+
+        response = self.client.post(
+            "/days/4/api/answer/stream",
+            json={
+                "prompt": "  Придумай слоган  ",
+                "model": "deepseek-v4-flash",
+                "temperature": 0,
+            },
+        )
+        events = [json.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/x-ndjson")
+        self.assertEqual(
+            [event["type"] for event in events],
+            ["answer_start", "delta", "answer_done", "complete"],
+        )
+        stream_answers.assert_called_once_with(
+            "Придумай слоган",
+            model="deepseek-v4-flash",
+            temperature=0.0,
+        )
+
+    @patch("advent.days.day04.routes.request_day_four_prompt")
+    def test_day_four_generates_a_prompt_for_the_selected_model(self, prompt_request):
+        prompt_request.return_value = ({"content": "Придумай метафору для дождя."}, 200)
+
+        response = self.client.post("/days/4/api/prompt", json={"model": "deepseek-v4-pro"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["content"],
+            "Придумай метафору для дождя.",
+        )
+        prompt_request.assert_called_once_with(model="deepseek-v4-pro")
+
+    def test_day_four_rejects_a_temperature_outside_the_api_range(self):
+        for value in (-0.1, 2.1, 5):
+            with self.subTest(temperature=value):
+                response = self.client.post(
+                    "/days/4/api/answer",
+                    json={
+                        "prompt": "Тест",
+                        "model": "deepseek-v4-flash",
+                        "temperature": value,
+                    },
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("от 0 до 2", response.get_json()["error"])
+
+    def test_day_four_rejects_a_non_numeric_temperature(self):
+        for value in ("hot", None, True, [1]):
+            with self.subTest(temperature=value):
+                response = self.client.post(
+                    "/days/4/api/answer",
+                    json={
+                        "prompt": "Тест",
+                        "model": "deepseek-v4-flash",
+                        "temperature": value,
+                    },
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.get_json(),
+                    {"error": "Укажите температуру числом"},
+                )
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

@@ -1,0 +1,953 @@
+/* День 4: сравнение ответов при разной температуре. */
+
+.day4-lab {
+  margin-top: 36px;
+}
+
+.day4-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day4-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day4-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day4-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/*
+ * Блок теории: та же рамка, что у домашнего задания, но сворачиваемая.
+ * По умолчанию закрыт — раскрытие анимирует общее правило details из base.css.
+ */
+
+.theory-brief {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.theory-brief__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background: var(--surface-soft);
+  padding: 10px 18px;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  list-style: none;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.theory-brief__title::-webkit-details-marker {
+  display: none;
+}
+
+.theory-brief__title::before {
+  color: var(--accent);
+  content: "[+]";
+  letter-spacing: 0;
+}
+
+.theory-brief[open] .theory-brief__title {
+  border-bottom: 1px solid var(--line);
+}
+
+.theory-brief[open] .theory-brief__title::before {
+  content: "[−]";
+}
+
+.theory-brief__title:hover {
+  color: var(--text-bright);
+}
+
+.theory-brief__title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.theory-brief__title h2 {
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.theory-brief__body {
+  display: grid;
+  gap: 18px;
+  padding: 18px;
+}
+
+.theory-brief__lead {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.theory-block {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.theory-block__label {
+  margin: 0;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.theory-block p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.theory-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+  list-style: none;
+}
+
+.theory-list li {
+  position: relative;
+  padding-left: 20px;
+}
+
+.theory-list li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--muted);
+  content: "-";
+}
+
+.theory-list strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.theory-scale {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.theory-scale > div {
+  display: grid;
+  grid-template-columns: minmax(96px, 0.18fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.theory-scale dt {
+  color: var(--accent);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.theory-scale dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.theory-brief code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .theory-brief__body {
+    gap: 16px;
+  }
+
+  .theory-scale > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* ── Форма ─────────────────────────────────────────────────────────────── */
+
+.day4-form {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.day4-form.is-busy {
+  border-color: var(--line);
+}
+
+.day4-field {
+  display: grid;
+  gap: 7px;
+}
+
+.day4-field--wide {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 18px 18px;
+}
+
+.day4-field > span {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* ── Ползунок температуры ──────────────────────────────────────────────── */
+
+.day4-heat-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.day4-heat-heading label {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day4-heat-heading label::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+#temperature-readout {
+  color: var(--heat, var(--accent));
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  transition: color var(--speed) var(--ease);
+}
+
+#temperature-readout::after {
+  margin-left: 8px;
+  color: var(--muted);
+  content: attr(data-mood);
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/*
+ * Заливка — статичный градиент «холодно → тепло → горячо», обрезанный по --t.
+ * Обрезка, а не растяжение: цвет под ползунком не зависит от его положения.
+ */
+.day4-field--heat {
+  --heat: color-mix(
+    in oklab,
+    var(--error) calc((var(--t) - 0.5) * 200%),
+    color-mix(in oklab, var(--accent) calc(var(--t) * 200%), var(--info))
+  );
+}
+
+.day4-heat {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  margin-top: 10px;
+}
+
+.day4-heat__rail {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  height: 10px;
+  transform: translateY(-50%);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+}
+
+.day4-heat__fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--info) 0%, var(--accent) 50%, var(--error) 100%);
+  clip-path: inset(0 calc(100% - var(--t) * 100%) 0 0);
+}
+
+.day4-heat input[type="range"] {
+  position: relative;
+  width: 100%;
+  height: 34px;
+  margin: 0;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.day4-heat input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.day4-heat input[type="range"]::-webkit-slider-runnable-track {
+  height: 34px;
+  background: transparent;
+}
+
+.day4-heat input[type="range"]::-moz-range-track {
+  height: 34px;
+  background: transparent;
+}
+
+/*
+ * Бегунок — блочный курсор терминала: растёт и разгорается при перетаскивании.
+ */
+.day4-heat input[type="range"]::-webkit-slider-thumb {
+  width: 12px;
+  height: 26px;
+  margin-top: 4px;
+  border: 1px solid var(--bg);
+  background: var(--heat);
+  box-shadow: 0 0 0 1px var(--heat), 0 0 12px -2px var(--heat);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: box-shadow var(--speed-fast) var(--ease);
+}
+
+.day4-heat input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 26px;
+  border: 1px solid var(--bg);
+  border-radius: 0;
+  background: var(--heat);
+  box-shadow: 0 0 0 1px var(--heat), 0 0 12px -2px var(--heat);
+  transition: box-shadow var(--speed-fast) var(--ease);
+}
+
+.day4-heat input[type="range"]:hover::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px var(--heat), 0 0 18px -1px var(--heat);
+}
+
+.day4-heat input[type="range"]:hover::-moz-range-thumb {
+  box-shadow: 0 0 0 1px var(--heat), 0 0 18px -1px var(--heat);
+}
+
+.day4-heat input[type="range"]:active::-webkit-slider-thumb {
+  box-shadow: 0 0 0 1px var(--heat), 0 0 26px 1px var(--heat);
+}
+
+.day4-heat input[type="range"]:active::-moz-range-thumb {
+  box-shadow: 0 0 0 1px var(--heat), 0 0 26px 1px var(--heat);
+}
+
+.day4-heat input[type="range"]:disabled {
+  cursor: not-allowed;
+}
+
+.day4-heat input[type="range"]:disabled::-webkit-slider-thumb {
+  background: var(--muted);
+  box-shadow: none;
+}
+
+.day4-heat input[type="range"]:disabled::-moz-range-thumb {
+  background: var(--muted);
+  box-shadow: none;
+}
+
+/* Деления на значениях задания: подпись и одновременно кнопка перехода. */
+.day4-heat__ticks {
+  position: relative;
+  height: 26px;
+  margin-top: 2px;
+}
+
+.day4-heat__tick {
+  position: absolute;
+  top: 0;
+  left: calc(var(--tick) * 100%);
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  padding: 8px 6px 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--speed-fast) var(--ease);
+}
+
+.day4-heat__tick::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 5px;
+  background: var(--line-strong);
+  content: "";
+}
+
+.day4-heat__tick:hover:not(:disabled) {
+  color: var(--text-bright);
+}
+
+.day4-heat__tick.is-active {
+  color: var(--accent);
+}
+
+.day4-heat__tick.is-active::before {
+  background: var(--accent);
+}
+
+.day4-heat__tick:disabled {
+  cursor: not-allowed;
+}
+
+/*
+ * Крайние подписи прижимаем к краям рельса. Селектор по порядку, а не по
+ * значению --tick: [style*="--tick: 0"] поймал бы заодно 0.35 и 0.6.
+ */
+.day4-heat__tick:first-child {
+  transform: none;
+  left: 0;
+}
+
+.day4-heat__tick:first-child::before {
+  left: 5px;
+}
+
+.day4-heat__tick:last-child {
+  transform: none;
+  right: 0;
+  left: auto;
+}
+
+.day4-heat__tick:last-child::before {
+  right: 5px;
+  left: auto;
+}
+
+/* ── Поле запроса ──────────────────────────────────────────────────────── */
+
+.day4-prompt-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.day4-prompt-heading > label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day4-prompt-heading > label::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day4-prompt-generator {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  gap: 7px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 0 10px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.day4-prompt-generator span {
+  color: var(--accent);
+}
+
+.day4-prompt-generator:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day4-prompt-generator:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.day4-prompt-input {
+  position: relative;
+}
+
+.day4-prompt-input textarea {
+  min-height: 104px;
+  padding: 0;
+}
+
+/*
+ * Во время генерации поле показывает только надпись: прячем и подсказку-пример,
+ * и прежний текст, который вот-вот заменится.
+ */
+.day4-prompt-input.is-generating textarea,
+.day4-prompt-input.is-generating textarea::placeholder {
+  color: transparent;
+}
+
+/* ── Выбор модели ──────────────────────────────────────────────────────── */
+
+.day4-form__controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 18px;
+}
+
+.day4-select {
+  position: relative;
+}
+
+.day4-select__trigger {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 0 10px;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.day4-select__trigger:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.day4-select.is-open .day4-select__trigger {
+  border-color: var(--accent);
+}
+
+.day4-select__trigger:disabled {
+  cursor: not-allowed;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.day4-select__chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.day4-select__chevron::before {
+  content: "▾";
+}
+
+.day4-select.is-open .day4-select__chevron::before {
+  content: "▴";
+}
+
+.day4-select__menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  display: grid;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.day4-select__menu[hidden] {
+  display: none;
+}
+
+.day4-select__option {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  padding: 9px 12px 9px 26px;
+  color: var(--text);
+  text-align: left;
+}
+
+.day4-select__option + .day4-select__option {
+  border-top: 1px solid var(--line);
+}
+
+.day4-select__option:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.day4-select__option[aria-selected="true"] {
+  background: var(--accent-soft);
+}
+
+.day4-select__option[aria-selected="true"]::after {
+  position: absolute;
+  top: 9px;
+  left: 11px;
+  color: var(--accent);
+  content: "▸";
+}
+
+.day4-select__option strong {
+  color: var(--text-bright);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.day4-select__option small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* ── Кнопки ────────────────────────────────────────────────────────────── */
+
+.day4-form__hint {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 18px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.day4-form__hint::before {
+  content: "# ";
+}
+
+.day4-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--surface-soft);
+  padding: 10px 10px 10px 18px;
+}
+
+.day4-submit {
+  order: 2;
+  min-height: 34px;
+  margin-left: auto;
+  border: 0;
+  background: var(--accent);
+  padding: 0 16px;
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background var(--speed-fast) var(--ease), opacity var(--speed-fast) var(--ease);
+}
+
+.day4-submit:hover:not(:disabled) {
+  background: #ffd08a;
+}
+
+.day4-submit:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.day4-status {
+  order: 1;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day4-form__compare {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 10px 10px 10px 18px;
+}
+
+.day4-form__compare p {
+  order: 1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day4-compare {
+  order: 2;
+  min-height: 34px;
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  background: transparent;
+  padding: 0 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.day4-compare:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.day4-compare:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+/* ── Результаты ────────────────────────────────────────────────────────── */
+
+.temperature-results {
+  margin-top: 40px;
+}
+
+.temperature-results:focus {
+  outline: none;
+}
+
+.temperature-results__heading {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.temperature-results h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.temperature-results__heading > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.temperature-error {
+  margin: 0 0 16px;
+  border: 1px solid rgba(232, 112, 95, 0.4);
+  background: var(--error-soft);
+  padding: 11px 14px;
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.temperature-error::before {
+  content: "! ";
+}
+
+.temperature-error[hidden] {
+  display: none;
+}
+
+.temperature-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.temperature-card {
+  --heat: color-mix(
+    in oklab,
+    var(--error) calc((var(--t) - 0.5) * 200%),
+    color-mix(in oklab, var(--accent) calc(var(--t) * 200%), var(--info))
+  );
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--heat);
+  background: var(--surface);
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.temperature-card header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 14px;
+}
+
+.temperature-card header > span:first-child {
+  color: var(--heat);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.temperature-card header h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.temperature-card__badge {
+  margin-left: auto;
+  border: 1px solid var(--line-strong);
+  padding: 1px 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.temperature-card__description {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.temperature-card__description::before {
+  content: "# ";
+}
+
+.temperature-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.temperature-meta > div {
+  display: flex;
+  gap: 4px;
+  font-size: 11.5px;
+}
+
+.temperature-meta dt {
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.temperature-meta dt::after {
+  content: "=";
+}
+
+.temperature-meta dd {
+  margin: 0;
+  color: var(--muted-bright);
+  overflow-wrap: anywhere;
+}
+
+.temperature-answer {
+  min-height: 110px;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 14px;
+  color: var(--muted-bright);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.temperature-analysis {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--accent);
+  background: var(--surface);
+  padding: 16px 18px 18px;
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.temperature-analysis[hidden] {
+  display: none;
+}
+
+.temperature-analysis h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.temperature-answer.is-streaming::after,
+#temperature-analysis-text.is-streaming::after {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  margin-left: 2px;
+  background: var(--accent);
+  content: "";
+  vertical-align: -2px;
+  animation: caret-blink 1.1s steps(1, end) infinite;
+}
+
+@media (max-width: 820px) {
+  .day4-form__controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .day4-prompt-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .day4-form__actions,
+  .day4-form__compare {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .day4-submit,
+  .day4-compare {
+    order: 1;
+    width: 100%;
+    min-height: 40px;
+    margin-left: 0;
+  }
+
+  .day4-status,
+  .day4-form__compare p {
+    order: 2;
+  }
+}
