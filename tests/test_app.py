@@ -225,7 +225,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(response.get_json(), {"error": "Выберите способ решения"})
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4):
+        for number in (1, 2, 3, 4, 5):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -379,6 +379,31 @@ class AdventAppTestCase(unittest.TestCase):
                     response.get_json(),
                     {"error": "Укажите температуру числом"},
                 )
+
+    def test_day_five_renders_the_model_versions_homework(self):
+        response = self.client.get("/days/5/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 5.", html)
+        self.assertIn("Версии моделей", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("слабой модели", html)
+        self.assertIn("средней модели", html)
+        self.assertIn("сильной модели", html)
+        self.assertIn("HuggingFace", html)
+        self.assertIn("время ответа, количество токенов и стоимость", html)
+        self.assertIn("качество ответов, скорость и ресурсоёмкость", html)
+        self.assertIn(
+            "Короткий вывод о различиях между моделями и ссылки на них",
+            html,
+        )
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day05.css", html)
+        self.assertIn('href="/days/5/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

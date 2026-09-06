@@ -36,7 +36,8 @@ advent/
 │   ├── day01/routes.py      # страница и API первого дня
 │   ├── day02/routes.py      # страница и API второго дня
 │   ├── day03/routes.py      # страница и API третьего дня
-│   └── day04/routes.py      # страница и API четвёртого дня
+│   ├── day04/routes.py      # страница и API четвёртого дня
+│   └── day05/routes.py      # страница пятого дня
 ├── services/deepseek.py     # интеграция с DeepSeek
 ├── templates/
 │   ├── base.html            # общая оболочка и меню
@@ -52,6 +53,7 @@ advent/
 - Day 2 использует `POST /days/2/api/compare` и потоковый `POST /days/2/api/compare/stream`.
 - Day 3 использует `POST /days/3/api/solve`, `POST /days/3/api/solve/stream` и `POST /days/3/api/task`.
 - Day 4 использует `POST /days/4/api/answer`, потоковый `POST /days/4/api/answer/stream` и `POST /days/4/api/prompt`.
+- Day 5 — оформленное задание про версии моделей, практическая часть в работе.
 
 ## Как добавить новый день
 

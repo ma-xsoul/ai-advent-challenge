@@ -43,6 +43,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=5,
+        title="Версии моделей",
+        description="Слабая, средняя и сильная модель",
+        endpoint="day05.index",
+        status="В работе",
+        visible=True,
+    ),
 )
 
 

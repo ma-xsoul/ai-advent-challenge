@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}День 5. Версии моделей · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day05.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 05</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Models · Latency · Cost</span>
+    </div>
+    <h1>День 5.<br><span>Версии моделей</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание пятого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <ul class="homework-brief__steps">
+        <li>Выполните один и тот же запрос на слабой модели — например, из начала списка HuggingFace.</li>
+        <li>Повторите тот же запрос на средней модели — из середины списка.</li>
+        <li>Повторите тот же запрос на сильной модели — из конца списка.</li>
+        <li>Замерьте время ответа, количество токенов и стоимость, если модель платная.</li>
+        <li>Сравните качество ответов, скорость и ресурсоёмкость.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Короткий вывод о различиях между моделями и ссылки на них.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day5-lab" aria-labelledby="day5-lab-title">
+    <div class="day5-lab__intro">
+      <p class="day5-kicker">Практика</p>
+      <h2 id="day5-lab-title">Один запрос на трёх уровнях модели</h2>
+      <p>Маршрут, шаблон и стили дня готовы. Лаборатория сравнения появится здесь.</p>
+    </div>
+
+    <div class="day5-tiers">
+      <article class="day5-tiers__item">
+        <span class="day5-tiers__rank">01</span>
+        <h3>Слабая</h3>
+        <p>Дешевле и быстрее всех, но чаще ошибается и хуже держит формат.</p>
+      </article>
+      <article class="day5-tiers__item">
+        <span class="day5-tiers__rank">02</span>
+        <h3>Средняя</h3>
+        <p>Рабочий компромисс: приемлемое качество при умеренной цене и задержке.</p>
+      </article>
+      <article class="day5-tiers__item">
+        <span class="day5-tiers__rank">03</span>
+        <h3>Сильная</h3>
+        <p>Лучшее качество ценой скорости и стоимости запроса.</p>
+      </article>
+    </div>
+
+    <dl class="day5-metrics">
+      <div>
+        <dt>Время ответа</dt>
+        <dd>От отправки запроса до последнего токена.</dd>
+      </div>
+      <div>
+        <dt>Токены</dt>
+        <dd>Вход и выход отдельно — платят за оба.</dd>
+      </div>
+      <div>
+        <dt>Стоимость</dt>
+        <dd>Цена за миллион токенов, умноженная на расход.</dd>
+      </div>
+    </dl>
+
+    <p class="day5-note">
+      <span aria-hidden="true">$</span> статус: <strong>в работе</strong> — модель дня <code>{{ model }}</code>
+    </p>
+  </section>
+{% endblock %}

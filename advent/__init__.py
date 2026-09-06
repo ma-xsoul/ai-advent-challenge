@@ -8,6 +8,7 @@ from .days.day01.routes import chat as day01_chat
 from .days.day02.routes import bp as day02_blueprint
 from .days.day03.routes import bp as day03_blueprint
 from .days.day04.routes import bp as day04_blueprint
+from .days.day05.routes import bp as day05_blueprint
 from .navigation import DAYS
 
 
@@ -23,6 +24,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(day02_blueprint)
     app.register_blueprint(day03_blueprint)
     app.register_blueprint(day04_blueprint)
+    app.register_blueprint(day05_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(
