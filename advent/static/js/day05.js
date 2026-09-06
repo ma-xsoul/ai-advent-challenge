@@ -23,6 +23,63 @@
   const cards = new Map();
   let renderFrame = null;
 
+  /*
+   * Пока идёт поток, страница сама держит нижний край печатающегося блока в
+   * поле зрения: от нажатия кнопки до мета-анализа руки не нужны. Ручная
+   * прокрутка ведение отменяет, возврат к низу — включает снова.
+   */
+  const FOLLOW_MARGIN = 90;
+  let followTarget = null;
+  let followEnabled = false;
+  let lastAutoScroll = -1;
+
+  const followTargetVisible = () => {
+    if (!followTarget) return false;
+    const fold = followTarget.closest("details");
+    if (fold && !fold.open) return false;
+    return followTarget.offsetParent !== null;
+  };
+
+  const nearTargetBottom = () => {
+    if (!followTargetVisible()) return false;
+    return followTarget.getBoundingClientRect().bottom - window.innerHeight < 160;
+  };
+
+  const followBottom = () => {
+    if (!followEnabled || !followTarget || !followTargetVisible()) return;
+    const overflow =
+      followTarget.getBoundingClientRect().bottom - (window.innerHeight - FOLLOW_MARGIN);
+    if (overflow <= 1) return;
+
+    window.scrollBy({ top: overflow, behavior: "auto" });
+    lastAutoScroll = Math.round(window.scrollY);
+  };
+
+  const startFollowing = (element) => {
+    followTarget = element;
+    followEnabled = true;
+  };
+
+  const stopFollowing = () => {
+    followEnabled = false;
+    followTarget = null;
+  };
+
+  // Прокрутку, которую сделали мы сами, за действие человека не считаем.
+  const syncFollowToUser = () => {
+    if (followTarget) followEnabled = nearTargetBottom();
+  };
+
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (Math.abs(Math.round(window.scrollY) - lastAutoScroll) > 2) syncFollowToUser();
+    },
+    { passive: true },
+  );
+  window.addEventListener("wheel", syncFollowToUser, { passive: true });
+  window.addEventListener("touchmove", syncFollowToUser, { passive: true });
+
   const renderRaw = (output) => {
     const raw = rawAnswers.get(output) || "";
     if (typeof window.renderMarkdown === "function") {
@@ -39,6 +96,7 @@
       renderFrame = null;
       pendingRender.forEach(renderRaw);
       pendingRender.clear();
+      followBottom();
     });
   };
 
@@ -116,7 +174,37 @@
     grid.append(card);
     cards.set(event.tier, card);
     revealBlock(card);
+    startFollowing(card.querySelector("[data-answer]"));
     return card;
+  };
+
+  /*
+   * Рассуждение показываем живьём: у старшей модели оно идёт первые несколько
+   * секунд, и без него карточка выглядит зависшей. Как только пошёл сам ответ,
+   * блок сворачивается, чтобы не заслонять результат.
+   */
+  const appendReasoning = (event) => {
+    const card = cards.get(event.tier);
+    if (!card) return;
+    const fold = card.querySelector("[data-reasoning-fold]");
+    const output = card.querySelector("[data-reasoning]");
+    if (!fold || !output) return;
+
+    if (fold.hidden) {
+      fold.hidden = false;
+      fold.open = true;
+      card.querySelector("[data-meta='finish']").textContent = "размышляет…";
+      startFollowing(output);
+    }
+    output.textContent += event.content;
+    output.scrollTop = output.scrollHeight;
+    card.querySelector("[data-reasoning-count]").textContent =
+      `${output.textContent.length} символов`;
+  };
+
+  const collapseReasoning = (card) => {
+    const fold = card.querySelector("[data-reasoning-fold]");
+    if (fold && !fold.hidden && fold.open) fold.open = false;
   };
 
   const finishCard = (event) => {
@@ -127,6 +215,7 @@
 
     setAnswer(output, answer.content || rawAnswer(output) || "Пустой ответ");
     output.classList.remove("is-streaming");
+    collapseReasoning(card);
     card.querySelector("[data-meta='seconds']").textContent =
       typeof answer.seconds === "number" ? `${answer.seconds} с` : "—";
     card.querySelector("[data-meta='first']").textContent =
@@ -224,9 +313,18 @@
             analysis.hidden = false;
             analysisText.classList.add("is-streaming");
             appendAnswer(analysisText, streamEvent.content);
+          } else if (streamEvent.target === "reasoning") {
+            appendReasoning(streamEvent);
           } else {
             const card = cards.get(streamEvent.tier);
-            if (card) appendAnswer(card.querySelector("[data-answer]"), streamEvent.content);
+            if (!card) return;
+            const output = card.querySelector("[data-answer]");
+            if (!rawAnswer(output)) {
+              collapseReasoning(card);
+              card.querySelector("[data-meta='finish']").textContent = "печатает…";
+              startFollowing(output);
+            }
+            appendAnswer(output, streamEvent.content);
           }
         } else if (streamEvent.type === "model_done") {
           finishCard(streamEvent);
@@ -240,6 +338,7 @@
           analysisText.classList.add("is-streaming");
           status.textContent = "Формируется мета-анализ…";
           revealBlock(analysis);
+          startFollowing(analysisText);
         } else if (streamEvent.type === "analysis_done") {
           analysis.hidden = false;
           setAnswer(analysisText, streamEvent.analysis?.content || rawAnswer(analysisText));
@@ -259,6 +358,7 @@
       status.textContent = "Ошибка";
     } finally {
       setLoading(false);
+      stopFollowing();
     }
   });
 

@@ -366,6 +366,68 @@
   overflow-wrap: anywhere;
 }
 
+/* Рассуждение старшей модели: видно, что она работает, пока текста ещё нет. */
+.reasoning-fold {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.reasoning-fold[hidden] {
+  display: none;
+}
+
+.reasoning-fold summary {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 0 14px;
+  color: var(--muted);
+  font-size: 11.5px;
+  list-style: none;
+  user-select: none;
+}
+
+.reasoning-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.reasoning-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.reasoning-fold[open] summary::before {
+  content: "[−] ";
+}
+
+.reasoning-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.reasoning-fold__count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.models-reasoning {
+  max-height: 180px;
+  margin: 0;
+  overflow-y: auto;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .models-answer {
   min-height: 110px;
   flex: 1;

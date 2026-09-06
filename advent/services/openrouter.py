@@ -19,12 +19,16 @@ import requests
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
-# Лестница Qwen: одна семья, три весовые категории. Сравнение показывает
-# влияние размера модели, а не разницу школ обучения разных лабораторий.
+# Три весовые категории. Младшие — лестница Qwen, старшая — Kimi K3, самая
+# дорогая китайская модель в каталоге OpenRouter.
 #
-# reasoning_mandatory=True у старшей модели — не наша прихоть: на попытку
-# передать reasoning.enabled=false endpoint отвечает 400 «Reasoning is
-# mandatory for this endpoint and cannot be disabled».
+# Раньше старшей была qwen3.8-max, но у неё рассуждение не отключается: она
+# обрывала ответ на середине, упираясь в лимит токенов, и отвечала не
+# по-русски. У Kimi reasoning.enabled=false принимается, поэтому все три
+# модели сравниваются в одинаковых условиях.
+#
+# reasoning_mandatory оставлен как флаг: если модель запретит отключение,
+# endpoint ответит 400 «Reasoning is mandatory for this endpoint».
 DAY_FIVE_MODELS: tuple[dict[str, Any], ...] = (
     {
         "tier": "weak",
@@ -41,8 +45,8 @@ DAY_FIVE_MODELS: tuple[dict[str, Any], ...] = (
     {
         "tier": "strong",
         "label": "Сильная",
-        "slug": "qwen/qwen3.8-max-0902",
-        "reasoning_mandatory": True,
+        "slug": "moonshotai/kimi-k3",
+        "reasoning_mandatory": False,
     },
 )
 
@@ -143,6 +147,7 @@ def _stream_one(
         return None, message
 
     parts: list[str] = []
+    reasoning_parts: list[str] = []
     finish_reason: str | None = None
     usage: dict[str, Any] | None = None
 
@@ -173,7 +178,22 @@ def _stream_one(
                 finish_reason = choice["finish_reason"]
 
             delta = choice.get("delta")
-            content = delta.get("content") if isinstance(delta, dict) else None
+            if not isinstance(delta, dict):
+                continue
+
+            # Рассуждающие модели молчат в content по нескольку секунд, пока
+            # думают. Без этих событий карточка выглядит зависшей.
+            reasoning = delta.get("reasoning")
+            if isinstance(reasoning, str) and reasoning:
+                reasoning_parts.append(reasoning)
+                yield {
+                    "type": "delta",
+                    "tier": model["tier"],
+                    "target": "reasoning",
+                    "content": reasoning,
+                }
+
+            content = delta.get("content")
             if not isinstance(content, str) or not content:
                 continue
 
@@ -210,6 +230,7 @@ def _stream_one(
         "first_token_seconds": (
             round(first_token_at - started, 2) if first_token_at is not None else None
         ),
+        "reasoning_characters": len("".join(reasoning_parts)),
         **_usage_summary(usage),
     }, None
 

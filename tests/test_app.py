@@ -410,7 +410,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('data-compare-url="/days/5/api/compare/stream"', html)
         self.assertIn("qwen/qwen3.7-flash", html)
         self.assertIn("qwen/qwen3-30b-a3b-instruct-2507", html)
-        self.assertIn("qwen/qwen3.8-max-0902", html)
+        self.assertIn("moonshotai/kimi-k3", html)
         self.assertIn("deepseek-v4-pro", html)
         self.assertIn('href="/days/5/"', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
