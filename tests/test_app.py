@@ -401,9 +401,85 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn("css/day01.css", html)
         self.assertIn("css/homework.css", html)
         self.assertIn("css/day05.css", html)
+        self.assertIn("css/lab.css", html)
+        self.assertIn("js/day05.js", html)
+        self.assertIn("Сгенерировать запрос", html)
+        self.assertIn("Запросить три модели", html)
+        self.assertIn('id="models-card-template"', html)
+        self.assertIn('data-prompt-url="/days/5/api/prompt"', html)
+        self.assertIn('data-compare-url="/days/5/api/compare/stream"', html)
+        self.assertIn("qwen/qwen3.7-flash", html)
+        self.assertIn("qwen/qwen3-30b-a3b-instruct-2507", html)
+        self.assertIn("qwen/qwen3.8-max-0902", html)
+        self.assertIn("deepseek-v4-pro", html)
         self.assertIn('href="/days/5/"', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
+
+    @patch("advent.days.day05.routes.request_day_five_prompt")
+    def test_day_five_generates_a_prompt(self, prompt_request):
+        prompt_request.return_value = ({"content": "Объясни, почему небо голубое."}, 200)
+
+        response = self.client.post("/days/5/api/prompt", json={"model": "deepseek-v4-flash"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json()["content"],
+            "Объясни, почему небо голубое.",
+        )
+        prompt_request.assert_called_once_with(model="deepseek-v4-flash")
+
+    @patch("advent.days.day05.routes.stream_day_five_analysis")
+    @patch("advent.days.day05.routes.stream_day_five_answers")
+    def test_day_five_chains_openrouter_models_and_the_deepseek_analysis(
+        self, stream_answers, stream_analysis
+    ):
+        answer = {"content": "Ответ", "seconds": 1.2, "output_tokens": 40, "cost": 0.00001}
+        stream_answers.return_value = iter(
+            [
+                {"type": "model_start", "tier": "weak", "label": "Слабая", "slug": "a"},
+                {"type": "delta", "tier": "weak", "target": "answer", "content": "От"},
+                {"type": "model_done", "tier": "weak", "answer": answer},
+                {"type": "models_complete", "results": {"weak": answer}},
+            ]
+        )
+
+        def fake_analysis(prompt, *, model, results):
+            yield {"type": "delta", "target": "analysis", "content": "Итог"}
+            return {"content": "Итог"}, None
+
+        stream_analysis.side_effect = fake_analysis
+
+        response = self.client.post(
+            "/days/5/api/compare/stream",
+            json={"prompt": "  Почему небо голубое?  "},
+        )
+        events = [json.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/x-ndjson")
+        self.assertEqual(
+            [event["type"] for event in events],
+            [
+                "model_start",
+                "delta",
+                "model_done",
+                "analysis_start",
+                "delta",
+                "analysis_done",
+                "complete",
+            ],
+        )
+        # models_complete — внутреннее событие, наружу уходить не должно.
+        self.assertNotIn("models_complete", [event["type"] for event in events])
+        stream_answers.assert_called_once_with("Почему небо голубое?")
+        self.assertEqual(stream_analysis.call_args.kwargs["model"], "deepseek-v4-pro")
+
+    def test_day_five_rejects_an_empty_prompt(self):
+        response = self.client.post("/days/5/api/compare/stream", json={"prompt": "   "})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json(), {"error": "Введите запрос"})
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

@@ -124,6 +124,29 @@ DAY_FOUR_ANALYSIS_SYSTEM_PROMPT = (
     "Пиши по-русски и кратко, уложись в 600 токенов."
 )
 
+DAY_FIVE_PROMPT_GENERATOR_SYSTEM_PROMPT = (
+    "Сгенерируй ровно один запрос к языковой модели, на котором будет наглядно видна "
+    "разница между слабой, средней и сильной моделью. Подходят задания, требующие связного "
+    "рассуждения или точности: объяснить нетривиальное явление простыми словами, разобрать "
+    "неоднозначную ситуацию, найти ошибку в рассуждении, кратко сравнить два подхода. "
+    "Не подходят вопросы на одно слово, простая арифметика и чистое творчество — на них "
+    "слабая модель выглядит не хуже сильной. "
+    "Запрос должен требовать компактный ответ: не больше пяти предложений. "
+    "Не выполняй задание, не давай пояснений и заголовка — верни только текст самого "
+    "запроса одной формулировкой на русском языке."
+)
+DAY_FIVE_ANALYSIS_SYSTEM_PROMPT = (
+    "Тебе дают один запрос и три ответа на него от моделей разной весовой категории: "
+    "слабой, средней и сильной. Вместе с каждым ответом даны замеры: время, токены и "
+    "стоимость. Сравни ответы по качеству, скорости и ресурсоёмкости. "
+    "Более длинный ответ не считай автоматически более качественным. "
+    "Ответь строго нумерованным списком ровно из трёх пунктов в формате: "
+    "`N. **<уровень> — <название модели>** — качество ответа, затем скорость и цена`. "
+    "Уровень и название бери дословно из ключей объекта answers, иди от слабой к сильной. "
+    "После списка добавь строку «Итог: …» — оправдывает ли сильная модель свою цену на "
+    "этой задаче и какую из трёх стоит взять. Пиши по-русски и кратко, уложись в 600 токенов."
+)
+
 # Четыре точки шкалы: оба края диапазона DeepSeek плюс два рабочих значения.
 DAY_FOUR_TEMPERATURES = (0.0, 0.7, 1.4, 2.0)
 DAY_FOUR_TEMPERATURE_MIN = 0.0
@@ -649,6 +672,48 @@ def stream_day_four_answers(
             yield {"type": "analysis_done", "analysis": analysis}
 
     yield {"type": "complete", "results_count": len(results)}
+
+
+def request_day_five_prompt(*, model: str) -> tuple[dict[str, Any], int]:
+    """Создаёт запрос, на котором разница весовых категорий моделей заметна."""
+    payload = _base_payload(
+        "Сгенерируй новый запрос для сравнения моделей разной силы.",
+        model=model,
+        system_prompt=DAY_FIVE_PROMPT_GENERATOR_SYSTEM_PROMPT,
+    )
+    payload["max_tokens"] = 300
+    payload["temperature"] = 1.3
+    return _request_text_summary(payload)
+
+
+def stream_day_five_analysis(
+    prompt: str,
+    *,
+    model: str,
+    results: dict[str, dict[str, Any]],
+) -> Generator[dict[str, Any], None, tuple[dict[str, Any] | None, str | None]]:
+    """Мета-анализ трёх ответов. Судью держим холодным ради воспроизводимости."""
+    comparison = {
+        "prompt": prompt,
+        "answers": {
+            f"{answer.get('label', tier)} — {answer.get('slug', '')}": {
+                "ответ": answer.get("content", "")[:4000],
+                "секунды": answer.get("seconds"),
+                "токенов_на_выходе": answer.get("output_tokens"),
+                "стоимость_usd": answer.get("cost"),
+            }
+            for tier, answer in results.items()
+        },
+    }
+    payload = _base_payload(
+        json.dumps(comparison, ensure_ascii=False, indent=2),
+        model=model,
+        system_prompt=DAY_FIVE_ANALYSIS_SYSTEM_PROMPT,
+    )
+    payload["max_tokens"] = 600
+    payload["temperature"] = 0.0
+
+    return (yield from _stream_day_three_text(payload, approach=None, target="analysis"))
 
 
 def _day_four_answer_payload(

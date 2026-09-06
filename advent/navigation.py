@@ -48,7 +48,7 @@ DAYS = (
         title="Версии моделей",
         description="Слабая, средняя и сильная модель",
         endpoint="day05.index",
-        status="В работе",
+        status="Готово",
         visible=True,
     ),
 )

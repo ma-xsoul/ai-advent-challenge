@@ -5,6 +5,7 @@
 {% block styles %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day05.css') }}">
 {% endblock %}
 
@@ -48,44 +49,88 @@
     <div class="day5-lab__intro">
       <p class="day5-kicker">Практика</p>
       <h2 id="day5-lab-title">Один запрос на трёх уровнях модели</h2>
-      <p>Маршрут, шаблон и стили дня готовы. Лаборатория сравнения появится здесь.</p>
+      <p>Запрос придумывает DeepSeek, отвечают три модели Qwen разного размера, итог подводит {{ analyst_model }}.</p>
     </div>
 
-    <div class="day5-tiers">
-      <article class="day5-tiers__item">
-        <span class="day5-tiers__rank">01</span>
-        <h3>Слабая</h3>
-        <p>Дешевле и быстрее всех, но чаще ошибается и хуже держит формат.</p>
-      </article>
-      <article class="day5-tiers__item">
-        <span class="day5-tiers__rank">02</span>
-        <h3>Средняя</h3>
-        <p>Рабочий компромисс: приемлемое качество при умеренной цене и задержке.</p>
-      </article>
-      <article class="day5-tiers__item">
-        <span class="day5-tiers__rank">03</span>
-        <h3>Сильная</h3>
-        <p>Лучшее качество ценой скорости и стоимости запроса.</p>
-      </article>
-    </div>
+    <form
+      id="models-form"
+      class="day5-form"
+      data-prompt-url="{{ url_for('day05.generate_prompt') }}"
+      data-compare-url="{{ url_for('day05.compare_stream') }}"
+    >
+      <div class="day5-field">
+        <div class="day5-prompt-heading">
+          <label for="models-prompt">Запрос</label>
+          <button id="prompt-generator" class="day5-prompt-generator" type="button"><span aria-hidden="true">*</span> Сгенерировать запрос</button>
+        </div>
+        <div class="day5-prompt-input">
+          <textarea id="models-prompt" name="prompt" rows="5" maxlength="10000" required placeholder="Например: объясни простыми словами, почему нельзя делить на ноль, и в чём здесь частая ошибка рассуждения"></textarea>
+          <p id="prompt-loading" class="task-loading" hidden>Придумываю запрос<span class="task-loading__dots" aria-hidden="true"></span></p>
+        </div>
+      </div>
 
-    <dl class="day5-metrics">
-      <div>
-        <dt>Время ответа</dt>
-        <dd>От отправки запроса до последнего токена.</dd>
-      </div>
-      <div>
-        <dt>Токены</dt>
-        <dd>Вход и выход отдельно — платят за оба.</dd>
-      </div>
-      <div>
-        <dt>Стоимость</dt>
-        <dd>Цена за миллион токенов, умноженная на расход.</dd>
-      </div>
-    </dl>
+      <ol class="day5-ladder">
+        {% for model in models %}
+          <li class="day5-ladder__item" data-ladder-tier="{{ model.tier }}">
+            <span class="day5-ladder__level">{{ model.label }}</span>
+            <code>{{ model.slug }}</code>
+          </li>
+        {% endfor %}
+      </ol>
 
-    <p class="day5-note">
-      <span aria-hidden="true">$</span> статус: <strong>в работе</strong> — модель дня <code>{{ model }}</code>
-    </p>
+      <p class="day5-form__hint">Модели спрашиваются последовательно одним и тем же запросом. У старшей модели рассуждение отключить нельзя — она думает всегда, и это видно по времени и цене.</p>
+
+      <div class="day5-form__actions">
+        <button id="models-submit" class="day5-submit" type="submit">Запросить три модели <span aria-hidden="true">→</span></button>
+        <span id="models-status" class="day5-status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <section id="models-results" class="models-results" aria-labelledby="models-results-title" tabindex="-1" hidden>
+      <div class="models-results__heading">
+        <div>
+          <p class="day5-kicker">Результат</p>
+          <h2 id="models-results-title">Ответы по возрастанию силы модели</h2>
+        </div>
+        <p>Один запрос — три весовые категории, замеры времени, токенов и цены.</p>
+      </div>
+
+      <p id="models-error" class="models-error" role="alert" hidden></p>
+
+      <div id="models-grid" class="models-grid"></div>
+
+      <aside id="models-analysis" class="models-analysis" hidden>
+        <p class="day5-kicker">Мета-анализ · {{ analyst_model }}</p>
+        <h3>Качество, скорость, ресурсоёмкость</h3>
+        <div id="models-analysis-text" class="md-body"></div>
+      </aside>
+    </section>
+
+    <template id="models-card-template">
+      <article class="models-card" data-model-card>
+        <header>
+          <span class="models-card__level" data-card-level>—</span>
+          <h3 data-card-slug>—</h3>
+          <span class="models-card__badge" data-card-reasoning hidden>рассуждает</span>
+        </header>
+        <dl class="models-meta">
+          <div><dt>Время</dt><dd data-meta="seconds">—</dd></div>
+          <div><dt>Первый токен</dt><dd data-meta="first">—</dd></div>
+          <div><dt>Токены</dt><dd data-meta="tokens">—</dd></div>
+          <div><dt>Стоимость</dt><dd data-meta="cost">—</dd></div>
+          <div><dt>Финиш</dt><dd data-meta="finish">—</dd></div>
+        </dl>
+        <details class="answer-fold" open>
+          <summary>Ответ</summary>
+          <div class="models-answer md-body" data-answer></div>
+        </details>
+      </article>
+    </template>
   </section>
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day05.js') }}"></script>
 {% endblock %}
