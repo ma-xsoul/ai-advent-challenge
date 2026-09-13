@@ -224,8 +224,33 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"error": "Выберите способ решения"})
 
+    def test_day_six_renders_the_agent_homework(self):
+        response = self.client.get("/days/6/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 6.", html)
+        self.assertIn("Первый агент", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("отдельной сущностью", html)
+        self.assertIn("Инкапсулируйте логику запроса и ответа", html)
+        self.assertIn("Агент принимает запрос и корректно вызывает LLM через API", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/lab.css", html)
+        self.assertIn("css/day06.css", html)
+        self.assertIn("js/day06.js", html)
+        self.assertIn('id="agent-form"', html)
+        self.assertIn("agent.snapshot()", html)
+        self.assertIn("Новый диалог", html)
+        self.assertIn('data-chat-url="/days/6/api/chat/stream"', html)
+        self.assertIn("agent_session", response.headers.get("Set-Cookie", ""))
+        self.assertIn('href="/days/6/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5):
+        for number in (1, 2, 3, 4, 5, 6):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -480,6 +505,73 @@ class AdventAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"error": "Введите запрос"})
+
+    def _day_six_client(self):
+        from tests.test_agent import FakeTransport
+
+        transport = FakeTransport(replies=["Из-за рассеяния света.", "Рассеяние."])
+        app = create_app({"TESTING": True, "AGENT_TRANSPORT": transport})
+        return app.test_client(), transport
+
+    def test_day_six_streams_the_agent_reply_and_keeps_the_dialogue(self):
+        client, transport = self._day_six_client()
+
+        first = client.post("/days/6/api/chat/stream", json={"message": " Почему небо голубое? "})
+        events = [json.loads(line) for line in first.get_data(as_text=True).splitlines()]
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.mimetype, "application/x-ndjson")
+        self.assertEqual(events[0]["type"], "delta")
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertEqual(events[-1]["reply"]["content"], "Из-за рассеяния света.")
+        self.assertEqual(events[-1]["snapshot"]["usage"]["requests"], 1)
+        self.assertEqual(len(events[-1]["snapshot"]["messages"]), 2)
+
+        # Второй запрос той же сессии уходит вместе с первым обменом.
+        client.post("/days/6/api/chat/stream", json={"message": "А теперь короче."})
+        roles = [m["role"] for m in transport.payloads[1]["messages"]]
+        self.assertEqual(roles, ["system", "user", "assistant", "user"])
+
+    def test_day_six_keeps_separate_agents_for_separate_sessions(self):
+        client, transport = self._day_six_client()
+        client.post("/days/6/api/chat/stream", json={"message": "Первая сессия"})
+
+        client.delete_cookie("agent_session")
+        state = client.get("/days/6/api/state").get_json()
+
+        self.assertEqual(state["messages"], [])
+        self.assertEqual(state["agents_in_registry"], 2)
+
+    def test_day_six_reset_starts_a_fresh_agent(self):
+        client, _ = self._day_six_client()
+        client.post("/days/6/api/chat/stream", json={"message": "Вопрос"})
+
+        state = client.post("/days/6/api/reset").get_json()
+
+        self.assertEqual(state["messages"], [])
+        self.assertEqual(state["usage"]["requests"], 0)
+
+    def test_day_six_reports_a_transport_error_without_breaking_the_stack(self):
+        from tests.test_agent import FakeTransport
+        from advent.agent import TransportError
+
+        transport = FakeTransport(error=TransportError("сеть упала"))
+        client = create_app({"TESTING": True, "AGENT_TRANSPORT": transport}).test_client()
+
+        response = client.post("/days/6/api/chat/stream", json={"message": "Вопрос"})
+        events = [json.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+        self.assertEqual(events[-1]["type"], "error")
+        self.assertIn("сеть упала", events[-1]["error"])
+        self.assertEqual(events[-1]["snapshot"]["messages"], [])
+
+    def test_day_six_rejects_an_empty_message(self):
+        client, _ = self._day_six_client()
+
+        response = client.post("/days/6/api/chat/stream", json={"message": "  "})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json(), {"error": "Введите сообщение"})
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

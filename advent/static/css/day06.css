@@ -1,0 +1,358 @@
+/* День 6: агент как отдельная сущность. */
+
+.day6-lab {
+  margin-top: 36px;
+}
+
+.day6-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day6-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day6-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day6-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* ── Рабочее место: чат слева, дебаг справа ────────────────────────────── */
+
+.day6-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.day6-chat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.day6-chat__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 14px;
+}
+
+.day6-chat__head h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day6-chat__reset {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 4px 10px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.day6-chat__reset:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day6-chat__reset:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+/* ── Лента диалога ─────────────────────────────────────────────────────── */
+
+.day6-log {
+  display: grid;
+  gap: 10px;
+  min-height: 220px;
+  padding: 14px;
+}
+
+.day6-log__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day6-log__empty[hidden] {
+  display: none;
+}
+
+.day6-turn {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.day6-turn[data-turn="assistant"] {
+  border-left-color: var(--accent);
+}
+
+.day6-turn.is-failed {
+  border-left-color: var(--error);
+}
+
+.day6-turn header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px 0;
+}
+
+.day6-turn header > span {
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.day6-turn[data-turn="assistant"] header > span {
+  color: var(--accent);
+}
+
+.day6-turn header > small {
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day6-turn__body {
+  padding: 6px 12px 12px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.day6-turn[data-turn="assistant"] .day6-turn__body {
+  color: var(--muted-bright);
+}
+
+.day6-turn.is-failed .day6-turn__body {
+  color: var(--error);
+}
+
+.day6-turn__body.is-streaming::after {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  margin-left: 2px;
+  background: var(--accent);
+  content: "";
+  vertical-align: -2px;
+  animation: caret-blink 1.1s steps(1, end) infinite;
+}
+
+/* ── Поле ввода ────────────────────────────────────────────────────────── */
+
+.day6-composer {
+  border-top: 1px solid var(--line);
+}
+
+.day6-composer label {
+  padding: 12px 14px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day6-composer label::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day6-composer textarea {
+  min-height: 72px;
+  padding: 6px 14px 12px;
+}
+
+.day6-composer__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px 10px 10px 14px;
+}
+
+.day6-status {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day6-submit {
+  min-height: 34px;
+  margin-left: auto;
+  border: 0;
+  background: var(--accent);
+  padding: 0 16px;
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background var(--speed-fast) var(--ease), opacity var(--speed-fast) var(--ease);
+}
+
+.day6-submit:hover:not(:disabled) {
+  background: #ffd08a;
+}
+
+.day6-submit:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+/* ── Дебаг-панель: зеркало agent.snapshot() ────────────────────────────── */
+
+.day6-debug {
+  position: sticky;
+  top: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 14px 16px 16px;
+}
+
+.day6-debug h3 {
+  margin: 0 0 12px;
+  color: var(--text-bright);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.day6-debug__group {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0 0 12px;
+}
+
+.day6-debug__group > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+}
+
+.day6-debug__group dt {
+  color: var(--muted);
+}
+
+.day6-debug__group dd {
+  margin: 0;
+  color: var(--muted-bright);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.day6-debug__group--live {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.day6-debug__group--live dd {
+  color: var(--accent);
+}
+
+.day6-debug__prompt,
+.day6-debug__stack {
+  border-top: 1px solid var(--line);
+}
+
+.day6-debug__prompt summary,
+.day6-debug__stack summary {
+  cursor: pointer;
+  padding: 9px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  list-style: none;
+  user-select: none;
+}
+
+.day6-debug__prompt summary::-webkit-details-marker,
+.day6-debug__stack summary::-webkit-details-marker {
+  display: none;
+}
+
+.day6-debug__prompt summary::before,
+.day6-debug__stack summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day6-debug__prompt[open] summary::before,
+.day6-debug__stack[open] summary::before {
+  content: "[−] ";
+}
+
+.day6-debug__prompt summary:hover,
+.day6-debug__stack summary:hover {
+  color: var(--text-bright);
+}
+
+.day6-debug pre {
+  max-height: 260px;
+  margin: 0 0 6px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 10px 12px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .day6-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .day6-debug {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .day6-composer__actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .day6-submit {
+    width: 100%;
+    min-height: 40px;
+    margin-left: 0;
+  }
+}

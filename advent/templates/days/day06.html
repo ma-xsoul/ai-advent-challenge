@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}День 6. Первый агент · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day06.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 06</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Agent · Encapsulation · State</span>
+    </div>
+    <h1>День 6.<br><span>Первый агент</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание шестого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <ul class="homework-brief__steps">
+        <li>Реализуйте простого агента, который принимает запрос пользователя.</li>
+        <li>Агент отправляет запрос в LLM через API.</li>
+        <li>Агент получает ответ.</li>
+        <li>Агент выводит результат в интерфейсе — простой чат, CLI или web.</li>
+        <li>Сделайте агента отдельной сущностью, а не одним вызовом API.</li>
+        <li>Инкапсулируйте логику запроса и ответа внутри агента.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент принимает запрос и корректно вызывает LLM через API.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day6-lab" aria-labelledby="day6-lab-title">
+    <div class="day6-lab__intro">
+      <p class="day6-kicker">Практика</p>
+      <h2 id="day6-lab-title">Чат с агентом</h2>
+      <p>Интерфейс не знает ни про API, ни про ключ, ни про историю: он отдаёт агенту текст и получает ответ. Всё остальное — внутри.</p>
+    </div>
+
+    <div class="day6-workbench">
+      <section class="day6-chat" aria-labelledby="day6-chat-title">
+        <header class="day6-chat__head">
+          <h3 id="day6-chat-title">Диалог</h3>
+          <button id="agent-reset" class="day6-chat__reset" type="button">[x] Новый диалог</button>
+        </header>
+
+        <div id="agent-log" class="day6-log" aria-live="polite">
+          <p class="day6-log__empty" data-log-empty>Стек пуст. Задайте вопрос, потом уточните его — агент помнит.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="day6-composer"
+          data-chat-url="{{ url_for('day06.chat_stream') }}"
+          data-reset-url="{{ url_for('day06.reset') }}"
+          data-state-url="{{ url_for('day06.state') }}"
+        >
+          <label for="agent-message">Сообщение</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: объясни в двух предложениях, почему небо голубое"></textarea>
+          <div class="day6-composer__actions">
+            <span id="agent-status" class="day6-status" aria-live="polite"></span>
+            <button id="agent-submit" class="day6-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="day6-debug" aria-labelledby="day6-debug-title">
+        <p class="day6-kicker">Дебаг</p>
+        <h3 id="day6-debug-title">agent.snapshot()</h3>
+
+        <dl class="day6-debug__group">
+          <div><dt>name</dt><dd data-debug="name">{{ snapshot.name }}</dd></div>
+          <div><dt>model</dt><dd data-debug="model">{{ snapshot.config.model }}</dd></div>
+          <div><dt>temperature</dt><dd data-debug="temperature">{{ snapshot.config.temperature }}</dd></div>
+          <div><dt>max_tokens</dt><dd data-debug="max_tokens">{{ snapshot.config.max_tokens }}</dd></div>
+          <div><dt>thinking</dt><dd data-debug="thinking">{{ 'enabled' if snapshot.config.thinking else 'disabled' }}</dd></div>
+        </dl>
+
+        <details class="day6-debug__prompt">
+          <summary>system_prompt</summary>
+          <pre data-debug="system_prompt">{{ snapshot.config.system_prompt or '—' }}</pre>
+        </details>
+
+        <dl class="day6-debug__group day6-debug__group--live">
+          <div><dt>стек сообщений</dt><dd data-debug="stack">{{ snapshot.messages | length }}</dd></div>
+          <div><dt>запросов</dt><dd data-debug="requests">{{ snapshot.usage.requests }}</dd></div>
+          <div><dt>токены вход</dt><dd data-debug="input_tokens">{{ snapshot.usage.input_tokens }}</dd></div>
+          <div><dt>токены выход</dt><dd data-debug="output_tokens">{{ snapshot.usage.output_tokens }}</dd></div>
+          <div><dt>токены всего</dt><dd data-debug="total_tokens">{{ snapshot.usage.total_tokens }}</dd></div>
+          <div><dt>агентов в реестре</dt><dd data-debug="agents_in_registry">{{ snapshot.agents_in_registry }}</dd></div>
+        </dl>
+
+        <details class="day6-debug__stack">
+          <summary>messages[]</summary>
+          <pre id="agent-stack" data-debug="messages">{{ snapshot.messages | tojson(indent=2) }}</pre>
+        </details>
+      </aside>
+    </div>
+
+    <template id="agent-turn-template">
+      <article class="day6-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="day6-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day06.js') }}"></script>
+{% endblock %}

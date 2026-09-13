@@ -9,7 +9,23 @@ from .days.day02.routes import bp as day02_blueprint
 from .days.day03.routes import bp as day03_blueprint
 from .days.day04.routes import bp as day04_blueprint
 from .days.day05.routes import bp as day05_blueprint
+from .days.day06.routes import bp as day06_blueprint
+from .agent import Agent, AgentConfig, AgentRegistry
 from .navigation import DAYS
+
+
+# Конфиг агента по умолчанию для чата дней 6+. Всё, что раньше уходило
+# параметрами в каждый вызов, теперь собрано здесь.
+DEFAULT_AGENT_CONFIG = AgentConfig(
+    name="advent",
+    system_prompt=(
+        "Ты помощник в учебной лаборатории. Отвечай по-русски, по делу и без "
+        "лишних вступлений. Если вопрос опирается на предыдущие реплики — "
+        "опирайся на них."
+    ),
+    temperature=0.7,
+    max_tokens=800,
+)
 
 
 def create_app(test_config: dict | None = None) -> Flask:
@@ -20,11 +36,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config:
         app.config.from_mapping(test_config)
 
+    # Один реестр на приложение. Транспорт берётся из конфига, чтобы тесты
+    # подставляли заглушку и агент проверялся без сети.
+    transport = app.config.get("AGENT_TRANSPORT")
+    app.extensions["agent_registry"] = AgentRegistry(
+        lambda: Agent(DEFAULT_AGENT_CONFIG, transport=transport)
+    )
+
     app.register_blueprint(day01_blueprint)
     app.register_blueprint(day02_blueprint)
     app.register_blueprint(day03_blueprint)
     app.register_blueprint(day04_blueprint)
     app.register_blueprint(day05_blueprint)
+    app.register_blueprint(day06_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(

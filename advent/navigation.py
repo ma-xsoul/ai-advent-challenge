@@ -51,6 +51,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=6,
+        title="Первый агент",
+        description="Агент как отдельная сущность",
+        endpoint="day06.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

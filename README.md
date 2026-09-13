@@ -35,12 +35,18 @@
 ```text
 advent/
 ├── navigation.py            # единый список дней для меню
+├── agent/                   # агент как отдельная сущность (день 6)
+│   ├── config.py            #   неизменяемый конфиг: модель, промпт, температура
+│   ├── transport.py         #   HTTP-слой, подменяется в тестах
+│   ├── agent.py             #   стек сообщений, вызов модели, учёт токенов
+│   └── registry.py          #   один процесс — много экземпляров агента
 ├── days/
 │   ├── day01/routes.py      # страница и API первого дня
 │   ├── day02/routes.py      # страница и API второго дня
 │   ├── day03/routes.py      # страница и API третьего дня
 │   ├── day04/routes.py      # страница и API четвёртого дня
-│   └── day05/routes.py      # страница и API пятого дня
+│   ├── day05/routes.py      # страница и API пятого дня
+│   └── day06/routes.py      # чат с агентом (день 6)
 ├── services/
 │   ├── deepseek.py          # интеграция с DeepSeek
 │   └── openrouter.py        # интеграция с OpenRouter (день 5)
@@ -60,6 +66,8 @@ advent/
 - Day 4 использует `POST /days/4/api/answer`, потоковый `POST /days/4/api/answer/stream` и `POST /days/4/api/prompt`.
 - Day 5 использует `POST /days/5/api/prompt` и потоковый `POST /days/5/api/compare/stream`.
 - Day 5 обращается к OpenRouter: нужен `OPENROUTER_API_KEY` в `.env`.
+- Day 6 использует `POST /days/6/api/chat/stream`, `POST /days/6/api/reset` и `GET /days/6/api/state`;
+  агент живёт в памяти процесса, сессия — cookie `agent_session`.
 
 ## Как добавить новый день
 
