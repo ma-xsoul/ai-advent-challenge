@@ -302,7 +302,7 @@ class AgentRegistryTestCase(unittest.TestCase):
     def test_creates_one_agent_per_session_and_reuses_it(self):
         from advent.agent import AgentRegistry
 
-        registry = AgentRegistry(lambda: Agent(AgentConfig(), FakeTransport()))
+        registry = AgentRegistry(lambda saved: Agent(AgentConfig(), FakeTransport()))
 
         first = registry.get("s1")
         again = registry.get("s1")
@@ -313,10 +313,30 @@ class AgentRegistryTestCase(unittest.TestCase):
         self.assertEqual(len(registry), 2)
         self.assertIn("s1", registry)
 
+    def test_peek_does_not_register_an_unknown_session(self):
+        from advent.agent import AgentRegistry
+
+        registry = AgentRegistry(lambda saved: Agent(AgentConfig(), FakeTransport()))
+
+        ghost = registry.peek("probe")
+
+        self.assertEqual(ghost.history, ())
+        self.assertEqual(len(registry), 0)
+        self.assertIsNot(registry.peek("probe"), ghost)
+
+    def test_peek_returns_the_registered_agent_when_there_is_one(self):
+        from advent.agent import AgentRegistry
+
+        registry = AgentRegistry(lambda saved: Agent(AgentConfig(), FakeTransport()))
+        real = registry.get("s1")
+
+        self.assertIs(registry.peek("s1"), real)
+        self.assertEqual(len(registry), 1)
+
     def test_reset_replaces_the_agent_and_drops_its_stack(self):
         from advent.agent import AgentRegistry
 
-        registry = AgentRegistry(lambda: Agent(AgentConfig(), FakeTransport()))
+        registry = AgentRegistry(lambda saved: Agent(AgentConfig(), FakeTransport()))
         old = registry.get("s1")
         old.ask("Вопрос")
 
@@ -325,6 +345,191 @@ class AgentRegistryTestCase(unittest.TestCase):
         self.assertIsNot(fresh, old)
         self.assertEqual(fresh.history, ())
         self.assertIs(registry.get("s1"), fresh)
+
+
+class AgentRestoreTestCase(unittest.TestCase):
+    def test_restore_is_the_inverse_of_snapshot(self):
+        agent = Agent(AgentConfig(name="demo", temperature=0.3), FakeTransport(replies=["Ответ"]))
+        agent.ask("Вопрос")
+
+        restored = Agent.restore(agent.snapshot(), FakeTransport())
+
+        self.assertEqual(restored.config, agent.config)
+        self.assertEqual(restored.history, agent.history)
+        self.assertEqual(restored.usage.total_tokens, agent.usage.total_tokens)
+
+    def test_restored_agent_continues_the_dialogue(self):
+        transport = FakeTransport(replies=["Дальше"])
+        agent = Agent(AgentConfig(), FakeTransport(replies=["Раз"]))
+        agent.ask("Первый")
+
+        restored = Agent.restore(agent.snapshot(), transport)
+        restored.ask("Второй")
+
+        self.assertEqual(
+            [m["role"] for m in transport.payloads[0]["messages"]],
+            ["user", "assistant", "user"],
+        )
+
+    def test_rejects_a_snapshot_with_a_broken_stack(self):
+        with self.assertRaises(ValueError):
+            Agent.restore({"config": {}, "messages": [{"role": "system", "content": "x"}]})
+        with self.assertRaises(ValueError):
+            Agent.restore({"messages": []})
+
+
+class JsonStoreTestCase(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        from advent.agent import JsonStore
+
+        self.store = JsonStore(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_save_then_load_round_trips_the_snapshot(self):
+        agent = Agent(AgentConfig(name="demo"), FakeTransport(replies=["Ответ"]))
+        agent.ask("Вопрос")
+
+        path = self.store.save("s1", agent)
+        data = self.store.load("s1")
+
+        self.assertTrue(path.exists())
+        self.assertEqual(data["session_id"], "s1")
+        self.assertEqual(data["version"], 1)
+        self.assertIn("saved_at", data)
+        self.assertEqual([m["content"] for m in data["messages"]], ["Вопрос", "Ответ"])
+        self.assertEqual(data["config"]["name"], "demo")
+
+    def test_save_leaves_no_temporary_file_behind(self):
+        self.store.save("s1", Agent(AgentConfig(), FakeTransport()))
+
+        from pathlib import Path
+
+        leftovers = list(Path(self._tmp.name).glob("*.tmp"))
+        self.assertEqual(leftovers, [])
+
+    def test_load_returns_none_for_an_unknown_session(self):
+        self.assertIsNone(self.store.load("nope"))
+        self.assertIsNone(self.store.describe("nope"))
+
+    def test_load_raises_on_a_corrupt_file(self):
+        from pathlib import Path
+        from advent.agent import StoreError
+
+        Path(self._tmp.name, "bad.json").write_text("{не json", encoding="utf-8")
+
+        with self.assertRaises(StoreError):
+            self.store.load("bad")
+
+    def test_delete_removes_the_file(self):
+        self.store.save("s1", Agent(AgentConfig(), FakeTransport()))
+
+        self.assertTrue(self.store.delete("s1"))
+        self.assertIsNone(self.store.load("s1"))
+        self.assertFalse(self.store.delete("s1"))
+
+    def test_refuses_unsafe_session_ids(self):
+        from advent.agent import StoreError
+
+        with self.assertRaises(StoreError):
+            self.store.load("../etc/passwd")
+
+    def test_describe_reports_the_file_without_the_agent(self):
+        agent = Agent(AgentConfig(), FakeTransport(replies=["Ответ"]))
+        agent.ask("Вопрос")
+        self.store.save("s1", agent)
+
+        info = self.store.describe("s1")
+
+        self.assertEqual(info.messages, 2)
+        self.assertTrue(info.path.endswith("s1.json"))
+        self.assertGreater(info.bytes, 0)
+        self.assertIsNotNone(info.saved_at)
+
+
+class PersistentRegistryTestCase(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from advent.agent import AgentRegistry, JsonStore
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.replies = ["Раз", "Два", "Три"]
+
+        def factory(saved):
+            transport = FakeTransport(replies=list(self.replies))
+            if saved:
+                return Agent.restore(saved, transport)
+            return Agent(AgentConfig(name="persist"), transport)
+
+        self.registry = AgentRegistry(factory, store=JsonStore(self._tmp.name))
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_survives_eviction_by_reading_the_disk(self):
+        """Имитация перезапуска: агента нет в памяти, но есть файл."""
+        agent = self.registry.get("s1")
+        agent.ask("Первый")
+        self.registry.save("s1")
+
+        self.assertTrue(self.registry.evict("s1"))
+        self.assertNotIn("s1", self.registry)
+
+        restored = self.registry.get("s1")
+
+        self.assertIsNot(restored, agent)
+        self.assertEqual([m.content for m in restored.history], ["Первый", "Раз"])
+        self.assertEqual(restored.usage.requests, 1)
+
+    def test_peek_restores_from_disk_but_does_not_invent_sessions(self):
+        self.registry.get("s1").ask("Первый")
+        self.registry.save("s1")
+        self.registry.evict("s1")
+
+        restored = self.registry.peek("s1")
+        ghost = self.registry.peek("nobody")
+
+        self.assertEqual([m.content for m in restored.history], ["Первый", "Раз"])
+        self.assertIn("s1", self.registry)
+        self.assertEqual(ghost.history, ())
+        self.assertNotIn("nobody", self.registry)
+
+    def test_get_without_a_file_creates_a_fresh_agent(self):
+        agent = self.registry.get("new")
+
+        self.assertEqual(agent.history, ())
+        self.assertEqual(agent.config.name, "persist")
+
+    def test_reset_deletes_the_file_too(self):
+        self.registry.get("s1").ask("Вопрос")
+        self.registry.save("s1")
+        self.assertIsNotNone(self.registry.stored("s1"))
+
+        self.registry.reset("s1")
+
+        self.assertIsNone(self.registry.stored("s1"))
+        self.registry.evict("s1")
+        self.assertEqual(self.registry.get("s1").history, ())
+
+    def test_save_without_an_agent_in_memory_is_a_noop(self):
+        self.registry.save("ghost")
+
+        self.assertIsNone(self.registry.stored("ghost"))
+
+    def test_memory_only_registry_ignores_save_and_evict_restores_nothing(self):
+        from advent.agent import AgentRegistry
+
+        registry = AgentRegistry(lambda saved: Agent(AgentConfig(), FakeTransport()))
+        registry.get("s1").ask("Вопрос")
+        registry.save("s1")
+        registry.evict("s1")
+
+        self.assertFalse(registry.persistent)
+        self.assertEqual(registry.get("s1").history, ())
 
 
 class DeepSeekTransportTestCase(unittest.TestCase):

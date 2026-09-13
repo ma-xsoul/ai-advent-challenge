@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import Flask, redirect, url_for
 from dotenv import load_dotenv
 
@@ -10,7 +12,8 @@ from .days.day03.routes import bp as day03_blueprint
 from .days.day04.routes import bp as day04_blueprint
 from .days.day05.routes import bp as day05_blueprint
 from .days.day06.routes import bp as day06_blueprint
-from .agent import Agent, AgentConfig, AgentRegistry
+from .days.day07.routes import bp as day07_blueprint
+from .agent import Agent, AgentConfig, AgentRegistry, JsonStore
 from .navigation import DAYS
 
 
@@ -36,11 +39,22 @@ def create_app(test_config: dict | None = None) -> Flask:
     if test_config:
         app.config.from_mapping(test_config)
 
-    # Один реестр на приложение. Транспорт берётся из конфига, чтобы тесты
-    # подставляли заглушку и агент проверялся без сети.
+    # Транспорт берётся из конфига, чтобы тесты подставляли заглушку
+    # и агент проверялся без сети.
     transport = app.config.get("AGENT_TRANSPORT")
-    app.extensions["agent_registry"] = AgentRegistry(
-        lambda: Agent(DEFAULT_AGENT_CONFIG, transport=transport)
+
+    def make_agent(saved=None):
+        if saved:
+            return Agent.restore(saved, transport=transport)
+        return Agent(DEFAULT_AGENT_CONFIG, transport=transport)
+
+    # Два реестра с одной фабрикой. Первый — только память процесса, как в
+    # дне 6. Второй пишет стек на диск и переживает перезапуск — дни 7+.
+    app.extensions["agent_registry"] = AgentRegistry(make_agent)
+    app.config.setdefault("AGENT_STORE_DIR", str(Path(app.root_path).parent / "data" / "agents"))
+    app.extensions["persistent_agent_registry"] = AgentRegistry(
+        make_agent,
+        store=JsonStore(app.config["AGENT_STORE_DIR"]),
     )
 
     app.register_blueprint(day01_blueprint)
@@ -49,6 +63,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(day04_blueprint)
     app.register_blueprint(day05_blueprint)
     app.register_blueprint(day06_blueprint)
+    app.register_blueprint(day07_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(

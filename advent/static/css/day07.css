@@ -1,0 +1,67 @@
+/* День 7: агент переживает перезапуск. */
+
+.day7-lab {
+  margin-top: 36px;
+}
+
+.day7-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day7-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day7-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day7-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Панель хранилища — над дебагом, потому что сегодня она главная. */
+.day7-storage dd {
+  color: var(--accent);
+}
+
+.day7-storage dd[data-storage="file"] {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day7-debug-kicker {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.day7-store-error {
+  margin: 0 0 14px;
+  border: 1px solid rgba(232, 112, 95, 0.4);
+  background: var(--error-soft);
+  padding: 11px 14px;
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.day7-store-error::before {
+  content: "! ";
+}

@@ -24,7 +24,7 @@ SESSION_COOKIE = "agent_session"
 @bp.get("/")
 def index():
     session_id = _session_id()
-    agent = _registry().get(session_id)
+    agent = _registry().peek(session_id)
     response = make_response(
         render_template(
             "days/day06.html",
@@ -40,7 +40,7 @@ def index():
 @bp.get("/api/state")
 def state():
     session_id = _session_id()
-    response = jsonify(_state(_registry().get(session_id)))
+    response = jsonify(_state(_registry().peek(session_id)))
     _remember_session(response, session_id)
     return response
 

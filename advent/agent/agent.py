@@ -76,6 +76,41 @@ class Agent:
         self._messages: list[Message] = []
         self._usage = AgentUsage()
 
+    @classmethod
+    def restore(
+        cls,
+        data: dict[str, Any],
+        transport: Transport | None = None,
+    ) -> Agent:
+        """
+        Собирает агента из слепка `snapshot()`: конфиг, стек и расход
+        возвращаются ровно такими, какими были. Обратная операция к snapshot().
+        """
+        config_data = data.get("config")
+        if not isinstance(config_data, dict):
+            raise ValueError("В слепке нет конфига агента")
+        config = AgentConfig(**config_data)
+
+        messages: list[Message] = []
+        for item in data.get("messages", []):
+            role = item.get("role") if isinstance(item, dict) else None
+            content = item.get("content") if isinstance(item, dict) else None
+            if role not in ("user", "assistant") or not isinstance(content, str):
+                raise ValueError("В слепке повреждён стек сообщений")
+            messages.append(Message(role, content))
+
+        usage_data = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        usage = AgentUsage(
+            requests=int(usage_data.get("requests", 0) or 0),
+            input_tokens=int(usage_data.get("input_tokens", 0) or 0),
+            output_tokens=int(usage_data.get("output_tokens", 0) or 0),
+        )
+
+        agent = cls(config, transport)
+        agent._messages = messages
+        agent._usage = usage
+        return agent
+
     @property
     def config(self) -> AgentConfig:
         return self._config

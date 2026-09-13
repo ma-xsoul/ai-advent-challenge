@@ -239,7 +239,8 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn("css/homework.css", html)
         self.assertIn("css/lab.css", html)
         self.assertIn("css/day06.css", html)
-        self.assertIn("js/day06.js", html)
+        self.assertIn("css/agent-chat.css", html)
+        self.assertIn("js/agent-chat.js", html)
         self.assertIn('id="agent-form"', html)
         self.assertIn("agent.snapshot()", html)
         self.assertIn("Новый диалог", html)
@@ -249,8 +250,31 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_seven_renders_the_persistence_homework(self):
+        response = self.client.get("/days/7/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 7.", html)
+        self.assertIn("Сохранение контекста", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("JSON или SQLite", html)
+        self.assertIn("как будто агент не выключался", html)
+        self.assertIn("сохраняет и восстанавливает контекст между запусками", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/agent-chat.css", html)
+        self.assertIn("css/day07.css", html)
+        self.assertIn("js/agent-chat.js", html)
+        self.assertIn('id="agent-restart"', html)
+        self.assertIn("JsonStore", html)
+        self.assertIn('data-restart-url="/days/7/api/restart"', html)
+        self.assertIn('href="/days/7/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6):
+        for number in (1, 2, 3, 4, 5, 6, 7):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -539,8 +563,10 @@ class AdventAppTestCase(unittest.TestCase):
         client.delete_cookie("agent_session")
         state = client.get("/days/6/api/state").get_json()
 
+        # Незнакомая сессия видит пустого агента, но в реестр не попадает:
+        # просмотр страницы не плодит записи.
         self.assertEqual(state["messages"], [])
-        self.assertEqual(state["agents_in_registry"], 2)
+        self.assertEqual(state["agents_in_registry"], 1)
 
     def test_day_six_reset_starts_a_fresh_agent(self):
         client, _ = self._day_six_client()
@@ -572,6 +598,124 @@ class AdventAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json(), {"error": "Введите сообщение"})
+
+    def _day_seven_app(self, store_dir, replies=None):
+        from tests.test_agent import FakeTransport
+
+        transport = FakeTransport(replies=list(replies or ["Запомнил.", "Тебя зовут Максим."]))
+        return create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+
+    @staticmethod
+    def _chat(client, url, message):
+        """Потоковый ответ ленивый: сохранение на диск происходит при чтении тела."""
+        response = client.post(url, json={"message": message})
+        response.get_data()
+        return response
+
+    def test_day_seven_writes_the_stack_to_disk_after_each_reply(self):
+        import json as json_module
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client = self._day_seven_app(store_dir).test_client()
+            client.set_cookie("agent_session", "s7")
+
+            response = client.post("/days/7/api/chat/stream", json={"message": "Меня зовут Максим"})
+            events = [json_module.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+            self.assertEqual(events[-1]["type"], "done")
+            self.assertIsNone(events[-1]["save_error"])
+            self.assertEqual(events[-1]["snapshot"]["storage"]["messages"], 2)
+
+            saved = json_module.loads(Path(store_dir, "s7.json").read_text(encoding="utf-8"))
+            self.assertEqual([m["content"] for m in saved["messages"]], ["Меня зовут Максим", "Запомнил."])
+
+    def test_day_seven_survives_a_real_process_restart(self):
+        """Новый экземпляр приложения — новая память процесса, файл тот же."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            first_run = self._day_seven_app(store_dir).test_client()
+            first_run.set_cookie("agent_session", "s7")
+            self._chat(first_run, "/days/7/api/chat/stream", "Меня зовут Максим")
+
+            second_app = self._day_seven_app(store_dir, replies=["Тебя зовут Максим."])
+            second_run = second_app.test_client()
+            second_run.set_cookie("agent_session", "s7")
+
+            page = second_run.get("/days/7/").get_data(as_text=True)
+            self.assertIn('data-debug="stack">2<', page)
+            self.assertIn('data-storage="messages">2<', page)
+            state = second_run.get("/days/7/api/state").get_json()
+            self.assertEqual(state["messages"][0]["content"], "Меня зовут Максим")
+
+            self._chat(second_run, "/days/7/api/chat/stream", "Как меня зовут?")
+            transport = second_app.config["AGENT_TRANSPORT"]
+            self.assertEqual(
+                [m["role"] for m in transport.payloads[0]["messages"]],
+                ["system", "user", "assistant", "user"],
+            )
+            self.assertEqual(transport.payloads[0]["messages"][1]["content"], "Меня зовут Максим")
+
+    def test_day_seven_restart_endpoint_reloads_the_agent_from_disk(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            app = self._day_seven_app(store_dir)
+            client = app.test_client()
+            client.set_cookie("agent_session", "s7")
+            self._chat(client, "/days/7/api/chat/stream", "Привет")
+            before = app.extensions["persistent_agent_registry"].get("s7")
+
+            state = client.post("/days/7/api/restart").get_json()
+
+            after = app.extensions["persistent_agent_registry"].get("s7")
+            self.assertIsNot(before, after)
+            self.assertEqual([m["content"] for m in state["messages"]], ["Привет", "Запомнил."])
+            self.assertEqual(state["usage"]["requests"], 1)
+
+    def test_day_seven_reset_removes_the_file(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client = self._day_seven_app(store_dir).test_client()
+            client.set_cookie("agent_session", "s7")
+            self._chat(client, "/days/7/api/chat/stream", "Привет")
+            self.assertTrue(Path(store_dir, "s7.json").exists())
+
+            state = client.post("/days/7/api/reset").get_json()
+
+            self.assertFalse(Path(store_dir, "s7.json").exists())
+            self.assertIsNone(state["storage"])
+            self.assertEqual(state["messages"], [])
+
+    def test_day_seven_reports_a_corrupt_session_file(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            Path(store_dir, "s7.json").write_text("{битый", encoding="utf-8")
+            client = self._day_seven_app(store_dir).test_client()
+            client.set_cookie("agent_session", "s7")
+
+            response = client.get("/days/7/api/state")
+
+            self.assertEqual(response.status_code, 500)
+            self.assertIn("s7.json", response.get_json()["error"])
+
+    def test_day_six_stays_in_memory_only(self):
+        """Реестр дня 6 без диска: тот же cookie, но своя, непостоянная память."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client = self._day_seven_app(store_dir).test_client()
+            client.set_cookie("agent_session", "s6")
+            self._chat(client, "/days/6/api/chat/stream", "Привет")
+
+            self.assertFalse(Path(store_dir, "s6.json").exists())
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

@@ -59,6 +59,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=7,
+        title="Сохранение контекста",
+        description="Агент помнит диалог между запусками",
+        endpoint="day07.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

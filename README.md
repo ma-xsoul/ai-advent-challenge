@@ -39,14 +39,16 @@ advent/
 │   ├── config.py            #   неизменяемый конфиг: модель, промпт, температура
 │   ├── transport.py         #   HTTP-слой, подменяется в тестах
 │   ├── agent.py             #   стек сообщений, вызов модели, учёт токенов
-│   └── registry.py          #   один процесс — много экземпляров агента
+│   ├── registry.py          #   один процесс — много экземпляров агента
+│   └── store.py             #   JSON-файл на сессию: агент переживает перезапуск
 ├── days/
 │   ├── day01/routes.py      # страница и API первого дня
 │   ├── day02/routes.py      # страница и API второго дня
 │   ├── day03/routes.py      # страница и API третьего дня
 │   ├── day04/routes.py      # страница и API четвёртого дня
 │   ├── day05/routes.py      # страница и API пятого дня
-│   └── day06/routes.py      # чат с агентом (день 6)
+│   ├── day06/routes.py      # чат с агентом (день 6)
+│   └── day07/routes.py      # чат с агентом, который переживает перезапуск (день 7)
 ├── services/
 │   ├── deepseek.py          # интеграция с DeepSeek
 │   └── openrouter.py        # интеграция с OpenRouter (день 5)
@@ -68,6 +70,8 @@ advent/
 - Day 5 обращается к OpenRouter: нужен `OPENROUTER_API_KEY` в `.env`.
 - Day 6 использует `POST /days/6/api/chat/stream`, `POST /days/6/api/reset` и `GET /days/6/api/state`;
   агент живёт в памяти процесса, сессия — cookie `agent_session`.
+- Day 7 использует те же маршруты под `/days/7/api/` плюс `POST /days/7/api/restart`;
+  стек пишется в `data/agents/<сессия>.json` после каждого ответа и читается при старте.
 
 ## Как добавить новый день
 
