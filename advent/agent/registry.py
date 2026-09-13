@@ -74,6 +74,20 @@ class AgentRegistry:
             self._agents[session_id] = agent
             return agent
 
+    def reconfigure(self, session_id: str, **changes: Any) -> Agent:
+        """
+        Сменить конфиг агента, не теряя диалог: старый экземпляр заменяется
+        новым с тем же стеком. Так лимит контекста меняется по ходу демо.
+        """
+        with self._lock:
+            agent = self._agents.get(session_id)
+            if agent is None:
+                saved = self._store.load(session_id) if self._store else None
+                agent = self._factory(saved)
+            agent = agent.with_config(**changes)
+            self._agents[session_id] = agent
+            return agent
+
     def save(self, session_id: str) -> None:
         """Сбросить стек агента на диск. Без хранилища — ничего не делает."""
         if not self._store:

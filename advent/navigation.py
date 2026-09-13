@@ -67,6 +67,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=8,
+        title="Работа с токенами",
+        description="Сколько стоит каждый ход диалога",
+        endpoint="day08.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

@@ -273,8 +273,35 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_eight_renders_the_tokens_homework(self):
+        response = self.client.get("/days/8/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 8.", html)
+        self.assertIn("Работа с токенами", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("для текущего запроса, для всей истории диалога, для ответа модели", html)
+        self.assertIn("превышает лимит модели", html)
+        self.assertIn("что ломается при переполнении", html)
+        self.assertIn("считает токены и показывает, как они влияют на поведение агента", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/agent-chat.css", html)
+        self.assertIn("css/day08.css", html)
+        self.assertIn("js/agent-chat.js", html)
+        self.assertIn('id="agent-limit-form"', html)
+        self.assertIn('id="agent-scenario"', html)
+        self.assertIn('data-limit-url="/days/8/api/limit"', html)
+        self.assertIn('data-scenario-url="/days/8/api/scenario"', html)
+        self.assertIn("Собираем ТЗ", html)
+        self.assertIn('data-turns', html)
+        self.assertIn('href="/days/8/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -716,6 +743,105 @@ class AdventAppTestCase(unittest.TestCase):
             self._chat(client, "/days/6/api/chat/stream", "Привет")
 
             self.assertFalse(Path(store_dir, "s6.json").exists())
+
+    def _day_eight_client(self, store_dir, replies=None):
+        from tests.test_agent import FakeTransport
+
+        transport = FakeTransport(replies=list(replies or []))
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s8")
+        return client, transport
+
+    def test_day_eight_reports_the_three_numbers_for_each_turn(self):
+        import json as json_module
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eight_client(store_dir, replies=["Понял."])
+
+            response = self._chat(client, "/days/8/api/chat/stream", "Платформа — только Android.")
+            done = [json_module.loads(l) for l in response.get_data(as_text=True).splitlines()][-1]
+
+            self.assertEqual(done["type"], "done")
+            turn = done["turn"]
+            self.assertEqual(turn["index"], 1)
+            self.assertGreater(turn["question_tokens"], 0)
+            self.assertEqual(turn["context_tokens"], 10)
+            self.assertEqual(turn["answer_tokens"], 5)
+            self.assertEqual(done["snapshot"]["turns"][0]["total_tokens"], 15)
+            self.assertEqual(done["snapshot"]["context"]["estimated"], 15)
+
+    def test_day_eight_sets_and_clears_the_context_limit_without_losing_the_dialogue(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eight_client(store_dir)
+            self._chat(client, "/days/8/api/chat/stream", "Привет")
+
+            limited = client.post("/days/8/api/limit", json={"limit": 300}).get_json()
+            self.assertEqual(limited["context"]["limit"], 300)
+            self.assertEqual(len(limited["messages"]), 2)
+
+            cleared = client.post("/days/8/api/limit", json={"limit": None}).get_json()
+            self.assertIsNone(cleared["context"]["limit"])
+            self.assertEqual(len(cleared["messages"]), 2)
+
+    def test_day_eight_rejects_a_bad_limit(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eight_client(store_dir)
+
+            for bad in ("много", 5, 999_999, True):
+                with self.subTest(limit=bad):
+                    response = client.post("/days/8/api/limit", json={"limit": bad})
+                    self.assertEqual(response.status_code, 400)
+
+    def test_day_eight_streams_an_overflow_event_and_keeps_the_stack_intact(self):
+        import json as json_module
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_eight_client(store_dir)
+            self._chat(client, "/days/8/api/chat/stream", "Раз")
+            client.post("/days/8/api/limit", json={"limit": 100})
+
+            long_message = "Очень длинная реплика про требования к приложению, " * 8
+            response = self._chat(client, "/days/8/api/chat/stream", long_message)
+            events = [json_module.loads(l) for l in response.get_data(as_text=True).splitlines()]
+
+            self.assertEqual([e["type"] for e in events], ["error"])
+            self.assertEqual(events[0]["overflow"]["limit"], 100)
+            self.assertGreater(events[0]["overflow"]["estimated"], 100)
+            self.assertIn("не отправлен", events[0]["error"])
+            # Стек не тронут, запрос к модели не уходил.
+            self.assertEqual(len(events[0]["snapshot"]["messages"]), 2)
+            self.assertEqual(len(transport.payloads), 1)
+
+    def test_day_eight_serves_the_spec_scenario(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eight_client(store_dir)
+
+            scenario = client.get("/days/8/api/scenario").get_json()
+
+            self.assertEqual(scenario["key"], "spec")
+            self.assertEqual(len(scenario["messages"]), 12)
+
+    def test_day_eight_persists_turns_across_restart(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eight_client(store_dir)
+            self._chat(client, "/days/8/api/chat/stream", "Раз")
+            self._chat(client, "/days/8/api/chat/stream", "Два")
+
+            state = client.post("/days/8/api/restart").get_json()
+
+            self.assertEqual([t["index"] for t in state["turns"]], [1, 2])
+            self.assertEqual(state["turns"][1]["total_tokens"], 30)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

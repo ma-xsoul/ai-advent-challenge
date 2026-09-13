@@ -13,11 +13,11 @@
 }
 /* ── Рабочее место: чат слева, дебаг справа ────────────────────────────── */
 
+/* Колонки одной высоты: сетка растягивает обе до самой высокой. */
 .agent-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
   gap: 14px;
-  align-items: start;
 }
 
 .agent-chat {
@@ -49,6 +49,7 @@
   gap: 8px;
 }
 
+.agent-chat__scenario,
 .agent-chat__restart,
 .agent-chat__reset {
   border: 1px solid var(--line-strong);
@@ -59,12 +60,14 @@
   transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
 }
 
+.agent-chat__scenario:hover:not(:disabled),
 .agent-chat__restart:hover:not(:disabled),
 .agent-chat__reset:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--text-bright);
 }
 
+.agent-chat__scenario:disabled,
 .agent-chat__restart:disabled,
 .agent-chat__reset:disabled {
   cursor: wait;
@@ -73,10 +76,13 @@
 
 /* ── Лента диалога ─────────────────────────────────────────────────────── */
 
+/* Лента забирает всё свободное место, чтобы форма ввода сидела у низа. */
 .agent-log {
   display: grid;
+  flex: 1;
+  align-content: start;
   gap: 10px;
-  min-height: 220px;
+  min-height: 140px;
   padding: 14px;
 }
 
@@ -105,6 +111,17 @@
 
 .agent-turn.is-failed {
   border-left-color: var(--error);
+}
+
+/* Переполнение — не сбой, а осознанный отказ агента: свой цвет и подпись. */
+.agent-turn.is-overflow {
+  border-left-color: #ff9a3c;
+  background: rgba(255, 154, 60, 0.06);
+}
+
+.agent-turn.is-overflow .agent-turn__body,
+.agent-turn.is-overflow header > small {
+  color: #ff9a3c;
 }
 
 /* Реплики, прочитанные с диска, помечаются: видно, что пришло из файла. */
@@ -156,6 +173,10 @@
   color: var(--error);
 }
 
+.agent-turn.is-overflow .agent-turn__body {
+  color: #ff9a3c;
+}
+
 .agent-turn__body.is-streaming::after {
   display: inline-block;
   width: 7px;
@@ -184,8 +205,9 @@
   content: "> ";
 }
 
+/* Поле ввода заметное: сюда печатают, лента лишь показывает. */
 .agent-composer textarea {
-  min-height: 72px;
+  min-height: 150px;
   padding: 6px 14px 12px;
 }
 
@@ -229,11 +251,15 @@
 /* ── Дебаг-панель: зеркало agent.snapshot() ────────────────────────────── */
 
 .agent-debug {
-  position: sticky;
-  top: 16px;
   border: 1px solid var(--line);
   background: var(--surface);
   padding: 14px 16px 16px;
+}
+
+/* Рамка панели тянется на всю высоту, а содержимое липнет при прокрутке. */
+.agent-debug__body {
+  position: sticky;
+  top: 16px;
 }
 
 .agent-debug h3 {
@@ -336,7 +362,7 @@
     grid-template-columns: 1fr;
   }
 
-  .agent-debug {
+  .agent-debug__body {
     position: static;
   }
 }

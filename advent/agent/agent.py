@@ -10,10 +10,11 @@
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from .config import AgentConfig
+from .tokens import estimate_message_tokens
 from .transport import DeepSeekTransport, Transport, TransportError
 
 
@@ -24,6 +25,50 @@ class Message:
 
     def as_payload(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
+
+
+class ContextOverflowError(RuntimeError):
+    """
+    Стек не помещается в лимит контекста агента. Запрос не отправлялся.
+
+    Это не сбой, а осознанный отказ: агент посчитал, что история вместе с
+    новым вопросом не влезет в окно, и не стал тратить токены на запрос,
+    который модель всё равно отвергнет. Сегодня — только показать ошибку.
+    Научить агента не упираться в стену — сжимать историю — задача дня 9.
+    """
+
+    def __init__(self, estimated: int, limit: int) -> None:
+        self.estimated = estimated
+        self.limit = limit
+        super().__init__(
+            f"Стек ≈{estimated} токенов не помещается в лимит контекста {limit}. "
+            "Запрос не отправлен."
+        )
+
+
+@dataclass(frozen=True)
+class TurnStats:
+    """
+    Во что обошёлся один ход. Три числа из задания восьмого дня.
+
+    question_tokens — только новый вопрос. Оценка по символам, считается
+                      ДО запроса: API это число отдельно не возвращает.
+    context_tokens  — весь стек, ушедший в модель: системный промпт плюс
+                      вся история плюс новый вопрос. Точно, из API.
+    answer_tokens   — ответ модели в этом ходе. Точно, из API.
+
+    Вопрос каждый ход весит примерно одинаково, а стек растёт: модель не
+    помнит прошлые ходы, и вся история отправляется заново каждый раз.
+    """
+
+    index: int
+    question_tokens: int  # ≈ оценка, до запроса
+    context_tokens: int | None  # prompt_tokens из API
+    answer_tokens: int | None  # completion_tokens из API
+    total_tokens: int  # накоплено за весь диалог, вход + выход
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -75,6 +120,7 @@ class Agent:
         self._transport = transport or DeepSeekTransport()
         self._messages: list[Message] = []
         self._usage = AgentUsage()
+        self._turns: list[TurnStats] = []
 
     @classmethod
     def restore(
@@ -106,10 +152,38 @@ class Agent:
             output_tokens=int(usage_data.get("output_tokens", 0) or 0),
         )
 
+        turns: list[TurnStats] = []
+        for item in data.get("turns", []) or []:
+            if not isinstance(item, dict):
+                continue
+            turns.append(
+                TurnStats(
+                    index=int(item.get("index", len(turns) + 1)),
+                    question_tokens=int(item.get("question_tokens", 0) or 0),
+                    context_tokens=_int_or_none(item.get("context_tokens")),
+                    answer_tokens=_int_or_none(item.get("answer_tokens")),
+                    total_tokens=int(item.get("total_tokens", 0) or 0),
+                )
+            )
+
         agent = cls(config, transport)
         agent._messages = messages
         agent._usage = usage
+        agent._turns = turns
         return agent
+
+    def with_config(self, **changes: Any) -> Agent:
+        """
+        Тот же диалог с изменённым конфигом: конфиг новый — стек старый.
+
+        Конфиг заморожен намеренно, поэтому смена лимита или температуры —
+        это новый экземпляр агента, которому передали стек, расход и
+        статистику ходов. Так на странице снимаешь лимит после переполнения
+        и продолжаешь разговор с того же места.
+        """
+        data = self.snapshot()
+        data["config"] = asdict(replace(self._config, **changes))
+        return type(self).restore(data, transport=self._transport)
 
     @property
     def config(self) -> AgentConfig:
@@ -124,11 +198,53 @@ class Agent:
     def usage(self) -> AgentUsage:
         return self._usage
 
+    @property
+    def turns(self) -> tuple[TurnStats, ...]:
+        """Статистика по ходам — по одной записи на каждый успешный ответ."""
+        return tuple(self._turns)
+
+    def estimate_context(self, next_question: str | None = None) -> int:
+        """
+        Сколько токенов уйдёт в следующий запрос, по оценке.
+
+        После первого хода оценка почти точная: берём prompt_tokens прошлого
+        запроса (точно, из API), прибавляем прошлый ответ (точно, из API)
+        и новый вопрос (единственное, что оцениваем по символам).
+        До первого хода считаем всё по символам.
+        """
+        if self._turns and self._turns[-1].context_tokens is not None:
+            last = self._turns[-1]
+            estimated = last.context_tokens + (last.answer_tokens or 0)
+        else:
+            estimated = estimate_message_tokens(self._config.system_prompt or "")
+            estimated += sum(estimate_message_tokens(m.content) for m in self._messages)
+        if next_question:
+            estimated += estimate_message_tokens(next_question)
+        return estimated
+
+    def _check_context_limit(self, text: str) -> None:
+        """
+        Проверка лимита — ДО того, как вопрос попал в стек и ДО запроса.
+
+        Порядок важен: если бы вопрос сначала ложился в стек, отказ оставлял
+        бы в истории user-сообщение без ответа, и следующий ход ушёл бы
+        с двумя user подряд. Переполнение — отказ отправить, стек цел.
+        """
+        limit = self._config.context_limit
+        if limit is None:
+            return
+        estimated = self.estimate_context(text)
+        if estimated > limit:
+            raise ContextOverflowError(estimated, limit)
+
     def ask(self, text: str) -> AgentReply:
         """Кладёт запрос в стек, спрашивает модель, кладёт ответ в стек."""
         text = text.strip()
         if not text:
             raise ValueError("Пустой запрос")
+        # Лимит проверяется до того, как вопрос попал в стек: переполнение —
+        # это отказ отправлять, а не испорченная история.
+        self._check_context_limit(text)
 
         self._messages.append(Message("user", text))
         try:
@@ -140,8 +256,7 @@ class Agent:
             self._messages.pop()
             raise
 
-        self._messages.append(Message("assistant", reply.content))
-        self._usage.record(reply)
+        self._commit(text, reply)
         return reply
 
     def stream(self, text: str) -> Generator[str, None, AgentReply]:
@@ -152,6 +267,7 @@ class Agent:
         text = text.strip()
         if not text:
             raise ValueError("Пустой запрос")
+        self._check_context_limit(text)
 
         self._messages.append(Message("user", text))
         try:
@@ -161,14 +277,28 @@ class Agent:
             self._messages.pop()
             raise
 
+        self._commit(text, reply)
+        return reply
+
+    def _commit(self, question: str, reply: AgentReply) -> None:
+        """Ответ дошёл: положить в стек, прибавить расход, записать ход."""
         self._messages.append(Message("assistant", reply.content))
         self._usage.record(reply)
-        return reply
+        self._turns.append(
+            TurnStats(
+                index=len(self._turns) + 1,
+                question_tokens=estimate_message_tokens(question),
+                context_tokens=reply.input_tokens,
+                answer_tokens=reply.output_tokens,
+                total_tokens=self._usage.total_tokens,
+            )
+        )
 
     def reset(self) -> None:
         """Начать диалог заново: стек и расход обнуляются, конфиг остаётся."""
         self._messages.clear()
         self._usage = AgentUsage()
+        self._turns.clear()
 
     def snapshot(self) -> dict[str, Any]:
         """Слепок для дебаг-панели: конфиг, стек и расход одним JSON."""
@@ -177,9 +307,21 @@ class Agent:
             "config": asdict(self._config),
             "messages": [message.as_payload() for message in self._messages],
             "usage": {**asdict(self._usage), "total_tokens": self._usage.total_tokens},
+            "turns": [turn.as_dict() for turn in self._turns],
+            "context": {
+                "estimated": self.estimate_context(),
+                "limit": self._config.context_limit,
+            },
         }
 
     def _build_payload(self, *, stream: bool = False) -> dict[str, Any]:
+        """
+        Собирает запрос к модели. Ключевая строка — messages.extend(...):
+        в запрос уходит ВЕСЬ стек, а не последняя реплика. Модель не хранит
+        состояние между вызовами, поэтому каждый ход мы пересылаем ей весь
+        разговор с самого начала. Отсюда рост context_tokens в TurnStats:
+        спрашиваем 25 токенов, а платим за 700.
+        """
         messages: list[dict[str, str]] = []
         if self._config.system_prompt:
             messages.append({"role": "system", "content": self._config.system_prompt})

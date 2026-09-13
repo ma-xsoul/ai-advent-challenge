@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}День 8. Работа с токенами · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day08.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 08</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Tokens · Growth · Overflow</span>
+    </div>
+    <h1>День 8.<br><span>Работа с токенами</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание восьмого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <ul class="homework-brief__steps">
+        <li>Добавьте в код агента подсчёт токенов: для текущего запроса, для всей истории диалога, для ответа модели.</li>
+        <li>Сравните короткий диалог, длинный диалог и диалог, который превышает лимит модели.</li>
+        <li>Покажите, как растёт стоимость и токены по мере диалога.</li>
+        <li>Покажите, что ломается при переполнении.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Код, который считает токены и показывает, как они влияют на поведение агента.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day8-lab" aria-labelledby="day8-lab-title">
+    <div class="day8-lab__intro">
+      <p class="day8-kicker">Практика</p>
+      <h2 id="day8-lab-title">Сколько стоит каждый ход</h2>
+      <p>Три числа на ход — новый вопрос, весь стек, ответ — и таблица, в которой видно, как растёт вход. Уменьшите лимит, прогоните сценарий и посмотрите, где агент откажет.</p>
+    </div>
+
+    {% if store_error %}
+      <p class="day8-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="agent-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <button id="agent-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description if scenario else '' }}" data-scenario-url="{{ url_for('day08.scenario') }}">[▶] Сценарий «{{ scenario.title if scenario else '…' }}»</button>
+            <button id="agent-restart" class="agent-chat__restart" type="button" title="Выгрузить агента из памяти и прочитать с диска">[↻]</button>
+            <button id="agent-reset" class="agent-chat__reset" type="button">[x] Новый диалог</button>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Напишите что-нибудь или запустите сценарий — под каждым ответом появятся токены.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day08.chat_stream') }}"
+          data-reset-url="{{ url_for('day08.reset') }}"
+          data-restart-url="{{ url_for('day08.restart') }}"
+          data-state-url="{{ url_for('day08.state') }}"
+          data-limit-url="{{ url_for('day08.set_limit') }}"
+        >
+          <label for="agent-message">Сообщение</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: помоги собрать ТЗ на приложение для учёта расходов"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+        <p class="agent-kicker">Контекст</p>
+        <h3 id="agent-debug-title">Лимит и заполнение</h3>
+
+        <form id="agent-limit-form" class="day8-limit">
+          <label for="agent-limit">лимит контекста, токенов</label>
+          <div class="day8-limit__row">
+            <input id="agent-limit" name="limit" type="number" min="100" max="128000" step="50" placeholder="без лимита" value="{{ snapshot.context.limit if snapshot and snapshot.context.limit else '' }}">
+            <button class="day8-limit__apply" type="submit">Применить</button>
+          </div>
+          <div class="day8-gauge" aria-hidden="true">
+            <span class="day8-gauge__fill" data-gauge-fill style="--fill: 0"></span>
+          </div>
+          <p class="day8-limit__hint">
+            <span>стек ≈ <strong data-debug="context_estimated">{{ snapshot.context.estimated if snapshot else 0 }}</strong></span>
+            <span>лимит <strong data-debug="context_limit">{{ snapshot.context.limit if snapshot and snapshot.context.limit else '∞' }}</strong></span>
+          </p>
+        </form>
+
+        <p class="agent-kicker day8-debug-kicker">Расход за диалог</p>
+        <dl class="agent-debug__group agent-debug__group--live">
+          <div><dt>ходов</dt><dd data-debug="requests">{{ snapshot.usage.requests if snapshot else 0 }}</dd></div>
+          <div><dt>вход всего</dt><dd data-debug="input_tokens">{{ snapshot.usage.input_tokens if snapshot else 0 }}</dd></div>
+          <div><dt>выход всего</dt><dd data-debug="output_tokens">{{ snapshot.usage.output_tokens if snapshot else 0 }}</dd></div>
+          <div><dt>итого</dt><dd data-debug="total_tokens">{{ snapshot.usage.total_tokens if snapshot else 0 }}</dd></div>
+          <div><dt>стек сообщений</dt><dd data-debug="stack">{{ snapshot.messages | length if snapshot else 0 }}</dd></div>
+        </dl>
+
+        <p class="agent-kicker day8-debug-kicker">Конфиг</p>
+        <dl class="agent-debug__group">
+          <div><dt>model</dt><dd data-debug="model">{{ snapshot.config.model if snapshot else '—' }}</dd></div>
+          <div><dt>temperature</dt><dd data-debug="temperature">{{ snapshot.config.temperature if snapshot else '—' }}</dd></div>
+          <div><dt>max_tokens</dt><dd data-debug="max_tokens">{{ snapshot.config.max_tokens if snapshot else '—' }}</dd></div>
+          <div><dt>файл</dt><dd data-storage="file">{{ snapshot.storage.file if snapshot and snapshot.storage else '—' }}</dd></div>
+        </dl>
+        </div>
+      </aside>
+    </div>
+
+    <section class="day8-turns" aria-labelledby="day8-turns-title">
+      <div class="day8-turns__heading">
+        <div>
+          <p class="day8-kicker">По ходам</p>
+          <h3 id="day8-turns-title">Как растёт вход</h3>
+        </div>
+        <p>Столбик — весь стек, ушедший в запрос. Модель не помнит: каждый ход история отправляется заново.</p>
+      </div>
+      <div class="day8-turns__scroll">
+        <table class="day8-table">
+          <thead>
+            <tr>
+              <th>ход</th>
+              <th>≈ вопрос</th>
+              <th>стек</th>
+              <th>ответ</th>
+              <th>итого за диалог</th>
+              <th class="day8-table__bar-head">рост стека</th>
+            </tr>
+          </thead>
+          <tbody id="agent-turns" data-turns></tbody>
+        </table>
+        <p class="day8-turns__empty" data-turns-empty>Пока ни одного хода.</p>
+      </div>
+    </section>
+
+    {% if snapshot %}
+      <script id="agent-initial" type="application/json">{{ snapshot | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/agent-chat.js') }}"></script>
+{% endblock %}

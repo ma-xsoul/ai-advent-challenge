@@ -28,6 +28,11 @@ class AgentConfig:
     thinking: bool = False
     # Имя нужно, когда агентов больше одного: дебаг-панель и будущие суб-агенты.
     name: str = "agent"
+    # Лимит контекста агента в токенах — отдельно от окна модели.
+    # У deepseek-v4-flash окно 128 000 токенов: чтобы упереться в него,
+    # нужны сотни ходов. Агент может держать окно меньше — например 700, —
+    # и тогда переполнение видно за десять реплик. None — без лимита.
+    context_limit: int | None = None
 
     def __post_init__(self) -> None:
         if not self.model or not self.model.strip():
@@ -38,3 +43,5 @@ class AgentConfig:
             )
         if self.max_tokens < 1:
             raise ValueError("max_tokens должен быть положительным")
+        if self.context_limit is not None and self.context_limit < 1:
+            raise ValueError("context_limit должен быть положительным или None")

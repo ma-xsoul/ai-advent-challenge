@@ -82,6 +82,7 @@
       </section>
 
       <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
         <p class="agent-kicker">Дебаг</p>
         <h3 id="agent-debug-title">agent.snapshot()</h3>
 
@@ -111,6 +112,7 @@
           <summary>messages[]</summary>
           <pre id="agent-stack" data-debug="messages">{{ snapshot.messages | tojson(indent=2) }}</pre>
         </details>
+        </div>
       </aside>
     </div>
 

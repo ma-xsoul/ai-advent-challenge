@@ -532,6 +532,148 @@ class PersistentRegistryTestCase(unittest.TestCase):
         self.assertEqual(registry.get("s1").history, ())
 
 
+class TokenAccountingTestCase(unittest.TestCase):
+    def test_estimate_counts_cyrillic_denser_than_latin(self):
+        from advent.agent import estimate_tokens
+
+        self.assertEqual(estimate_tokens(""), 0)
+        self.assertGreater(estimate_tokens("Привет, мир"), estimate_tokens("Hi, world"))
+        self.assertGreaterEqual(estimate_tokens("а"), 1)
+
+    def test_each_reply_records_a_turn_with_the_three_numbers(self):
+        agent = Agent(AgentConfig(), FakeTransport(replies=["Ответ"]))
+
+        agent.ask("Почему небо голубое?")
+        turn = agent.turns[0]
+
+        self.assertEqual(turn.index, 1)
+        self.assertGreater(turn.question_tokens, 0)
+        self.assertEqual(turn.context_tokens, 10)
+        self.assertEqual(turn.answer_tokens, 5)
+        self.assertEqual(turn.total_tokens, 15)
+
+    def test_turns_accumulate_and_survive_snapshot_restore(self):
+        agent = Agent(AgentConfig(), FakeTransport())
+        agent.ask("Раз")
+        agent.ask("Два")
+
+        restored = Agent.restore(agent.snapshot(), FakeTransport())
+
+        self.assertEqual([t.index for t in restored.turns], [1, 2])
+        self.assertEqual(restored.turns[1].total_tokens, 30)
+
+    def test_stream_records_turns_too(self):
+        agent = Agent(AgentConfig(), FakeTransport(replies=["Ответ"]))
+        generator = agent.stream("Вопрос")
+        while True:
+            try:
+                next(generator)
+            except StopIteration:
+                break
+
+        self.assertEqual(len(agent.turns), 1)
+        self.assertEqual(agent.turns[0].context_tokens, 10)
+
+    def test_estimate_context_uses_api_numbers_after_the_first_turn(self):
+        agent = Agent(AgentConfig(system_prompt="Кратко."), FakeTransport())
+        before = agent.estimate_context("Вопрос")
+        agent.ask("Вопрос")
+
+        after = agent.estimate_context()
+
+        self.assertGreater(before, 0)
+        # Прошлый контекст (10) плюс прошлый ответ (5): точные числа из API.
+        self.assertEqual(after, 15)
+
+    def test_reset_clears_turns(self):
+        agent = Agent(AgentConfig(), FakeTransport())
+        agent.ask("Раз")
+
+        agent.reset()
+
+        self.assertEqual(agent.turns, ())
+
+
+class ContextLimitTestCase(unittest.TestCase):
+    def test_no_limit_by_default(self):
+        self.assertIsNone(AgentConfig().context_limit)
+        with self.assertRaises(ValueError):
+            AgentConfig(context_limit=0)
+
+    def test_refuses_before_sending_when_the_stack_would_overflow(self):
+        from advent.agent import ContextOverflowError
+
+        transport = FakeTransport()
+        agent = Agent(AgentConfig(context_limit=20), transport)
+        agent.ask("Раз")
+
+        with self.assertRaises(ContextOverflowError) as raised:
+            agent.ask("Очень длинный вопрос, который заведомо не поместится в двадцать токенов")
+
+        self.assertEqual(raised.exception.limit, 20)
+        self.assertGreater(raised.exception.estimated, 20)
+        # Запрос не ушёл и стек не тронут.
+        self.assertEqual(len(transport.payloads), 1)
+        self.assertEqual([m.role for m in agent.history], ["user", "assistant"])
+
+    def test_stream_checks_the_limit_as_well(self):
+        from advent.agent import ContextOverflowError
+
+        agent = Agent(AgentConfig(context_limit=5), FakeTransport())
+
+        with self.assertRaises(ContextOverflowError):
+            next(agent.stream("Вопрос длиннее пяти токенов, определённо"))
+
+        self.assertEqual(agent.history, ())
+
+    def test_with_config_keeps_the_dialogue_and_changes_the_limit(self):
+        agent = Agent(AgentConfig(context_limit=20), FakeTransport(replies=["Ответ"]))
+        agent.ask("Раз")
+
+        relaxed = agent.with_config(context_limit=None)
+
+        self.assertIsNone(relaxed.config.context_limit)
+        self.assertEqual(relaxed.history, agent.history)
+        self.assertEqual(relaxed.turns, agent.turns)
+        self.assertEqual(relaxed.usage.total_tokens, agent.usage.total_tokens)
+        self.assertIs(relaxed._transport, agent._transport)
+
+    def test_snapshot_reports_the_context_estimate_and_limit(self):
+        agent = Agent(AgentConfig(context_limit=500), FakeTransport())
+        agent.ask("Раз")
+
+        context = agent.snapshot()["context"]
+
+        self.assertEqual(context, {"estimated": 15, "limit": 500})
+
+
+class ScenarioTestCase(unittest.TestCase):
+    def test_spec_scenario_has_a_dozen_turns_ending_with_a_recall_question(self):
+        from advent.agent import get_scenario
+
+        scenario = get_scenario("spec")
+
+        self.assertEqual(len(scenario.messages), 12)
+        self.assertIn("Ничего не упусти", scenario.messages[-1])
+        self.assertIsNone(get_scenario("nope"))
+
+
+class PersistentRegistryReconfigureTestCase(unittest.TestCase):
+    def test_reconfigure_swaps_the_agent_but_keeps_its_stack(self):
+        from advent.agent import AgentRegistry
+
+        registry = AgentRegistry(lambda saved: Agent(AgentConfig(), FakeTransport()) if not saved else Agent.restore(saved, FakeTransport()))
+        old = registry.get("s1")
+        old.ask("Раз")
+
+        new = registry.reconfigure("s1", context_limit=300)
+
+        self.assertIsNot(new, old)
+        self.assertEqual(new.config.context_limit, 300)
+        self.assertEqual(new.history, old.history)
+        self.assertIs(registry.get("s1"), new)
+
+
 class DeepSeekTransportTestCase(unittest.TestCase):
     def test_fails_fast_without_an_api_key(self):
         from advent.agent import DeepSeekTransport
