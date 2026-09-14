@@ -300,8 +300,36 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_nine_renders_the_compression_homework(self):
+        response = self.client.get("/days/9/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 9.", html)
+        self.assertIn("Сжатие истории", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("последние N сообщений", html)
+        self.assertIn("каждые 10 сообщений", html)
+        self.assertIn("вместо полной истории", html)
+        self.assertIn("расход токенов до и после", html)
+        self.assertIn("работает с компрессией истории и экономит токены", html)
+        # Практика: две дорожки, политика и сравнение.
+        self.assertIn('data-lane="plain"', html)
+        self.assertIn('data-lane="summary"', html)
+        self.assertIn("Без сжатия", html)
+        self.assertIn("Со сжатием", html)
+        self.assertIn('id="day9-policy"', html)
+        self.assertIn("Сжать сейчас", html)
+        self.assertIn('id="agent-initial"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day09.css", html)
+        self.assertIn('href="/days/9/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -842,6 +870,233 @@ class AdventAppTestCase(unittest.TestCase):
 
             self.assertEqual([t["index"] for t in state["turns"]], [1, 2])
             self.assertEqual(state["turns"][1]["total_tokens"], 30)
+
+    def _day_nine_client(self, store_dir, replies=None, measuring=False):
+        from tests.test_agent import FakeTransport, MeasuringTransport
+
+        transport_cls = MeasuringTransport if measuring else FakeTransport
+        transport = transport_cls(replies=list(replies or []))
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s9")
+        return client, transport
+
+    @staticmethod
+    def _events(response):
+        import json as json_module
+
+        return [json_module.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+    def test_day_nine_keeps_two_agents_per_session_with_different_configs(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_nine_client(store_dir)
+
+            state = client.get("/days/9/api/state").get_json()
+
+            self.assertIsNone(state["lanes"]["plain"]["config"]["compression"])
+            self.assertEqual(state["lanes"]["summary"]["config"]["compression"]["every"], 10)
+            self.assertEqual(state["policy"], {"keep_last": 4, "every": 10, "summary_max_tokens": 800, "limit": None})
+            self.assertEqual(state["compare"]["lanes"]["summary"]["facts_total"], 13)
+            # Просмотр страницы не плодит агентов в реестре.
+            self.assertEqual(state["lanes"]["plain"]["agents_in_registry"], 0)
+
+    def test_day_nine_streams_to_one_lane_and_stores_it_under_its_own_file(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_nine_client(store_dir, replies=["Понял."])
+
+            response = self._chat_lane(client, "summary", "Платформа — Android.")
+            events = self._events(response)
+
+            self.assertEqual(events[-1]["type"], "done")
+            self.assertEqual(events[-1]["snapshot"]["storage"]["file"], "s9-summary.json")
+            self.assertTrue(Path(store_dir, "s9-summary.json").exists())
+            self.assertFalse(Path(store_dir, "s9-plain.json").exists())
+            # Cookie сессии — базовый id, а не id дорожки.
+            self.assertIn("agent_session=s9", response.headers.get("Set-Cookie", "agent_session=s9"))
+            self.assertEqual(len(transport.payloads), 1)
+
+    def test_day_nine_rejects_an_unknown_lane(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_nine_client(store_dir)
+
+            response = client.post("/days/9/api/chat/stream", json={"message": "Привет", "lane": "left"})
+
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("дорожку", response.get_json()["error"])
+
+    def test_day_nine_compresses_the_summary_lane_and_reports_it_in_the_stream(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_nine_client(store_dir)
+            client.post("/days/9/api/policy", json={"keep_last": 2, "every": 6, "limit": None})
+            # Заглушка отдаёт ответы по порядку: три хода правой дорожки, потом конспект.
+            transport._replies = ["а1", "а2", "а3", "КОНСПЕКТ"]
+
+            for text in ("в1", "в2"):
+                self._chat_lane(client, "summary", text)
+            events = self._events(self._chat_lane(client, "summary", "в3"))
+
+            types = [event["type"] for event in events]
+            self.assertEqual(types[-3:], ["compressing", "compressed", "done"])
+            self.assertEqual(events[-2]["compression"]["reason"], "every")
+            self.assertEqual(events[-2]["compression"]["compressed"], 4)
+            done = events[-1]
+            self.assertEqual(done["snapshot"]["summary"]["text"], "КОНСПЕКТ")
+            self.assertEqual(len(done["snapshot"]["messages"]), 6)
+            self.assertEqual(done["snapshot"]["context"]["messages"], 2)
+
+            # Левая дорожка ничего не сжимает, даже на том же пороге.
+            for text in ("в1", "в2"):
+                self._chat_lane(client, "plain", text)
+            events = self._events(self._chat_lane(client, "plain", "в3"))
+            self.assertEqual([event["type"] for event in events if event["type"] != "delta"], ["done"])
+            self.assertIsNone(events[-1]["snapshot"]["summary"])
+            self.assertEqual(len(events[-1]["snapshot"]["messages"]), 6)
+
+            state = client.get("/days/9/api/state").get_json()
+            self.assertEqual(state["compare"]["lanes"]["summary"]["summary_requests"], 1)
+            self.assertEqual(state["compare"]["lanes"]["plain"]["summary_requests"], 0)
+
+    def test_day_nine_policy_validation(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_nine_client(store_dir)
+
+            bad_payloads = [
+                {"keep_last": 10, "every": 10, "limit": None},
+                {"keep_last": -1, "every": 10, "limit": None},
+                {"keep_last": 2, "every": 1, "limit": None},
+                {"keep_last": 2, "every": 10, "limit": 10},
+                {"keep_last": "два", "every": 10, "limit": None},
+                {"keep_last": True, "every": 10, "limit": None},
+            ]
+            for payload in bad_payloads:
+                with self.subTest(payload=payload):
+                    self.assertEqual(client.post("/days/9/api/policy", json=payload).status_code, 400)
+
+            ok = client.post("/days/9/api/policy", json={"keep_last": 2, "every": 8, "limit": 700}).get_json()
+            self.assertEqual(ok["policy"], {"keep_last": 2, "every": 8, "summary_max_tokens": 800, "limit": 700})
+            self.assertEqual(ok["lanes"]["plain"]["context"]["limit"], 700)
+            self.assertIsNone(ok["lanes"]["plain"]["config"]["compression"])
+
+    def test_day_nine_manual_compress(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_nine_client(store_dir)
+            client.post("/days/9/api/policy", json={"keep_last": 0, "every": 20, "limit": None})
+
+            nothing = client.post("/days/9/api/compress").get_json()
+            self.assertIsNone(nothing["compression"])
+
+            transport._replies = ["а1", "КОНСПЕКТ"]
+            self._chat_lane(client, "summary", "в1")
+            data = client.post("/days/9/api/compress").get_json()
+
+            self.assertEqual(data["compression"]["reason"], "manual")
+            self.assertEqual(data["state"]["lanes"]["summary"]["summary"]["text"], "КОНСПЕКТ")
+            self.assertEqual(data["state"]["lanes"]["summary"]["context"]["messages"], 0)
+
+    def test_day_nine_compares_facts_and_tokens_between_the_lanes(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_nine_client(store_dir, measuring=True)
+            full = "ТЗ: Android 10, рубли, доллары и евро, свои категории, офлайн, Google, 800 тыс., три месяца, тёмная тема, CSV, уведомления, 299 руб."
+            lossy = "ТЗ: Android, рубли, доллары и евро, категории, офлайн, Google, 800 тыс., три месяца, тёмная тема, CSV, уведомления."
+            transport._replies = [full, lossy]
+
+            self._chat_lane(client, "plain", "Собери ТЗ")
+            self._chat_lane(client, "summary", "Собери ТЗ")
+            compare = client.get("/days/9/api/state").get_json()["compare"]
+
+            self.assertEqual(compare["lanes"]["plain"]["facts_found"], 13)
+            self.assertEqual(compare["lanes"]["summary"]["facts_found"], 11)
+            self.assertEqual(compare["lanes"]["summary"]["missing"], ["минимальная версия 10", "цена 299 рублей"])
+            lost = [f["label"] for f in compare["facts"] if f["plain"] and not f["summary"]]
+            self.assertEqual(lost, ["минимальная версия 10", "цена 299 рублей"])
+            # Короткий ответ дешевле длинного — экономия положительная, в токенах и процентах.
+            self.assertGreater(compare["saved_tokens"], 0)
+            self.assertIsInstance(compare["saved_percent"], int)
+            self.assertTrue(compare["same_turns"])
+
+    def test_day_nine_reset_clears_both_lanes_but_keeps_the_policy(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_nine_client(store_dir)
+            client.post("/days/9/api/policy", json={"keep_last": 2, "every": 8, "limit": 500})
+            self._chat_lane(client, "plain", "в1")
+            self._chat_lane(client, "summary", "в1")
+
+            state = client.post("/days/9/api/reset").get_json()
+
+            self.assertEqual(state["lanes"]["plain"]["messages"], [])
+            self.assertEqual(state["lanes"]["summary"]["messages"], [])
+            self.assertEqual(state["policy"], {"keep_last": 2, "every": 8, "summary_max_tokens": 800, "limit": 500})
+            self.assertEqual(state["lanes"]["plain"]["context"]["limit"], 500)
+            self.assertEqual(state["lanes"]["summary"]["storage"]["messages"], 0)
+            self.assertTrue(Path(store_dir, "s9-summary.json").exists())
+
+    def test_day_nine_summary_survives_a_restart(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_nine_client(store_dir)
+            client.post("/days/9/api/policy", json={"keep_last": 0, "every": 20, "limit": None})
+            transport._replies = ["а1", "КОНСПЕКТ"]
+            self._chat_lane(client, "summary", "в1")
+            client.post("/days/9/api/compress")
+
+            from tests.test_agent import FakeTransport
+
+            second = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": FakeTransport(replies=["а2"])})
+            second_client = second.test_client()
+            second_client.set_cookie("agent_session", "s9")
+            # tojson экранирует кириллицу в разметке — проверяем по JSON состояния.
+            self.assertEqual(second_client.get("/days/9/").status_code, 200)
+            state = second_client.get("/days/9/api/state").get_json()
+            self.assertEqual(state["lanes"]["summary"]["summary"]["text"], "КОНСПЕКТ")
+            self.assertEqual(state["lanes"]["summary"]["compressions"][0]["reason"], "manual")
+
+            self._chat_lane(second_client, "summary", "в2")
+            sent = second.config["AGENT_TRANSPORT"].payloads[0]["messages"]
+            self.assertEqual([m["role"] for m in sent], ["system", "user"])
+            self.assertIn("КОНСПЕКТ", sent[0]["content"])
+
+    def test_day_nine_serves_the_scenario_with_its_facts(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_nine_client(store_dir)
+
+            scenario = client.get("/days/9/api/scenario").get_json()
+
+            self.assertEqual(len(scenario["messages"]), 12)
+            self.assertEqual(len(scenario["facts"]), 13)
+            self.assertEqual(scenario["facts"][-1]["label"], "цена 299 рублей")
+
+            verbose = client.get("/days/9/api/scenario?key=spec-verbose").get_json()
+            self.assertEqual(verbose["messages"][1:], scenario["messages"][1:])
+            self.assertIn("развёрнуто", verbose["messages"][0])
+            self.assertEqual(verbose["facts"], scenario["facts"])
+            self.assertEqual(client.get("/days/9/api/scenario?key=nope").status_code, 404)
+
+    @staticmethod
+    def _chat_lane(client, lane, message):
+        response = client.post("/days/9/api/chat/stream", json={"message": message, "lane": lane})
+        response.get_data()
+        return response
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

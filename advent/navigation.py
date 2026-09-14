@@ -75,6 +75,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=9,
+        title="Сжатие истории",
+        description="Summary вместо старых сообщений",
+        endpoint="day09.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

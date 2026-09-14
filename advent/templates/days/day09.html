@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}День 9. Сжатие истории · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day09.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 09</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Context · Summary · Compression</span>
+    </div>
+    <h1>День 9.<br><span>Сжатие истории</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание девятого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <ul class="homework-brief__steps">
+        <li>Реализуйте механизм управления контекстом: храните последние N сообщений «как есть».</li>
+        <li>Остальное заменяйте <code>summary</code> — например, каждые 10 сообщений.</li>
+        <li>Храните <code>summary</code> отдельно и подставляйте его в запрос вместо полной истории.</li>
+        <li>Сравните качество ответов без сжатия и со сжатием, а также расход токенов до и после.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент, который работает с компрессией истории и экономит токены.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day9-lab" aria-labelledby="day9-lab-title">
+    <div class="day9-lab__intro">
+      <p class="day9-kicker">Практика</p>
+      <h2 id="day9-lab-title">Память целиком, контекст — сжатый</h2>
+      <p>Два агента получают одни и те же реплики. Левый отправляет модели весь стек, правый — конспект старой части плюс последние N сообщений. Сравните ответ на последнюю реплику и расход за диалог.</p>
+    </div>
+
+    <ol class="day9-flow">
+      <li class="day9-flow__step">
+        <span class="day9-flow__rank">01</span>
+        <h3>Стек растёт</h3>
+        <p>Память хранит всё. Как в дне 7 — ни одно сообщение не теряется, файл на диске полный.</p>
+      </li>
+      <li class="day9-flow__step">
+        <span class="day9-flow__rank">02</span>
+        <h3>Порог</h3>
+        <p>Каждые <code>every</code> сообщений диалога всё, кроме последних <code>N</code>, уходит на сжатие отдельным запросом к модели.</p>
+      </li>
+      <li class="day9-flow__step">
+        <span class="day9-flow__rank">03</span>
+        <h3>Summary</h3>
+        <p>Конспект хранится отдельно от стека. Следующее сжатие объединяет старый конспект с новыми репликами — конспект всегда один.</p>
+      </li>
+      <li class="day9-flow__step">
+        <span class="day9-flow__rank">04</span>
+        <h3>Контекст</h3>
+        <p>В модель идёт: системный промпт + конспект + последние N «как есть» + новый вопрос.</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day9-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day9-controls">
+      <form id="day9-policy" class="day9-policy" aria-label="Политика сжатия">
+        <label>
+          <span>N — последних как есть</span>
+          <input id="day9-keep" name="keep_last" type="number" min="{{ bounds.keep[0] }}" max="{{ bounds.keep[1] }}" step="1" required value="{{ state.policy.keep_last if state else 4 }}">
+        </label>
+        <label>
+          <span>every — сжимать каждые</span>
+          <input id="day9-every" name="every" type="number" min="{{ bounds.every[0] }}" max="{{ bounds.every[1] }}" step="1" required value="{{ state.policy.every if state else 10 }}">
+        </label>
+        <label>
+          <span>лимит контекста, обеим</span>
+          <input id="day9-limit" name="limit" type="number" min="{{ bounds.limit[0] }}" max="{{ bounds.limit[1] }}" step="50" placeholder="без лимита" value="{{ state.policy.limit if state and state.policy.limit else '' }}">
+        </label>
+        <button class="day9-policy__apply" type="submit">Применить</button>
+      </form>
+      <div class="day9-actions">
+        {% for item in scenarios %}
+          <button class="agent-chat__scenario" type="button" title="{{ item.description }}" data-scenario-url="{{ url_for('day09.scenario', key=item.key) }}">[▶] «{{ item.title }}»</button>
+        {% endfor %}
+        <button id="day9-compress" class="agent-chat__restart" type="button" title="Свернуть старую часть стека правого агента прямо сейчас">[⇣] Сжать сейчас</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="day9-lanes">
+      {% for lane in ('plain', 'summary') %}
+        <section class="day9-lane" data-lane="{{ lane }}" aria-label="{{ lane_titles[lane] }}">
+          <header class="day9-lane__head">
+            <div>
+              <h3>{{ lane_titles[lane] }}</h3>
+              <p class="day9-lane__tag">{% if lane == 'plain' %}весь стек → модель{% else %}конспект + последние N → модель{% endif %}</p>
+            </div>
+            <dl class="day9-lane__stats">
+              <div><dt>в памяти</dt><dd data-lane-stat="memory">0</dd></div>
+              <div><dt>в контекст</dt><dd data-lane-stat="context">0</dd></div>
+              <div><dt>≈ стек</dt><dd data-lane-stat="estimated">0</dd></div>
+              <div><dt>итого токенов</dt><dd data-lane-stat="total">0</dd></div>
+              {% if lane == 'summary' %}<div><dt>конспектов</dt><dd data-lane-stat="compressions">0</dd></div>{% endif %}
+            </dl>
+          </header>
+          <div class="agent-log day9-log" data-lane-log aria-live="polite">
+            <p class="agent-log__empty" data-log-empty>
+              {% if lane == 'plain' %}Стек пуст. Каждый ход этот агент отправит модели всё, что накопилось.{% else %}Стек пуст. Каждые every сообщений старая часть стека свернётся в конспект, в модель пойдут конспект и последние N.{% endif %}
+            </p>
+          </div>
+        </section>
+      {% endfor %}
+    </div>
+
+    <form
+      id="agent-form"
+      class="agent-composer day9-composer"
+      data-chat-url="{{ url_for('day09.chat_stream') }}"
+      data-state-url="{{ url_for('day09.state') }}"
+      data-reset-url="{{ url_for('day09.reset') }}"
+      data-policy-url="{{ url_for('day09.set_policy') }}"
+      data-compress-url="{{ url_for('day09.compress_now') }}"
+    >
+      <label for="agent-message">Сообщение обоим агентам</label>
+      <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: помоги собрать ТЗ на приложение для учёта расходов"></textarea>
+      <div class="agent-composer__actions">
+        <span id="agent-status" class="agent-status" aria-live="polite"></span>
+        <button id="agent-submit" class="agent-submit" type="submit">Спросить обоих <span aria-hidden="true">→</span></button>
+      </div>
+    </form>
+
+    <section class="day9-compare" aria-labelledby="day9-compare-title">
+      <div class="day9-heading">
+        <div>
+          <p class="day9-kicker">Сравнение</p>
+          <h3 id="day9-compare-title">Что уцелело и что сэкономили</h3>
+        </div>
+        <p>Факты — по последнему ответу каждого агента. Расход — за весь диалог, включая запросы на конспект: сжатие тоже стоит токенов.</p>
+      </div>
+
+      <div class="day9-compare__grid">
+        <div class="day9-verdict">
+          <div class="day9-verdict__item">
+            <span class="day9-verdict__label">расход со сжатием vs без</span>
+            <strong data-verdict="tokens">—</strong>
+            <small data-verdict="tokens-note">прогоните сценарий на обеих дорожках</small>
+          </div>
+          <div class="day9-verdict__item">
+            <span class="day9-verdict__label">факты в итоговом ответе</span>
+            <strong data-verdict="facts">—</strong>
+            <small data-verdict="facts-note">{{ scenario.facts | length }} фактов в сценарии «{{ scenario.title }}»</small>
+          </div>
+        </div>
+
+        <div class="day9-table__scroll">
+          <table class="day9-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>без сжатия</th>
+                <th>со сжатием</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>ходов</td><td data-cmp="plain.turns">0</td><td data-cmp="summary.turns">0</td></tr>
+              <tr><td>запросов к модели</td><td data-cmp="plain.requests">0</td><td data-cmp="summary.requests">0</td></tr>
+              <tr><td>из них на конспект</td><td data-cmp="plain.summary_requests">0</td><td data-cmp="summary.summary_requests">0</td></tr>
+              <tr><td>вход всего</td><td data-cmp="plain.input_tokens">0</td><td data-cmp="summary.input_tokens">0</td></tr>
+              <tr><td>выход всего</td><td data-cmp="plain.output_tokens">0</td><td data-cmp="summary.output_tokens">0</td></tr>
+              <tr><td>в том числе на конспект</td><td data-cmp="plain.summary_tokens">0</td><td data-cmp="summary.summary_tokens">0</td></tr>
+              <tr class="day9-table__total"><td>итого токенов</td><td data-cmp="plain.total_tokens">0</td><td data-cmp="summary.total_tokens">0</td></tr>
+              <tr><td>фактов найдено</td><td data-cmp="plain.facts">—</td><td data-cmp="summary.facts">—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <ul class="day9-facts" data-facts>
+          {% for fact in scenario.facts %}
+            <li data-fact="{{ fact.label }}">
+              <span class="day9-facts__label">{{ fact.label }}</span>
+              <span class="day9-facts__mark" data-fact-lane="plain" title="без сжатия">·</span>
+              <span class="day9-facts__mark" data-fact-lane="summary" title="со сжатием">·</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <details class="day9-summary" data-summary>
+        <summary><span data-summary-title>Конспект: пока нет</span></summary>
+        <pre data-summary-text>Правый агент ещё не сжимал историю.</pre>
+      </details>
+    </section>
+
+    <section class="day9-turns" aria-labelledby="day9-turns-title">
+      <div class="day9-heading">
+        <div>
+          <p class="day9-kicker">По ходам</p>
+          <h3 id="day9-turns-title">Стек до и после</h3>
+        </div>
+        <p>Столбик — сколько токенов ушло в модель на этом ходу. Слева стек растёт без остановки, справа после каждого конспекта опускается.</p>
+      </div>
+      <div class="day9-table__scroll">
+        <table class="day9-table day9-table--turns">
+          <thead>
+            <tr>
+              <th>ход</th>
+              <th>без сжатия: стек</th>
+              <th>ответ</th>
+              <th>со сжатием: стек</th>
+              <th>ответ</th>
+              <th>конспект</th>
+            </tr>
+          </thead>
+          <tbody data-turns></tbody>
+        </table>
+        <p class="day9-turns__empty" data-turns-empty>Пока ни одного хода.</p>
+      </div>
+    </section>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+    <template id="day9-marker-template">
+      <div class="day9-marker" data-marker>
+        <span class="day9-marker__icon" aria-hidden="true">⇣</span>
+        <span data-marker-text></span>
+      </div>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day09.js') }}"></script>
+{% endblock %}

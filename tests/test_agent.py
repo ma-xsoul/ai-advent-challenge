@@ -38,6 +38,29 @@ class FakeTransport:
         }
 
 
+class MeasuringTransport(FakeTransport):
+    """Та же заглушка, но prompt_tokens считаются по символам payload — как у живого API."""
+
+    def _usage(self, payload, content):
+        from advent.agent.tokens import estimate_message_tokens, estimate_tokens
+
+        return {
+            "prompt_tokens": sum(estimate_message_tokens(m["content"]) for m in payload["messages"]),
+            "completion_tokens": estimate_tokens(content),
+        }
+
+    def send(self, payload):
+        response = super().send(payload)
+        response["usage"] = self._usage(payload, response["choices"][0]["message"]["content"])
+        return response
+
+    def stream(self, payload):
+        chunks = list(super().stream(payload))
+        content = "".join(c["choices"][0]["delta"].get("content", "") for c in chunks)
+        chunks[-1]["usage"] = self._usage(payload, content)
+        yield from chunks
+
+
 class AgentConfigTestCase(unittest.TestCase):
     def test_defaults_match_the_project_conventions(self):
         config = AgentConfig()
@@ -644,7 +667,7 @@ class ContextLimitTestCase(unittest.TestCase):
 
         context = agent.snapshot()["context"]
 
-        self.assertEqual(context, {"estimated": 15, "limit": 500})
+        self.assertEqual(context, {"estimated": 15, "limit": 500, "messages": 2, "summarized": 0})
 
 
 class ScenarioTestCase(unittest.TestCase):
@@ -672,6 +695,354 @@ class PersistentRegistryReconfigureTestCase(unittest.TestCase):
         self.assertEqual(new.config.context_limit, 300)
         self.assertEqual(new.history, old.history)
         self.assertIs(registry.get("s1"), new)
+
+
+class CompressionPolicyTestCase(unittest.TestCase):
+    def test_defaults_keep_four_and_compress_every_ten(self):
+        from advent.agent import CompressionPolicy
+
+        policy = CompressionPolicy()
+
+        self.assertEqual((policy.keep_last, policy.every), (4, 10))
+        self.assertIsNone(AgentConfig().compression)
+
+    def test_rejects_a_policy_that_could_never_compress(self):
+        from advent.agent import CompressionPolicy
+
+        for bad in ({"keep_last": -1}, {"every": 1}, {"keep_last": 10, "every": 10}, {"summary_max_tokens": 0}):
+            with self.subTest(**bad):
+                with self.assertRaises(ValueError):
+                    CompressionPolicy(**bad)
+
+    def test_config_rebuilds_the_policy_from_a_plain_dict(self):
+        """Из файла на диске политика приходит словарём — как её положил asdict()."""
+        from advent.agent import CompressionPolicy
+
+        config = AgentConfig(compression={"keep_last": 2, "every": 6, "summary_max_tokens": 100})
+
+        self.assertEqual(config.compression, CompressionPolicy(keep_last=2, every=6, summary_max_tokens=100))
+        with self.assertRaises(ValueError):
+            AgentConfig(compression="каждые десять")
+
+
+def _drive(generator):
+    """Прокрутить поток агента и вернуть события не-текст плюс результат."""
+    events = []
+    while True:
+        try:
+            chunk = next(generator)
+        except StopIteration as stop:
+            return events, stop.value
+        if not isinstance(chunk, str):
+            events.append(chunk)
+
+
+class CompressionTestCase(unittest.TestCase):
+    """День 9: конспект вместо старых сообщений."""
+
+    def _agent(self, transport, **policy):
+        from advent.agent import CompressionPolicy
+
+        return Agent(
+            AgentConfig(system_prompt="Кратко.", compression=CompressionPolicy(**policy)),
+            transport,
+        )
+
+    def test_compresses_when_the_context_reaches_every_messages(self):
+        from advent.agent import CompressionRecord
+
+        transport = FakeTransport(replies=["а1", "а2", "а3", "КОНСПЕКТ: три факта", "а4"])
+        agent = self._agent(transport, keep_last=2, every=6)
+
+        agent.ask("в1")
+        agent.ask("в2")
+        self.assertIsNone(agent.summary)
+        agent.ask("в3")  # шесть сообщений в контексте — пора
+
+        self.assertEqual(agent.summary.text, "КОНСПЕКТ: три факта")
+        self.assertEqual(agent.summary.covers, 4)
+        self.assertEqual(agent.summary.made_after_turn, 3)
+        # Память цела: все шесть сообщений на месте.
+        self.assertEqual(len(agent.history), 6)
+        # В модель уходят только последние два.
+        self.assertEqual([m.content for m in agent.context_messages], ["в3", "а3"])
+        record = agent.compressions[0]
+        self.assertIsInstance(record, CompressionRecord)
+        self.assertEqual((record.reason, record.compressed, record.covers, record.kept), ("every", 4, 4, 2))
+        self.assertEqual(record.after_turn, 3)
+
+        # Следующий ход: системный промпт с конспектом плюс хвост плюс вопрос.
+        agent.ask("в4")
+        messages = transport.payloads[-1]["messages"]
+        self.assertEqual([m["role"] for m in messages], ["system", "user", "assistant", "user"])
+        self.assertIn("Кратко.", messages[0]["content"])
+        self.assertIn("КОНСПЕКТ: три факта", messages[0]["content"])
+        self.assertIn("4 сообщений", messages[0]["content"])
+        self.assertEqual([m["content"] for m in messages[1:]], ["в3", "а3", "в4"])
+
+    def test_summary_request_goes_through_the_same_transport_and_counts_in_usage(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = self._agent(transport, keep_last=2, every=6)
+
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        summary_payload = transport.payloads[3]
+        self.assertFalse(summary_payload["stream"])
+        self.assertEqual(summary_payload["messages"][0]["role"], "system")
+        self.assertIn("конспект", summary_payload["messages"][0]["content"].lower())
+        self.assertIn("Пользователь: в0", summary_payload["messages"][1]["content"])
+        self.assertIn("Ассистент: а2", summary_payload["messages"][1]["content"])
+        self.assertNotIn("Пользователь: в2", summary_payload["messages"][1]["content"])
+        self.assertEqual(summary_payload["thinking"], {"type": "disabled"})
+        # Четыре запроса: три хода и конспект. Расход — за все четыре.
+        self.assertEqual(agent.usage.requests, 4)
+        self.assertEqual(agent.usage.total_tokens, 4 * 15)
+
+    def test_second_compression_merges_the_previous_summary(self):
+        """Счётчик every идёт от прошлого сжатия: шесть сообщений — конспект, ещё шесть — следующий."""
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект-1", "а4", "а5", "а6", "конспект-2"])
+        agent = self._agent(transport, keep_last=2, every=6)
+
+        for i in range(5):
+            agent.ask(f"в{i}")
+        self.assertEqual(agent.summary.text, "конспект-1")
+        agent.ask("в5")
+
+        self.assertEqual(agent.summary.text, "конспект-2")
+        self.assertEqual(agent.summary.covers, 10)
+        self.assertEqual(agent.summary.stack_size, 12)
+        self.assertEqual(len(agent.compressions), 2)
+        second_request = transport.payloads[-1]["messages"][1]["content"]
+        self.assertIn("Прошлый конспект:\nконспект-1", second_request)
+        self.assertIn("Пользователь: в2", second_request)
+        self.assertIn("Пользователь: в4", second_request)
+        self.assertNotIn("Пользователь: в5", second_request)
+        self.assertNotIn("Пользователь: в1", second_request)
+
+    def test_manual_compression_moves_the_counter(self):
+        transport = FakeTransport(replies=["а1", "конспект", "а2", "а3", "а4"])
+        agent = self._agent(transport, keep_last=0, every=6)
+        agent.ask("в1")
+        agent.compress()
+
+        agent.ask("в2")
+        agent.ask("в3")
+        # Без ручного сжатия шесть сообщений уже сработали бы; счётчик сдвинут — ещё нет.
+        self.assertEqual(len(agent.compressions), 1)
+        agent.ask("в4")
+        # Шесть сообщений после ручного сжатия — теперь пора.
+        self.assertEqual(len(agent.compressions), 2)
+        self.assertEqual(len(agent.history), 8)
+
+    def test_truncated_summary_is_flagged(self):
+        class ChoppingTransport(FakeTransport):
+            def send(self, payload):
+                response = super().send(payload)
+                response["choices"][0]["finish_reason"] = "length"
+                return response
+
+        transport = ChoppingTransport(replies=["а1", "обрыв"])
+        agent = self._agent(transport, keep_last=0, every=10)
+        agent.ask("в1")
+
+        record = agent.compress()
+
+        self.assertTrue(record.truncated)
+        self.assertTrue(agent.snapshot()["compressions"][0]["truncated"])
+
+    def test_tail_always_starts_with_a_user_message(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = self._agent(transport, keep_last=1, every=6)
+
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        # keep_last=1 оставил бы один ответ без вопроса — оставляем пару.
+        self.assertEqual([m.content for m in agent.context_messages], ["в2", "а3"])
+
+    def test_manual_compress_and_nothing_to_compress(self):
+        transport = FakeTransport(replies=["а1", "конспект"])
+        agent = self._agent(transport, keep_last=0, every=10)
+        agent.ask("в1")
+
+        record = agent.compress()
+        self.assertEqual((record.reason, record.compressed), ("manual", 2))
+        self.assertEqual(agent.context_messages, ())
+        self.assertIsNone(agent.compress())
+        self.assertEqual(len(transport.payloads), 2)
+
+    def test_agent_without_a_policy_cannot_compress(self):
+        agent = Agent(AgentConfig(), FakeTransport())
+        agent.ask("в1")
+
+        with self.assertRaises(ValueError):
+            agent.compress()
+
+    def test_stream_reports_compression_as_events_after_the_answer(self):
+        from advent.agent import CompressionRecord, CompressionStarted
+
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = self._agent(transport, keep_last=2, every=6)
+        for i in range(2):
+            _drive(agent.stream(f"в{i}"))
+
+        events, reply = _drive(agent.stream("в2"))
+
+        self.assertEqual(reply.content, "а3")
+        self.assertIsInstance(events[0], CompressionStarted)
+        self.assertEqual((events[0].reason, events[0].messages), ("every", 4))
+        self.assertIsInstance(events[1], CompressionRecord)
+        self.assertEqual(agent.summary.text, "конспект")
+
+    def test_failed_summary_does_not_undo_the_turn(self):
+        from advent.agent import CompressionFailed
+
+        from advent.agent.agent import SUMMARY_INSTRUCTION
+
+        class FlakyTransport(FakeTransport):
+            def send(self, payload):
+                if payload["messages"][0]["content"] == SUMMARY_INSTRUCTION:
+                    raise TransportError("сеть упала")
+                return super().send(payload)
+
+        transport = FlakyTransport(replies=["а1", "а2", "а3"])
+        agent = self._agent(transport, keep_last=2, every=6)
+        for i in range(2):
+            _drive(agent.stream(f"в{i}"))
+
+        events, reply = _drive(agent.stream("в2"))
+
+        self.assertEqual(reply.content, "а3")
+        self.assertIsInstance(events[-1], CompressionFailed)
+        self.assertIn("сеть упала", events[-1].error)
+        self.assertEqual(len(agent.history), 6)
+        self.assertIsNone(agent.summary)
+        # ask() тоже не роняет ход из-за конспекта.
+        agent.ask("в3")
+        self.assertEqual(len(agent.history), 8)
+
+    def test_compresses_instead_of_overflowing_when_there_is_room_to_win(self):
+        from advent.agent import CompressionPolicy, CompressionRecord, CompressionStarted, ContextOverflowError
+
+        long_answer = "подробный ответ на вопрос " * 8
+        transport = MeasuringTransport(replies=[long_answer, long_answer, "конспект: два факта"])
+        agent = Agent(AgentConfig(compression=CompressionPolicy(keep_last=0, every=50)), transport)
+        agent.ask("в1")
+        agent.ask("в2")
+        question = "третий вопрос"
+        # Лимит чуть меньше того, что нужно стеку с вопросом: без сжатия — отказ.
+        limit = agent.estimate_context(question) - 1
+        agent = agent.with_config(context_limit=limit)
+
+        events, reply = _drive(agent.stream(question))
+
+        self.assertIsInstance(events[0], CompressionStarted)
+        self.assertEqual(events[0].reason, "overflow")
+        self.assertIsInstance(events[1], CompressionRecord)
+        # Заглушка отдала конспект на третий send, а сам ответ — «ок» по умолчанию.
+        self.assertEqual(reply.content, "ок")
+        self.assertEqual(agent.summary.covers, 4)
+        self.assertEqual(len(agent.history), 6)
+        # Ушёл сжатый контекст: системный промпт с конспектом и один вопрос.
+        sent = transport.payloads[-1]["messages"]
+        self.assertEqual([m["role"] for m in sent], ["system", "user"])
+        self.assertIn("конспект: два факта", sent[0]["content"])
+
+        # А если и после сжатия не влезает — прежний отказ, стек цел.
+        tight = agent.with_config(context_limit=5)
+        with self.assertRaises(ContextOverflowError):
+            _drive(tight.stream("ещё вопрос"))
+        self.assertEqual(len(tight.history), 6)
+
+    def test_overflow_without_anything_to_compress_still_refuses(self):
+        from advent.agent import CompressionPolicy, ContextOverflowError
+
+        transport = FakeTransport()
+        agent = Agent(AgentConfig(context_limit=5, compression=CompressionPolicy(keep_last=2, every=10)), transport)
+
+        with self.assertRaises(ContextOverflowError):
+            agent.ask("вопрос длиннее пяти токенов, определённо")
+        self.assertEqual(transport.payloads, [])
+
+    def test_estimate_is_recounted_by_characters_right_after_compression(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = self._agent(transport, keep_last=2, every=6)
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        after_compression = agent.estimate_context()
+        agent.ask("в3")
+        after_next_turn = agent.estimate_context()
+
+        # Цифры API (10 + 5) описывают старый контекст — их не берём.
+        self.assertNotEqual(after_compression, 15)
+        self.assertEqual(after_next_turn, 15)
+
+    def test_snapshot_and_restore_keep_the_summary_and_the_records(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = self._agent(transport, keep_last=2, every=6)
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        snapshot = agent.snapshot()
+        self.assertEqual(snapshot["summary"]["text"], "конспект")
+        self.assertEqual(snapshot["summary"]["covers"], 4)
+        self.assertEqual(snapshot["summary"]["compressions"], 1)
+        self.assertEqual(snapshot["summary"]["input_tokens"], 10)
+        self.assertEqual(snapshot["context"]["messages"], 2)
+        self.assertEqual(snapshot["context"]["summarized"], 4)
+        self.assertEqual(snapshot["config"]["compression"], {"keep_last": 2, "every": 6, "summary_max_tokens": 800})
+
+        restored = Agent.restore(snapshot, FakeTransport(replies=["а4"]))
+        self.assertEqual(restored.summary, agent.summary)
+        self.assertEqual(restored.compressions, agent.compressions)
+        self.assertEqual(restored.config.compression, agent.config.compression)
+        restored.ask("в3")
+        self.assertIn("конспект", restored._transport.payloads[0]["messages"][0]["content"])
+
+    def test_with_config_can_switch_compression_on_for_a_running_dialogue(self):
+        from advent.agent import CompressionPolicy
+
+        agent = Agent(AgentConfig(), FakeTransport(replies=["а1", "конспект"]))
+        agent.ask("в1")
+
+        compressing = agent.with_config(compression=CompressionPolicy(keep_last=0, every=4))
+
+        self.assertEqual(compressing.history, agent.history)
+        self.assertIsNotNone(compressing.compress())
+
+    def test_reset_drops_the_summary(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = self._agent(transport, keep_last=2, every=6)
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        agent.reset()
+
+        self.assertIsNone(agent.summary)
+        self.assertEqual(agent.compressions, ())
+        self.assertIsNone(agent.snapshot()["summary"])
+
+
+class ScenarioFactsTestCase(unittest.TestCase):
+    def test_checks_which_facts_survived_in_the_answer(self):
+        from advent.agent import get_scenario
+
+        scenario = get_scenario("spec")
+        checks = scenario.check("ТЗ: Android 10+, рубли, доллары и евро, офлайн, Google, 800 тыс., 3 месяца, тёмная тема, CSV, уведомления, 299 руб.")
+
+        self.assertEqual(len(checks), 13)
+        missing = [c.label for c in checks if not c.found]
+        self.assertEqual(missing, ["категории создаёт пользователь"])
+
+    def test_both_currencies_are_required_for_one_fact(self):
+        from advent.agent import get_scenario
+
+        scenario = get_scenario("spec")
+        by_label = {c.label: c.found for c in scenario.check("поддержка долларов")}
+
+        self.assertFalse(by_label["поддержка долларов и евро"])
 
 
 class DeepSeekTransportTestCase(unittest.TestCase):

@@ -15,7 +15,16 @@ from typing import Any
 
 from flask import Response, current_app, jsonify, request, stream_with_context
 
-from ..agent import Agent, AgentRegistry, ContextOverflowError, StoreError, TransportError
+from ..agent import (
+    Agent,
+    AgentRegistry,
+    CompressionFailed,
+    CompressionRecord,
+    CompressionStarted,
+    ContextOverflowError,
+    StoreError,
+    TransportError,
+)
 
 
 SESSION_COOKIE = "agent_session"
@@ -67,18 +76,27 @@ def stream_chat(
     text: str,
     *,
     state_fn: Callable[[Agent], dict[str, Any]] | None = None,
+    store_id: str | None = None,
 ) -> Response:
     """
     Потоковый ответ агента в NDJSON. После полного ответа стек уходит на
     диск; ошибка записи не прячет уже полученный ответ и уезжает отдельным
-    полем. Переполнение контекста — отдельное событие с числами.
+    полем. Переполнение контекста — отдельное событие с числами. События
+    сжатия (день 9) идут в том же потоке до или после текста ответа.
+
+    store_id — под каким идентификатором агент живёт в реестре, если это
+    не сама сессия: день 9 держит на одну сессию двух агентов.
     """
-    snapshot_of = state_fn or (lambda a: state(reg, sid, a))
+    store_id = store_id or sid
+    snapshot_of = state_fn or (lambda a: state(reg, store_id, a))
 
     def generate_events():
         try:
             reply = yield from _stream_reply(agent, text)
         except ContextOverflowError as error:
+            # Агент мог успеть сжать историю перед отказом — это уже стоило
+            # токенов, и терять эту запись при перезапуске не хочется.
+            _save_quietly(reg, store_id)
             yield _event(
                 {
                     "type": "error",
@@ -94,7 +112,7 @@ def stream_chat(
 
         save_error = None
         try:
-            reg.save(sid)
+            reg.save(store_id)
         except OSError as error:
             save_error = f"Ответ получен, но не сохранён на диск: {error}"
 
@@ -130,7 +148,27 @@ def _stream_reply(agent: Agent, text: str):
             chunk = next(generator)
         except StopIteration as stop:
             return stop.value
-        yield _event({"type": "delta", "content": chunk})
+        yield _event(_stream_event(chunk))
+
+
+def _stream_event(chunk: Any) -> dict[str, Any]:
+    """Кусок текста — delta; события сжатия — свои типы, чтобы лента показала их отдельно."""
+    if isinstance(chunk, str):
+        return {"type": "delta", "content": chunk}
+    if isinstance(chunk, CompressionStarted):
+        return {"type": "compressing", "reason": chunk.reason, "messages": chunk.messages}
+    if isinstance(chunk, CompressionRecord):
+        return {"type": "compressed", "compression": asdict(chunk)}
+    if isinstance(chunk, CompressionFailed):
+        return {"type": "compression_failed", "reason": chunk.reason, "error": chunk.error}
+    raise TypeError(f"Агент отдал в поток неизвестное событие: {type(chunk).__name__}")
+
+
+def _save_quietly(reg: AgentRegistry, sid: str) -> None:
+    try:
+        reg.save(sid)
+    except OSError:
+        pass
 
 
 def _event(data: dict[str, Any]) -> str:

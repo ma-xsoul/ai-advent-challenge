@@ -8,7 +8,32 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class Fact:
+    """
+    Факт из сценария и признак, по которому он ищется в ответе.
+
+    Проверка по регулярному выражению, а не второй моделью: дёшево,
+    воспроизводимо и без токенов. Ищем не формулировку, а ключевое —
+    число, название, слово-маркер, — чтобы пересказ своими словами
+    засчитывался, а пропуск — нет.
+    """
+
+    label: str
+    pattern: str
+
+    def found_in(self, text: str) -> bool:
+        return re.search(self.pattern, text, flags=re.IGNORECASE | re.DOTALL) is not None
+
+
+@dataclass(frozen=True)
+class FactCheck:
+    label: str
+    found: bool
 
 
 @dataclass(frozen=True)
@@ -17,6 +42,13 @@ class Scenario:
     title: str
     description: str
     messages: tuple[str, ...]
+    # Что должно уцелеть в итоговом ответе. День 9: по этому списку видно,
+    # что потерялось при сжатии истории.
+    facts: tuple[Fact, ...] = field(default_factory=tuple)
+
+    def check(self, text: str) -> list[FactCheck]:
+        """Какие факты сценария есть в тексте — обычно в последнем ответе агента."""
+        return [FactCheck(fact.label, fact.found_in(text)) for fact in self.facts]
 
 
 # «Собираем ТЗ» — из примера в задании дня 10. Каждая реплика добавляет
@@ -43,9 +75,44 @@ SPEC_GATHERING = Scenario(
         "платформа, валюты, категории, офлайн, синхронизация, бюджет и срок, дизайн, "
         "экспорт, уведомления, цена.",
     ),
+    facts=(
+        Fact("платформа Android", r"android|андроид"),
+        Fact("минимальная версия 10", r"(android|андроид|верси\w*)\W{0,15}10\b"),
+        Fact("основная валюта — рубли", r"рубл|\brub\b|₽"),
+        Fact("поддержка долларов и евро", r"(?=.*(доллар|\busd\b|\$))(?=.*(евро|\beur\b|€))"),
+        Fact("категории создаёт пользователь", r"категори"),
+        Fact("офлайн-режим", r"оф+лайн|без интернета|offline"),
+        Fact("синхронизация через Google", r"google|гугл"),
+        Fact("бюджет 800 тысяч", r"800"),
+        Fact("срок три месяца", r"тр[её]х?\s*мес|3\s*мес|три месяца"),
+        Fact("тёмная тема по умолчанию", r"т[её]мн"),
+        Fact("экспорт в CSV", r"csv"),
+        Fact("ежедневное напоминание, время настраивается", r"уведомлен|напоминан"),
+        Fact("цена 299 рублей", r"299"),
+    ),
 )
 
-SCENARIOS: dict[str, Scenario] = {SPEC_GATHERING.key: SPEC_GATHERING}
+# Те же требования, но ассистента просят отвечать развёрнуто. История
+# тяжелеет с каждым ходом — и конспект, который на коротких репликах
+# стоил дороже, чем экономил, здесь начинает окупаться. Второй прогон
+# для дня 9: сжатие выгодно тогда, когда есть что сжимать.
+SPEC_GATHERING_VERBOSE = Scenario(
+    key="spec-verbose",
+    title="Собираем ТЗ, подробно",
+    description="Те же двенадцать реплик, но ассистент отвечает развёрнуто: история тяжелеет, и конспект начинает окупаться.",
+    messages=(
+        "Помоги собрать ТЗ на мобильное приложение для учёта личных расходов. "
+        "Отвечай развёрнуто, одним абзацем на пять-семь предложений: подтверждай "
+        "требование и коротко предлагай, как его реализовать.",
+    )
+    + SPEC_GATHERING.messages[1:],
+    facts=SPEC_GATHERING.facts,
+)
+
+SCENARIOS: dict[str, Scenario] = {
+    SPEC_GATHERING.key: SPEC_GATHERING,
+    SPEC_GATHERING_VERBOSE.key: SPEC_GATHERING_VERBOSE,
+}
 
 
 def get_scenario(key: str) -> Scenario | None:
