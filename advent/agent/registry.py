@@ -88,6 +88,19 @@ class AgentRegistry:
             self._agents[session_id] = agent
             return agent
 
+    def spawn(self, session_id: str, saved: dict[str, Any]) -> Agent:
+        """
+        Агент из готового слепка под новым id — так рождается ветка диалога
+        (день 10): слепок родителя, обрезанный до checkpoint, становится
+        отдельным агентом со своей историей дальше. Слепок сразу на диск.
+        """
+        with self._lock:
+            agent = self._factory(saved)
+            self._agents[session_id] = agent
+            if self._store:
+                self._store.save(session_id, agent)
+            return agent
+
     def save(self, session_id: str) -> None:
         """Сбросить стек агента на диск. Без хранилища — ничего не делает."""
         if not self._store:
@@ -96,6 +109,13 @@ class AgentRegistry:
             agent = self._agents.get(session_id)
             if agent is not None:
                 self._store.save(session_id, agent)
+
+    def forget(self, session_id: str) -> None:
+        """Убрать агента и из памяти, и с диска — ветка удалена насовсем."""
+        with self._lock:
+            self._agents.pop(session_id, None)
+            if self._store:
+                self._store.delete(session_id)
 
     def evict(self, session_id: str) -> bool:
         """

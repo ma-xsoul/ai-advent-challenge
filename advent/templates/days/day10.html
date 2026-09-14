@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}День 10. Стратегии контекста · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day10.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 10</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Context · Strategies · No summary</span>
+    </div>
+    <h1>День 10.<br><span>Стратегии контекста</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание десятого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Реализуйте в агенте минимум три стратегии управления контекстом (без summary) и переключатель между ними.</p>
+      <ul class="homework-brief__steps">
+        <li><strong>Sliding Window</strong> — храните только последние N сообщений, всё остальное отбрасывайте.</li>
+        <li><strong>Sticky Facts / Key-Value Memory</strong> — отдельный блок <code>facts</code> (ключ — значение) с важными данными из диалога: цель, ограничения, предпочтения, решения, договорённости. Обновляйте его после каждого сообщения пользователя; в запрос отправляйте <code>facts</code> + последние N сообщений.</li>
+        <li><strong>Branching</strong> — сохраните checkpoint в диалоге, создайте две ветки от одного места, продолжите диалог в каждой независимо и переключайтесь между ветками.</li>
+        <li>Протестируйте на одном и том же сценарии (например, «собираем ТЗ», 10–15 сообщений): прогоните его на каждой стратегии и сравните ответы и поведение агента.</li>
+        <li>Сравните качество ответа, стабильность (не теряет ли важные детали), расход токенов и удобство для пользователя.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент с тремя стратегиями управления контекстом (Sliding Window / Facts / Branching) и сравнение результатов.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day10-lab" aria-labelledby="day10-lab-title">
+    <div class="day10-lab__intro">
+      <p class="day10-kicker">Практика</p>
+      <h2 id="day10-lab-title">Три способа не отправлять модели всё</h2>
+      <p>Стратегия переключается у живого диалога. Один сценарий, три прогона — и таблица внизу показывает, что каждая стратегия сохранила и во что обошлась. Ветки растут от checkpoint: две истории от одного корня.</p>
+    </div>
+
+    <ol class="day10-strategies">
+      <li class="day10-strategy">
+        <span class="day10-strategy__rank">01</span>
+        <h3>Sliding Window</h3>
+        <p>В запрос уходят только последние N сообщений. Остальное не сжимается, как в дне 9, а отбрасывается — самая дешёвая стратегия и самая забывчивая.</p>
+        <p class="day10-strategy__formula">последние N → модель</p>
+      </li>
+      <li class="day10-strategy">
+        <span class="day10-strategy__rank">02</span>
+        <h3>Sticky Facts</h3>
+        <p>Отдельный блок <code>facts</code>: ключ — значение. Цель, ограничения, решения, договорённости. Переписывается после каждой реплики пользователя — факт может уточниться и смениться.</p>
+        <p class="day10-strategy__formula">facts + последние N → модель</p>
+      </li>
+      <li class="day10-strategy">
+        <span class="day10-strategy__rank">03</span>
+        <h3>Branching</h3>
+        <p>Checkpoint в нужном месте диалога, ветки от него, независимое продолжение в каждой и переключение между ними — история как дерево, а не как лента.</p>
+        <p class="day10-strategy__formula">checkpoint → ветка A · ветка B</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day10-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day10-controls">
+      <form id="day10-strategy" class="day10-switch" aria-label="Стратегия контекста">
+        <div class="day10-switch__options" role="radiogroup" aria-label="Стратегия">
+          {% for item in strategies %}
+            <label class="day10-switch__option">
+              <input type="radio" name="kind" value="{{ item.kind }}" {% if (state.strategy.kind if state else 'full') == item.kind %}checked{% endif %}>
+              <span>{{ item.title }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        <label class="day10-switch__n">
+          <span>N — последних как есть</span>
+          <input id="day10-n" name="n" type="number" min="{{ n_bounds[0] }}" max="{{ n_bounds[1] }}" step="1" required value="{{ state.strategy.n if state else 4 }}">
+        </label>
+        <button class="day10-switch__apply" type="submit">Применить</button>
+      </form>
+      <div class="day10-actions">
+        <button class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day10.scenario', key=scenario.key) }}">[▶] «{{ scenario.title }}»</button>
+        <button id="day10-branch-scenario" class="agent-chat__scenario" type="button" title="{{ branch_scenario.description }}" data-scenario-url="{{ url_for('day10.scenario', key=branch_scenario.key) }}">[▶] «{{ branch_scenario.title }}»</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head day10-chat__head">
+          <div class="day10-branches" data-branches aria-label="Ветки диалога">
+            <h3 id="agent-chat-title">Диалог</h3>
+          </div>
+          <div class="agent-chat__tools">
+            <button id="day10-checkpoint" class="agent-chat__restart" type="button" title="Отметить точку, от которой можно ветвиться">[⚑] Checkpoint</button>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day10-log" data-strategy="{{ state.strategy.kind if state else 'full' }}" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Выберите стратегию, напишите что-нибудь или запустите сценарий.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day10.chat_stream') }}"
+          data-state-url="{{ url_for('day10.state') }}"
+          data-reset-url="{{ url_for('day10.reset') }}"
+          data-strategy-url="{{ url_for('day10.set_strategy') }}"
+          data-checkpoint-url="{{ url_for('day10.add_checkpoint') }}"
+          data-fork-url="{{ url_for('day10.fork') }}"
+          data-switch-url="{{ url_for('day10.switch') }}"
+          data-runs-url="{{ url_for('day10.add_run') }}"
+        >
+          <label for="agent-message">Сообщение агенту активной ветки</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: помоги собрать ТЗ на приложение для учёта расходов"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">Контекст</p>
+          <h3 id="agent-debug-title" data-debug="strategy_title">{{ state.strategy.title if state else 'Полная история' }}</h3>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>стратегия</dt><dd data-debug="strategy">{{ state.strategy.kind if state else 'full' }}</dd></div>
+            <div><dt>N</dt><dd data-debug="n">{{ state.strategy.n if state else 4 }}</dd></div>
+            <div><dt>в памяти</dt><dd data-debug="stack">0</dd></div>
+            <div><dt>в контекст</dt><dd data-debug="context_messages">0</dd></div>
+            <div><dt>≈ стек</dt><dd data-debug="context_estimated">0</dd></div>
+            <div><dt>запросов</dt><dd data-debug="requests">0</dd></div>
+            <div><dt>из них побочных</dt><dd data-debug="side_requests">0</dd></div>
+            <div><dt>итого токенов</dt><dd data-debug="total_tokens">0</dd></div>
+          </dl>
+
+          <p class="agent-kicker day10-debug-kicker">Facts</p>
+          <dl class="day10-facts" data-facts>
+            <p class="day10-facts__empty" data-facts-empty>Блок пуст. Включите Sticky Facts — он заполнится после первой реплики.</p>
+          </dl>
+
+          <p class="agent-kicker day10-debug-kicker">Ветки и checkpoint'ы</p>
+          <div class="day10-tree" data-tree>
+            <p class="day10-tree__empty">Одна ветка, checkpoint'ов нет.</p>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <section class="day10-runs" aria-labelledby="day10-runs-title">
+      <div class="day10-heading">
+        <div>
+          <p class="day10-kicker">Сравнение</p>
+          <h3 id="day10-runs-title">Прогоны сценария</h3>
+        </div>
+        <div class="day10-runs__tools">
+          <button id="day10-record" class="agent-chat__restart" type="button" title="Записать текущий диалог активной ветки как прогон">[+] Записать прогон</button>
+          <button id="day10-clear-runs" class="agent-chat__reset" type="button" data-clear-url="{{ url_for('day10.clear_runs') }}">[x] Очистить</button>
+        </div>
+      </div>
+      <p class="day10-runs__note">Одна строка на прогон «{{ scenario.title }}»: качество — сколько из {{ scenario.facts | length }} фактов уцелело в итоговом ТЗ, стабильность — что именно потерялось, расход — токены с учётом побочных запросов. Строка записывается сама, когда сценарий доходит до конца.</p>
+      <div class="day10-table__scroll">
+        <table class="day10-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>стратегия</th>
+              <th>N</th>
+              <th>ветка</th>
+              <th>ходов</th>
+              <th>запросов</th>
+              <th>побочных</th>
+              <th>токенов</th>
+              <th>на побочные</th>
+              <th>фактов</th>
+              <th class="day10-table__missing">потеряно</th>
+            </tr>
+          </thead>
+          <tbody data-runs></tbody>
+        </table>
+        <p class="day10-runs__empty" data-runs-empty>Пока ни одного прогона.</p>
+      </div>
+    </section>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+    <template id="day10-marker-template">
+      <div class="day10-marker" data-marker>
+        <span class="day10-marker__icon" aria-hidden="true">≡</span>
+        <span data-marker-text></span>
+      </div>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day10.js') }}"></script>
+{% endblock %}

@@ -43,6 +43,34 @@ class CompressionPolicy:
 
 
 @dataclass(frozen=True)
+class FactsPolicy:
+    """
+    Sticky Facts — день 10.
+
+    Вместо истории модель получает блок фактов «ключ — значение»: цель,
+    ограничения, предпочтения, решения, договорённости. После каждой
+    реплики пользователя отдельный запрос переписывает блок целиком —
+    факт может уточниться или смениться, а не только добавиться.
+    В запрос уходят facts + последние keep_last сообщений.
+
+    Старые сообщения не сжимаются и не хранятся в конспекте — из них
+    остаётся только то, что попало в факты.
+    """
+
+    keep_last: int = 4
+    max_facts: int = 30
+    max_tokens: int = 500
+
+    def __post_init__(self) -> None:
+        if self.keep_last < 0:
+            raise ValueError("keep_last не может быть отрицательным")
+        if self.max_facts < 1:
+            raise ValueError("max_facts должен быть положительным")
+        if self.max_tokens < 1:
+            raise ValueError("max_tokens должен быть положительным")
+
+
+@dataclass(frozen=True)
 class AgentConfig:
     """
     Неизменяемый набор настроек одного агента.
@@ -66,8 +94,15 @@ class AgentConfig:
     # нужны сотни ходов. Агент может держать окно меньше — например 700, —
     # и тогда переполнение видно за десять реплик. None — без лимита.
     context_limit: int | None = None
-    # Политика сжатия истории. None — в модель уходит весь стек, как в днях 6–8.
+    # Стратегии контекста — не больше одной за раз. None у всех — в модель
+    # уходит весь стек, как в днях 6–8.
+    # День 9: конспект вместо старой части стека.
     compression: CompressionPolicy | None = None
+    # День 10, Sliding Window: в модель уходят только последние window
+    # сообщений, остальное отбрасывается — без конспекта и без фактов.
+    window: int | None = None
+    # День 10, Sticky Facts: блок «ключ — значение» плюс последние N.
+    facts: FactsPolicy | None = None
 
     def __post_init__(self) -> None:
         if not self.model or not self.model.strip():
@@ -87,3 +122,22 @@ class AgentConfig:
             object.__setattr__(self, "compression", CompressionPolicy(**self.compression))
         if self.compression is not None and not isinstance(self.compression, CompressionPolicy):
             raise ValueError("compression должен быть CompressionPolicy или None")
+        if isinstance(self.facts, dict):
+            object.__setattr__(self, "facts", FactsPolicy(**self.facts))
+        if self.facts is not None and not isinstance(self.facts, FactsPolicy):
+            raise ValueError("facts должен быть FactsPolicy или None")
+        if self.window is not None and (isinstance(self.window, bool) or self.window < 1):
+            raise ValueError("window должен быть положительным или None")
+        if sum(item is not None for item in (self.compression, self.window, self.facts)) > 1:
+            raise ValueError("Стратегия контекста только одна: конспект, окно или факты")
+
+    @property
+    def strategy(self) -> str:
+        """Какая стратегия контекста включена: full, summary, window или facts."""
+        if self.compression is not None:
+            return "summary"
+        if self.window is not None:
+            return "window"
+        if self.facts is not None:
+            return "facts"
+        return "full"

@@ -22,6 +22,9 @@ from ..agent import (
     CompressionRecord,
     CompressionStarted,
     ContextOverflowError,
+    FactsFailed,
+    FactsRecord,
+    FactsStarted,
     StoreError,
     TransportError,
 )
@@ -161,6 +164,12 @@ def _stream_event(chunk: Any) -> dict[str, Any]:
         return {"type": "compressed", "compression": asdict(chunk)}
     if isinstance(chunk, CompressionFailed):
         return {"type": "compression_failed", "reason": chunk.reason, "error": chunk.error}
+    if isinstance(chunk, FactsStarted):
+        return {"type": "facts_updating", "keys": chunk.keys}
+    if isinstance(chunk, FactsRecord):
+        return {"type": "facts_updated", "update": asdict(chunk)}
+    if isinstance(chunk, FactsFailed):
+        return {"type": "facts_failed", "error": chunk.error}
     raise TypeError(f"Агент отдал в поток неизвестное событие: {type(chunk).__name__}")
 
 

@@ -109,6 +109,62 @@ SPEC_GATHERING_VERBOSE = Scenario(
     facts=SPEC_GATHERING.facts,
 )
 
+@dataclass(frozen=True)
+class BranchTail:
+    """Продолжение диалога в одной ветке после checkpoint."""
+
+    title: str
+    messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BranchScenario:
+    """
+    Сценарий для Branching (день 10): общий ствол до checkpoint и два
+    разных продолжения. В одной ленте они бы противоречили друг другу —
+    «платное за 299» и «бесплатное с подпиской» в одном ТЗ, — а в двух
+    ветках каждое ТЗ собирается от одного корня без путаницы.
+    """
+
+    key: str
+    title: str
+    description: str
+    trunk: tuple[str, ...]
+    branches: tuple[BranchTail, ...]
+
+
+ASSEMBLE_SPEC = SPEC_GATHERING.messages[-1]
+
+SPEC_BRANCHES = BranchScenario(
+    key="spec-branches",
+    title="Две ветки ТЗ",
+    description=(
+        "Десять общих реплик, checkpoint, и два продолжения от него: платное приложение "
+        "за 299 рублей и бесплатное с подпиской. Каждая ветка собирает своё ТЗ."
+    ),
+    trunk=SPEC_GATHERING.messages[:10],
+    branches=(
+        BranchTail(
+            title="A · платное, 299 ₽",
+            messages=(SPEC_GATHERING.messages[10], ASSEMBLE_SPEC),
+        ),
+        BranchTail(
+            title="B · бесплатное + подписка",
+            messages=(
+                "Приложение бесплатное: с рекламой, а подписка за 199 рублей в месяц её отключает.",
+                ASSEMBLE_SPEC,
+            ),
+        ),
+    ),
+)
+
+BRANCH_SCENARIOS: dict[str, BranchScenario] = {SPEC_BRANCHES.key: SPEC_BRANCHES}
+
+
+def get_branch_scenario(key: str) -> BranchScenario | None:
+    return BRANCH_SCENARIOS.get(key)
+
+
 SCENARIOS: dict[str, Scenario] = {
     SPEC_GATHERING.key: SPEC_GATHERING,
     SPEC_GATHERING_VERBOSE.key: SPEC_GATHERING_VERBOSE,

@@ -328,8 +328,40 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_ten_renders_the_strategies_homework(self):
+        response = self.client.get("/days/10/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 10.", html)
+        self.assertIn("Стратегии контекста", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Sliding Window", html)
+        self.assertIn("Sticky Facts", html)
+        self.assertIn("Branching", html)
+        self.assertIn("последние N сообщений", html)
+        self.assertIn("checkpoint", html)
+        self.assertIn("качество ответа", html)
+        self.assertIn("расход токенов", html)
+        self.assertIn("Агент с тремя стратегиями", html)
+        # Практика: переключатель, лента, факты, ветки, таблица прогонов.
+        self.assertIn('id="day10-strategy"', html)
+        self.assertIn('value="window"', html)
+        self.assertIn('value="facts"', html)
+        self.assertIn('id="day10-checkpoint"', html)
+        self.assertIn("data-facts", html)
+        self.assertIn("data-tree", html)
+        self.assertIn("data-runs", html)
+        self.assertIn('id="agent-initial"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day10.css", html)
+        self.assertIn('href="/days/10/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1097,6 +1129,176 @@ class AdventAppTestCase(unittest.TestCase):
         response = client.post("/days/9/api/chat/stream", json={"message": message, "lane": lane})
         response.get_data()
         return response
+
+    def _day_ten_client(self, store_dir, transport=None):
+        from tests.test_agent import FakeTransport
+
+        transport = transport or FakeTransport()
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s10")
+        return client, transport
+
+    @staticmethod
+    def _chat10(client, message):
+        response = client.post("/days/10/api/chat/stream", json={"message": message})
+        response.get_data()
+        return response
+
+    def test_day_ten_switches_the_strategy_on_a_running_dialogue(self):
+        import json as json_module
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_ten_client(store_dir)
+            transport._replies = ["а1", "а2", "а3"]
+            self._chat10(client, "в1")
+            self._chat10(client, "в2")
+
+            state = client.post("/days/10/api/strategy", json={"kind": "window", "n": 2}).get_json()
+            self.assertEqual(state["strategy"], {"kind": "window", "title": "Sliding Window", "n": 2})
+            self.assertEqual(len(state["branch"]["messages"]), 4)
+            self.assertEqual(state["branch"]["context"]["messages"], 2)
+            self.assertEqual(state["branch"]["context"]["dropped"], 2)
+
+            done = [json_module.loads(l) for l in self._chat10(client, "в3").get_data(as_text=True).splitlines()][-1]
+            sent = transport.payloads[-1]["messages"]
+            self.assertEqual([m["content"] for m in sent if m["role"] != "system"], ["в2", "а2", "в3"])
+            self.assertEqual(done["snapshot"]["strategy"], "window")
+
+            back = client.post("/days/10/api/strategy", json={"kind": "full", "n": 2}).get_json()
+            self.assertEqual(back["strategy"]["kind"], "full")
+            self.assertEqual(back["branch"]["context"]["dropped"], 0)
+
+    def test_day_ten_rejects_a_bad_strategy(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_ten_client(store_dir)
+
+            for payload in ({"kind": "summary", "n": 4}, {"kind": "window", "n": 0}, {"kind": "facts", "n": "четыре"}, ["window"]):
+                with self.subTest(payload=payload):
+                    self.assertEqual(client.post("/days/10/api/strategy", json=payload).status_code, 400)
+
+    def test_day_ten_streams_facts_events_and_keeps_the_block_in_the_state(self):
+        import json as json_module
+        import tempfile
+
+        from tests.test_agent import FactsJsonTransport
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            transport = FactsJsonTransport(replies=["а1"], facts=['{"facts": {"платформа": "Android 10"}}'])
+            client, _ = self._day_ten_client(store_dir, transport)
+            client.post("/days/10/api/strategy", json={"kind": "facts", "n": 2})
+
+            events = [json_module.loads(l) for l in self._chat10(client, "Платформа — Android 10").get_data(as_text=True).splitlines()]
+
+            types = [e["type"] for e in events if e["type"] != "delta"]
+            self.assertEqual(types, ["facts_updating", "facts_updated", "done"])
+            self.assertEqual(events[-2]["update"]["added"], ["платформа"])
+            self.assertEqual(events[-1]["snapshot"]["facts"], {"платформа": "Android 10"})
+            state = client.get("/days/10/api/state").get_json()
+            self.assertEqual(state["branch"]["facts"], {"платформа": "Android 10"})
+            self.assertEqual(state["branch"]["usage"]["requests"], 2)
+
+    def test_day_ten_checkpoint_fork_and_switch(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_ten_client(store_dir)
+            transport._replies = ["а1", "а2", "ветка-A", "ветка-B"]
+            self._chat10(client, "в1")
+            self._chat10(client, "в2")
+
+            point = client.post("/days/10/api/checkpoint", json={"title": "после двух"}).get_json()["checkpoint"]
+            self.assertEqual((point["id"], point["message"], point["title"]), ("c1", 4, "после двух"))
+
+            forked = client.post("/days/10/api/fork", json={"checkpoint": "c1", "title": "A"}).get_json()
+            self.assertEqual(forked["branch"]["id"], "b1")
+            self.assertEqual(forked["state"]["tree"]["active"], "b1")
+            self.assertEqual(len(forked["state"]["branch"]["messages"]), 4)
+            self.assertTrue(Path(store_dir, "s10-b1.json").exists())
+            self._chat10(client, "в-A")
+
+            forked_b = client.post("/days/10/api/fork", json={"checkpoint": "c1", "title": "B"}).get_json()
+            self.assertEqual(forked_b["state"]["tree"]["active"], "b2")
+            self._chat10(client, "в-B")
+
+            state = client.get("/days/10/api/state").get_json()
+            self.assertEqual([m["content"] for m in state["branch"]["messages"]][-2:], ["в-B", "ветка-B"])
+            sizes = {b["id"]: b["messages"] for b in state["tree"]["branches"]}
+            self.assertEqual(sizes, {"main": 4, "b1": 6, "b2": 6})
+
+            switched = client.post("/days/10/api/switch", json={"branch": "b1"}).get_json()
+            self.assertEqual(switched["tree"]["active"], "b1")
+            self.assertEqual(switched["branch"]["messages"][-1]["content"], "ветка-A")
+            self.assertEqual(client.post("/days/10/api/switch", json={"branch": "b9"}).status_code, 400)
+            self.assertEqual(client.post("/days/10/api/fork", json={"checkpoint": "c9"}).status_code, 400)
+
+    def test_day_ten_records_runs_and_reset_keeps_them(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_ten_client(store_dir)
+            self.assertEqual(client.post("/days/10/api/runs", json={}).status_code, 400)
+            transport._replies = ["ТЗ: Android 10, рубли, доллары и евро, категории, офлайн, Google, 800 тыс., три месяца, тёмная тема, CSV, уведомления, 299 руб."]
+            client.post("/days/10/api/strategy", json={"kind": "window", "n": 3})
+            self._chat10(client, "Собери ТЗ")
+            client.post("/days/10/api/checkpoint", json={})
+
+            run = client.post("/days/10/api/runs", json={"scenario": "spec"}).get_json()["run"]
+            self.assertEqual((run["strategy"], run["n"], run["turns"], run["facts_found"], run["facts_total"]), ("window", 3, 1, 13, 13))
+            self.assertEqual(run["missing"], [])
+
+            state = client.post("/days/10/api/reset").get_json()
+            self.assertEqual(state["branch"]["messages"], [])
+            self.assertEqual(state["strategy"]["kind"], "window")
+            self.assertEqual(len(state["tree"]["runs"]), 1)
+            self.assertEqual(state["tree"]["checkpoints"], [])
+            self.assertTrue(Path(store_dir, "s10-tree.json").exists())
+
+            cleared = client.delete("/days/10/api/runs").get_json()
+            self.assertEqual(cleared["tree"]["runs"], [])
+
+    def test_day_ten_serves_both_scenarios(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_ten_client(store_dir)
+
+            spec = client.get("/days/10/api/scenario?key=spec").get_json()
+            branches = client.get("/days/10/api/scenario?key=spec-branches").get_json()
+
+            self.assertEqual(len(spec["messages"]), 12)
+            self.assertEqual(len(branches["trunk"]), 10)
+            self.assertEqual([b["title"][:1] for b in branches["branches"]], ["A", "B"])
+            self.assertIn("299", branches["branches"][0]["messages"][0])
+            self.assertEqual(client.get("/days/10/api/scenario?key=nope").status_code, 404)
+
+    def test_day_ten_state_survives_a_restart(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_ten_client(store_dir)
+            transport._replies = ["а1", "а2"]
+            client.post("/days/10/api/strategy", json={"kind": "window", "n": 2})
+            self._chat10(client, "в1")
+            client.post("/days/10/api/checkpoint", json={})
+            client.post("/days/10/api/fork", json={"checkpoint": "c1", "title": "A"})
+            self._chat10(client, "в2")
+
+            from tests.test_agent import FakeTransport
+
+            second = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": FakeTransport()}).test_client()
+            second.set_cookie("agent_session", "s10")
+            state = second.get("/days/10/api/state").get_json()
+
+            self.assertEqual(state["tree"]["active"], "b1")
+            self.assertEqual(state["strategy"]["kind"], "window")
+            self.assertEqual(len(state["branch"]["messages"]), 4)
+            self.assertEqual([b["messages"] for b in state["tree"]["branches"]], [2, 4])
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

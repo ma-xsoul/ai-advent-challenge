@@ -8,13 +8,27 @@ from .agent import (
     CompressionRecord,
     CompressionStarted,
     ContextOverflowError,
+    FactsFailed,
+    FactsRecord,
+    FactsStarted,
     Message,
     Summary,
     TurnStats,
 )
-from .config import AgentConfig, CompressionPolicy
+from .branches import Branch, Checkpoint, DialogTree, TreeStore
+from .config import AgentConfig, CompressionPolicy, FactsPolicy
 from .registry import AgentRegistry
-from .scenarios import SCENARIOS, Fact, FactCheck, Scenario, get_scenario
+from .scenarios import (
+    BRANCH_SCENARIOS,
+    SCENARIOS,
+    BranchScenario,
+    BranchTail,
+    Fact,
+    FactCheck,
+    Scenario,
+    get_branch_scenario,
+    get_scenario,
+)
 from .store import JsonStore, StoreError, StoredSession
 from .tokens import estimate_tokens
 from .transport import DeepSeekTransport, Transport, TransportError
@@ -25,14 +39,24 @@ __all__ = [
     "AgentRegistry",
     "AgentReply",
     "AgentUsage",
+    "BRANCH_SCENARIOS",
+    "Branch",
+    "BranchScenario",
+    "BranchTail",
+    "Checkpoint",
     "CompressionFailed",
     "CompressionPolicy",
     "CompressionRecord",
     "CompressionStarted",
     "ContextOverflowError",
     "DeepSeekTransport",
+    "DialogTree",
     "Fact",
     "FactCheck",
+    "FactsFailed",
+    "FactsPolicy",
+    "FactsRecord",
+    "FactsStarted",
     "JsonStore",
     "Message",
     "SCENARIOS",
@@ -40,8 +64,10 @@ __all__ = [
     "StoreError",
     "StoredSession",
     "Summary",
+    "TreeStore",
     "TurnStats",
     "estimate_tokens",
+    "get_branch_scenario",
     "get_scenario",
     "Transport",
     "TransportError",

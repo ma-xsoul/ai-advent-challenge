@@ -1,0 +1,669 @@
+/* День 10: три стратегии контекста без summary. */
+
+.day10-lab {
+  margin-top: 36px;
+}
+
+.day10-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day10-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day10-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day10-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day10-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Три стратегии — три карточки в ряд. */
+.day10-strategies {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day10-strategy {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day10-strategy__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day10-strategy h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day10-strategy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула стратегии — что именно уходит в модель. */
+.day10-strategy__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day10-strategy__formula::before {
+  content: "> ";
+}
+
+.day10-criteria {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 24px;
+  margin: 14px 0 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day10-criteria > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.36fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.day10-criteria dt {
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day10-criteria dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day10-note {
+  margin: 14px 0 0;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px 18px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day10-note > span {
+  margin-right: 8px;
+  color: var(--accent);
+}
+
+.day10-note strong {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .day10-strategies,
+  .day10-criteria {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .day10-criteria > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* ── Практика: переключатель, дорожка, ветки, прогоны ─────────────────── */
+
+.day10-strategies {
+  margin-bottom: 14px;
+}
+
+.day10-store-error {
+  margin: 0 0 14px;
+  border: 1px solid rgba(232, 112, 95, 0.4);
+  background: var(--error-soft);
+  padding: 11px 14px;
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.day10-store-error::before {
+  content: "! ";
+}
+
+.day10-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-soft);
+  padding: 12px 14px;
+}
+
+.day10-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* Сегменты: одна стратегия за раз — как в конфиге агента. */
+.day10-switch__options {
+  display: flex;
+  border: 1px solid var(--line-strong);
+}
+
+.day10-switch__option {
+  position: relative;
+  cursor: pointer;
+}
+
+.day10-switch__option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.day10-switch__option span {
+  display: block;
+  border-right: 1px solid var(--line-strong);
+  padding: 7px 12px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  transition: background var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.day10-switch__option:last-child span {
+  border-right: 0;
+}
+
+.day10-switch__option input:checked + span {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.day10-switch__option input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.day10-switch__n {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day10-switch__n > span::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day10-switch__n input {
+  width: 120px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 6px 10px;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day10-switch__n input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.day10-switch__apply {
+  min-height: 31px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  padding: 0 12px;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.day10-switch__apply:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.day10-switch__apply:disabled,
+.day10-switch__option input:disabled + span {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.day10-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Шапка диалога — вкладки веток слева, checkpoint справа. */
+.day10-chat__head {
+  align-items: center;
+}
+
+.day10-branches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.day10-branches h3 {
+  margin-right: 6px;
+}
+
+.day10-branch {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 3px 9px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  transition: border-color var(--speed-fast) var(--ease), color var(--speed-fast) var(--ease);
+}
+
+.day10-branch:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day10-branch.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.day10-branch small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.day10-branch:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.day10-log {
+  min-height: 220px;
+}
+
+/* Сообщения, которых модель больше не видит: окно их отбросило, факты — впитали. */
+.agent-turn.is-dropped {
+  border-left-color: var(--line);
+  opacity: 0.45;
+}
+
+.agent-turn.is-dropped header > span::after {
+  margin-left: 8px;
+  color: var(--muted);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.day10-log[data-strategy="window"] .agent-turn.is-dropped header > span::after {
+  content: "· вне окна";
+}
+
+.day10-log[data-strategy="facts"] .agent-turn.is-dropped header > span::after {
+  content: "· только в фактах";
+}
+
+/* Отметка обновления фактов в ленте. */
+.day10-marker {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  padding: 8px 12px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  line-height: 1.5;
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.day10-marker__icon {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.day10-marker.is-pending {
+  border-style: dotted;
+  color: var(--muted);
+}
+
+.day10-marker.is-pending .day10-marker__icon {
+  animation: caret-blink 1.1s steps(1, end) infinite;
+}
+
+.day10-marker.is-failed {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.day10-marker.is-failed .day10-marker__icon {
+  color: var(--error);
+}
+
+.day10-marker.is-branch {
+  border-style: solid;
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+}
+
+.day10-debug-kicker {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+/* Блок фактов — то, что модель получает вместо истории. */
+.day10-facts {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0 0 12px;
+}
+
+.day10-facts > div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.38fr) minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11.5px;
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.day10-facts dt {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.day10-facts dd {
+  margin: 0;
+  color: var(--muted-bright);
+  overflow-wrap: anywhere;
+}
+
+.day10-facts > div.is-changed dd {
+  color: var(--text-bright);
+}
+
+.day10-facts__empty,
+.day10-tree__empty {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.day10-facts__empty[hidden] {
+  display: none;
+}
+
+/* Дерево веток: ветки с родителем и checkpoint'ы с кнопкой «ветка отсюда». */
+.day10-tree {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 4px;
+  font-size: 11.5px;
+}
+
+.day10-tree__branch,
+.day10-tree__point {
+  display: flex;
+  /* Grid-элемент не ужимается ниже содержимого без min-width: 0 —
+     длинное имя ветки распирало бы панель. */
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+}
+
+.day10-tree__branch {
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--speed-fast) var(--ease);
+}
+
+.day10-tree__branch:hover:not(:disabled) {
+  border-color: var(--muted-bright);
+}
+
+.day10-tree__branch:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.day10-tree__branch.is-active {
+  border-color: var(--accent);
+}
+
+.day10-tree__branch span,
+.day10-tree__point span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-bright);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day10-tree__branch small,
+.day10-tree__point small {
+  color: var(--muted);
+}
+
+.day10-tree__branch > small {
+  flex-shrink: 0;
+}
+
+.day10-tree__point {
+  border-style: dashed;
+}
+
+.day10-tree__point span::before {
+  color: var(--accent);
+  content: "⚑ ";
+}
+
+.day10-tree__fork {
+  flex-shrink: 0;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 2px 8px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.day10-tree__fork:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.day10-tree__fork:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+/* ── Таблица прогонов ──────────────────────────────────────────────────── */
+
+.day10-runs {
+  margin-top: 24px;
+}
+
+.day10-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.day10-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.day10-runs__tools {
+  display: flex;
+  gap: 8px;
+}
+
+.day10-runs__note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.day10-table__scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day10-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day10-table th,
+.day10-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 7px 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.day10-table th {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: lowercase;
+}
+
+.day10-table th:first-child,
+.day10-table td:first-child {
+  color: var(--accent);
+  text-align: left;
+}
+
+.day10-table td {
+  color: var(--muted-bright);
+}
+
+.day10-table td.day10-table__strategy {
+  color: var(--text-bright);
+  text-align: left;
+}
+
+.day10-table td.day10-table__missing,
+.day10-table th.day10-table__missing {
+  min-width: 260px;
+  max-width: 420px;
+  text-align: left;
+  white-space: normal;
+}
+
+.day10-table td.day10-table__missing {
+  color: var(--error);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.day10-table td.is-good {
+  color: var(--ok);
+}
+
+.day10-table td.is-bad {
+  color: var(--error);
+}
+
+.day10-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.day10-runs__empty {
+  margin: 0;
+  padding: 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.day10-runs__empty[hidden] {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .day10-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

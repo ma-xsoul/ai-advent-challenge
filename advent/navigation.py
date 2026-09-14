@@ -83,6 +83,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=10,
+        title="Стратегии контекста",
+        description="Sliding Window · Sticky Facts · Branching",
+        endpoint="day10.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

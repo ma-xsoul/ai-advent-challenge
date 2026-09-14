@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Generator, Iterable
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Union
@@ -166,9 +167,53 @@ class CompressionFailed:
     error: str
 
 
-# Что отдаёт `stream()`: куски текста ответа и события сжатия.
+# ── Sticky Facts — день 10 ──────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class FactsRecord:
+    """
+    Одно обновление блока фактов: что изменилось и во что обошлось.
+
+    facts — весь блок после обновления. Он нужен не только панели: ветка
+    от checkpoint получает факты такими, какими они были в той точке.
+    """
+
+    after_turn: int
+    added: tuple[str, ...]
+    changed: tuple[str, ...]
+    removed: tuple[str, ...]
+    input_tokens: int | None
+    output_tokens: int | None
+    facts_tokens: int  # ≈ размер блока по символам
+    facts: dict[str, str]
+
+
+@dataclass(frozen=True)
+class FactsStarted:
+    """Событие потока: ответ дошёл, агент ушёл обновлять факты."""
+
+    keys: int  # сколько ключей в блоке сейчас
+
+
+@dataclass(frozen=True)
+class FactsFailed:
+    """Обновление фактов не удалось. Блок остался прежним, ход состоялся."""
+
+    error: str
+
+
+# Что отдаёт `stream()`: куски текста ответа и события побочных запросов.
 # Union вместо `|`: выражение на 3.9, а не аннотация.
-StreamEvent = Union[str, CompressionStarted, CompressionRecord, CompressionFailed]
+StreamEvent = Union[
+    str,
+    CompressionStarted,
+    CompressionRecord,
+    CompressionFailed,
+    FactsStarted,
+    FactsRecord,
+    FactsFailed,
+]
 
 # Инструкция модели, которая пишет конспект. Она получает старую часть
 # стека и прошлый конспект — и возвращает один новый.
@@ -208,6 +253,33 @@ SUMMARY_PREFIX = (
 )
 
 
+# Инструкция модели, которая ведёт блок фактов. Уроки конспекта дня 9
+# зашиты сразу: инструкции о стиле — тоже факт, из ответов ассистента —
+# только подтверждённое, ничего не выдумывать. Ключи устойчивые: тот же
+# факт при уточнении меняет значение, а не плодит новый ключ.
+FACTS_INSTRUCTION = (
+    "Ты ведёшь блок фактов диалога для ассистента, который продолжит этот разговор.\n"
+    "Тебе даны текущие факты, новая реплика пользователя и ответ ассистента. "
+    "Верни обновлённый блок целиком как JSON-объект вида "
+    '{{"facts": {{"ключ": "значение"}}}}.\n'
+    "Правила:\n"
+    "— ключи короткие и устойчивые: цель, платформа, валюты, бюджет, срок, стиль ответов, "
+    "ограничение, решение, договорённость; уточнение известного факта меняет значение, "
+    "а не добавляет ключ;\n"
+    "— значение — одна короткая фраза, числа и названия как есть;\n"
+    "— если пользователь изменил или отменил факт — измени или удали ключ;\n"
+    "— инструкции пользователя о том, как отвечать, — тоже факт, ключ «стиль ответов»;\n"
+    "— из ответа ассистента бери только то, что пользователь явно подтвердил;\n"
+    "— ничего не выдумывай: чего нет в реплике и в текущих фактах, того нет в блоке;\n"
+    "— не больше {max_facts} ключей."
+)
+FACTS_TEMPERATURE = 0.2
+FACTS_PREFIX = (
+    "Факты диалога (ключ — значение), собранные из реплик пользователя. "
+    "Опирайся на них так же, как на историю:"
+)
+
+
 class Agent:
     """
     Один агент — один диалог с одной моделью и одним конфигом.
@@ -218,7 +290,9 @@ class Agent:
 
     С политикой сжатия (день 9) в модель уходит не весь стек, а конспект
     старой части плюс последние сообщения. Стек при этом не редеет:
-    память агента и контекст запроса — разные вещи.
+    память агента и контекст запроса — разные вещи. День 10 добавляет
+    ещё две стратегии: окно (только последние N) и факты (блок
+    «ключ — значение» плюс последние N). Какая включена — решает конфиг.
     """
 
     def __init__(
@@ -233,6 +307,8 @@ class Agent:
         self._turns: list[TurnStats] = []
         self._summary: Summary | None = None
         self._compressions: list[CompressionRecord] = []
+        self._facts: dict[str, str] = {}
+        self._fact_updates: list[FactsRecord] = []
 
     @classmethod
     def restore(
@@ -306,12 +382,34 @@ class Agent:
                 )
             )
 
+        facts_data = data.get("facts")
+        facts = _clean_facts(facts_data) if isinstance(facts_data, dict) else {}
+
+        fact_updates: list[FactsRecord] = []
+        for item in data.get("fact_updates", []) or []:
+            if not isinstance(item, dict):
+                continue
+            fact_updates.append(
+                FactsRecord(
+                    after_turn=int(item.get("after_turn", 0) or 0),
+                    added=tuple(str(k) for k in item.get("added", []) or []),
+                    changed=tuple(str(k) for k in item.get("changed", []) or []),
+                    removed=tuple(str(k) for k in item.get("removed", []) or []),
+                    input_tokens=_int_or_none(item.get("input_tokens")),
+                    output_tokens=_int_or_none(item.get("output_tokens")),
+                    facts_tokens=int(item.get("facts_tokens", 0) or 0),
+                    facts=_clean_facts(item.get("facts")) if isinstance(item.get("facts"), dict) else {},
+                )
+            )
+
         agent = cls(config, transport)
         agent._messages = messages
         agent._usage = usage
         agent._turns = turns
         agent._summary = summary
         agent._compressions = compressions
+        agent._facts = facts
+        agent._fact_updates = fact_updates
         return agent
 
     def with_config(self, **changes: Any) -> Agent:
@@ -339,11 +437,47 @@ class Agent:
     @property
     def context_messages(self) -> tuple[Message, ...]:
         """
-        Та часть стека, что уходит в модель. Без конспекта — весь стек;
-        с конспектом — только сообщения после него. Память ≠ контекст.
+        Та часть стека, что уходит в модель. Память ≠ контекст.
+
+        full    — весь стек;
+        summary — сообщения после конспекта;
+        window  — последние window сообщений, остальное отброшено;
+        facts   — последние keep_last, остальное живёт только в фактах.
         """
-        start = self._summary.covers if self._summary else 0
+        if self._summary is not None:
+            start = self._summary.covers
+        elif self._config.window is not None:
+            start = self._tail_start(self._config.window)
+        elif self._config.facts is not None:
+            start = self._tail_start(self._config.facts.keep_last)
+        else:
+            start = 0
         return tuple(self._messages[start:])
+
+    @property
+    def facts(self) -> dict[str, str]:
+        """Блок «ключ — значение» стратегии Sticky Facts. Пуст, пока стратегия не включена."""
+        return dict(self._facts)
+
+    @property
+    def fact_updates(self) -> tuple[FactsRecord, ...]:
+        return tuple(self._fact_updates)
+
+    def _tail_start(self, keep: int) -> int:
+        """
+        Индекс, с которого стек уходит в модель «как есть».
+
+        keep считается по истории до нового вопроса — сам вопрос уходит
+        всегда. Хвост начинается с реплики пользователя: если keep режет
+        пару «вопрос — ответ», пара остаётся целиком.
+        """
+        end = len(self._messages)
+        if end and self._messages[-1].role == "user":
+            end -= 1
+        cut = max(0, end - keep)
+        if 0 < cut < end and self._messages[cut].role != "user":
+            cut -= 1
+        return cut
 
     @property
     def summary(self) -> Summary | None:
@@ -374,7 +508,15 @@ class Agent:
         считаем всё по символам: цифры API описывают старый контекст.
         """
         last = self._turns[-1] if self._turns else None
-        if last is not None and last.context_tokens is not None and not self._compressed_after(last):
+        api_numbers_hold = (
+            last is not None
+            and last.context_tokens is not None
+            and not self._compressed_after(last)
+            # Окно и факты меняют состав запроса каждый ход — цифры прошлого
+            # запроса ничего не говорят о следующем.
+            and self._config.strategy in ("full", "summary")
+        )
+        if api_numbers_hold:
             estimated = last.context_tokens + (last.answer_tokens or 0)
         else:
             estimated = estimate_message_tokens(self._system_text() or "")
@@ -432,6 +574,7 @@ class Agent:
 
         self._commit(text, reply)
         self._drain(self._compress_if_due())
+        self._drain(self._facts_if_due(text, reply.content))
         return reply
 
     def stream(self, text: str) -> Generator[StreamEvent, None, AgentReply]:
@@ -457,6 +600,7 @@ class Agent:
 
         self._commit(text, reply)
         yield from self._compress_if_due()
+        yield from self._facts_if_due(text, reply.content)
         return reply
 
     def _commit(self, question: str, reply: AgentReply) -> None:
@@ -520,19 +664,9 @@ class Agent:
         return record
 
     def _cut_point(self) -> int:
-        """
-        Индекс стека, с которого сообщения уходят в модель «как есть».
-
-        Последние keep_last остаются, но хвост должен начинаться с реплики
-        пользователя: при нечётном keep_last оставляем на одно сообщение
-        больше, чтобы после конспекта не шёл ответ без вопроса.
-        """
+        """С какого сообщения стек остаётся «как есть» при сжатии: последние keep_last."""
         policy = self._config.compression
-        keep = policy.keep_last if policy else 0
-        cut = max(0, len(self._messages) - keep)
-        if 0 < cut < len(self._messages) and self._messages[cut].role != "user":
-            cut -= 1
-        return cut
+        return self._tail_start(policy.keep_last if policy else 0)
 
     def _compressible(self) -> int:
         """Сколько сообщений ушло бы в конспект прямо сейчас."""
@@ -572,6 +706,84 @@ class Agent:
             return
         if record is not None:
             yield record
+
+    # ── Факты ───────────────────────────────────────────────────────────────
+
+    def update_facts(self, question: str, answer: str) -> FactsRecord:
+        """
+        Переписать блок фактов по свежей реплике пользователя.
+
+        Модель получает текущие факты, реплику и ответ — и возвращает блок
+        целиком: так факт может уточниться, смениться или исчезнуть, а не
+        только добавиться. Старые сообщения при этом никуда не уходят из
+        памяти, но в запрос попадает лишь то, что осталось в фактах.
+        """
+        policy = self._config.facts
+        if policy is None:
+            raise ValueError("У агента нет политики фактов")
+
+        reply = self._parse(self._transport.send(self._build_facts_payload(question, answer)))
+        # Блок фактов стоит токенов — и они в том же счётчике, что и ходы.
+        self._usage.record(reply)
+        try:
+            facts = _parse_facts(reply.content, policy.max_facts)
+        except ValueError as error:
+            raise TransportError(f"Блок фактов не разобрался: {error}") from error
+
+        before = self._facts
+        record = FactsRecord(
+            after_turn=len(self._turns),
+            added=tuple(key for key in facts if key not in before),
+            changed=tuple(key for key in facts if key in before and before[key] != facts[key]),
+            removed=tuple(key for key in before if key not in facts),
+            input_tokens=reply.input_tokens,
+            output_tokens=reply.output_tokens,
+            facts_tokens=estimate_tokens(self._facts_text(facts)),
+            facts=dict(facts),
+        )
+        self._facts = facts
+        self._fact_updates.append(record)
+        return record
+
+    def _facts_if_due(self, question: str, answer: str) -> Generator[StreamEvent, None, None]:
+        """Триггер из задания: после каждой реплики пользователя блок фактов обновляется."""
+        if self._config.facts is None:
+            return
+        yield FactsStarted(len(self._facts))
+        try:
+            record = self.update_facts(question, answer)
+        except TransportError as error:
+            # Ход состоялся, блок остался прежним — следующая реплика попробует снова.
+            yield FactsFailed(str(error))
+            return
+        yield record
+
+    def _build_facts_payload(self, question: str, answer: str) -> dict[str, Any]:
+        """Запрос на факты: JSON-режим, низкая температура, без потока. Та же модель и тот же счётчик."""
+        policy = self._config.facts
+        assert policy is not None
+        current = json.dumps(self._facts, ensure_ascii=False, indent=1) if self._facts else "{}"
+        content = (
+            f"Текущие факты:\n{current}\n\n"
+            f"Новая реплика пользователя:\n{question}\n\n"
+            f"Ответ ассистента:\n{answer}"
+        )
+        return {
+            "model": self._config.model,
+            "messages": [
+                {"role": "system", "content": FACTS_INSTRUCTION.format(max_facts=policy.max_facts)},
+                {"role": "user", "content": content},
+            ],
+            "temperature": FACTS_TEMPERATURE,
+            "max_tokens": policy.max_tokens,
+            "response_format": {"type": "json_object"},
+            "thinking": {"type": "disabled"},
+            "stream": False,
+        }
+
+    @staticmethod
+    def _facts_text(facts: dict[str, str]) -> str:
+        return "\n".join(f"- {key}: {value}" for key, value in facts.items())
 
     @staticmethod
     def _drain(events: Iterable[StreamEvent]) -> None:
@@ -613,26 +825,76 @@ class Agent:
         self._turns.clear()
         self._summary = None
         self._compressions.clear()
+        self._facts = {}
+        self._fact_updates.clear()
 
     def snapshot(self) -> dict[str, Any]:
-        """Слепок для дебаг-панели: конфиг, стек, расход и конспект одним JSON."""
+        """Слепок для дебаг-панели: конфиг, стек, расход, конспект и факты одним JSON."""
         covers = self._summary.covers if self._summary else 0
         return {
             "name": self._config.name,
+            "strategy": self._config.strategy,
             "config": asdict(self._config),
             "messages": [message.as_payload() for message in self._messages],
             "usage": {**asdict(self._usage), "total_tokens": self._usage.total_tokens},
             "turns": [turn.as_dict() for turn in self._turns],
             "summary": self._summary_snapshot(),
             "compressions": [asdict(record) for record in self._compressions],
+            "facts": dict(self._facts),
+            "fact_updates": [asdict(record) for record in self._fact_updates],
             "context": {
                 "estimated": self.estimate_context(),
                 "limit": self._config.context_limit,
-                # Сколько сообщений стека уходит в модель и сколько накрыто конспектом.
-                "messages": len(self._messages) - covers,
+                # Сколько сообщений стека уходит в модель, сколько накрыто
+                # конспектом и сколько просто не попадает в запрос.
+                "messages": len(self.context_messages),
                 "summarized": covers,
+                "dropped": len(self._messages) - len(self.context_messages) - covers,
             },
         }
+
+    def fork(self, message_count: int) -> dict[str, Any]:
+        """
+        Слепок диалога, обрезанный до первых message_count сообщений, —
+        точка ветвления (день 10, Branching).
+
+        Ветка — новый агент из этого слепка: тот же конфиг, та же история
+        до checkpoint, дальше — свой стек. Расход ветки — только за общую
+        часть; конспект и факты — какими они были в той точке.
+        """
+        if message_count < 0 or message_count > len(self._messages) or message_count % 2:
+            raise ValueError("Checkpoint ставится после ответа агента: чётное число сообщений в пределах стека")
+        turns = message_count // 2
+        kept_turns = self._turns[:turns]
+        compressions = [record for record in self._compressions if record.after_turn <= turns]
+        updates = [record for record in self._fact_updates if record.after_turn <= turns]
+
+        input_tokens = sum(turn.context_tokens or 0 for turn in kept_turns)
+        output_tokens = sum(turn.answer_tokens or 0 for turn in kept_turns)
+        for record in (*compressions, *updates):
+            input_tokens += record.input_tokens or 0
+            output_tokens += record.output_tokens or 0
+
+        summary = self._summary
+        if summary is not None and (summary.made_after_turn > turns or summary.covers > message_count):
+            summary = None
+
+        data = {
+            "name": self._config.name,
+            "config": asdict(self._config),
+            "messages": [message.as_payload() for message in self._messages[:message_count]],
+            "usage": {
+                "requests": len(kept_turns) + len(compressions) + len(updates),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+            "turns": [turn.as_dict() for turn in kept_turns],
+            "summary": asdict(summary) if summary else None,
+            "compressions": [asdict(record) for record in compressions],
+            "facts": dict(updates[-1].facts) if updates else {},
+            "fact_updates": [asdict(record) for record in updates],
+        }
+        return type(self).restore(data, transport=self._transport).snapshot()
 
     def _summary_snapshot(self) -> dict[str, Any] | None:
         if self._summary is None:
@@ -655,6 +917,8 @@ class Agent:
             parts.append(self._config.system_prompt)
         if self._summary is not None:
             parts.append(SUMMARY_PREFIX.format(count=self._summary.covers) + "\n" + self._summary.text)
+        if self._config.facts is not None and self._facts:
+            parts.append(FACTS_PREFIX + "\n" + self._facts_text(self._facts))
         return "\n\n".join(parts) or None
 
     def _build_payload(self, *, stream: bool = False) -> dict[str, Any]:
@@ -667,6 +931,8 @@ class Agent:
 
         День 9: с конспектом уходит не весь стек, а context_messages —
         сообщения после конспекта; сам конспект вшит в системный промпт.
+        День 10: окно режет context_messages до последних N, факты
+        добавляют в системный промпт блок «ключ — значение».
         """
         messages: list[dict[str, str]] = []
         system = self._system_text()
@@ -759,3 +1025,34 @@ class Agent:
 
 def _int_or_none(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _parse_facts(content: str, limit: int) -> dict[str, str]:
+    """
+    Разобрать ответ модели в блок фактов. Принимает и {"facts": {...}},
+    и голый объект: JSON-режим гарантирует объект, но не его форму.
+    """
+    data = json.loads(content)
+    if isinstance(data, dict) and isinstance(data.get("facts"), dict):
+        data = data["facts"]
+    if not isinstance(data, dict):
+        raise ValueError("ожидался JSON-объект с фактами")
+    facts = _clean_facts(data)
+    return dict(list(facts.items())[:limit])
+
+
+def _clean_facts(data: dict[Any, Any]) -> dict[str, str]:
+    """Ключи и значения — строки; списки склеиваются, пустое выбрасывается."""
+    facts: dict[str, str] = {}
+    for key, value in data.items():
+        name = str(key).strip()
+        if not name:
+            continue
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(item) for item in value)
+        elif isinstance(value, dict):
+            value = json.dumps(value, ensure_ascii=False)
+        text = str(value).strip()
+        if text:
+            facts[name] = text
+    return facts

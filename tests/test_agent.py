@@ -667,7 +667,7 @@ class ContextLimitTestCase(unittest.TestCase):
 
         context = agent.snapshot()["context"]
 
-        self.assertEqual(context, {"estimated": 15, "limit": 500, "messages": 2, "summarized": 0})
+        self.assertEqual(context, {"estimated": 15, "limit": 500, "messages": 2, "summarized": 0, "dropped": 0})
 
 
 class ScenarioTestCase(unittest.TestCase):
@@ -1043,6 +1043,346 @@ class ScenarioFactsTestCase(unittest.TestCase):
         by_label = {c.label: c.found for c in scenario.check("поддержка долларов")}
 
         self.assertFalse(by_label["поддержка долларов и евро"])
+
+
+class SlidingWindowTestCase(unittest.TestCase):
+    """День 10, стратегия 1: только последние N сообщений, остальное отбрасывается."""
+
+    def test_only_the_last_n_messages_and_the_question_go_to_the_model(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3", "а4"])
+        agent = Agent(AgentConfig(system_prompt="Кратко.", window=2), transport)
+
+        for i in range(4):
+            agent.ask(f"в{i}")
+
+        sent = transport.payloads[-1]["messages"]
+        # Окно — по истории до вопроса: одна пара плюс сам вопрос.
+        self.assertEqual([m["content"] for m in sent], ["Кратко.", "в2", "а3", "в3"])
+        # Память цела: все восемь сообщений на месте, в контексте — два.
+        self.assertEqual(len(agent.history), 8)
+        self.assertEqual([m.content for m in agent.context_messages], ["в3", "а4"])
+        self.assertEqual(agent.config.strategy, "window")
+
+    def test_window_keeps_pairs_whole(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3"])
+        agent = Agent(AgentConfig(window=3), transport)
+
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        sent = transport.payloads[-1]["messages"]
+        # Три сообщения резали бы пару — хвост начинается с вопроса, пара целиком.
+        self.assertEqual([m["content"] for m in sent], ["в0", "а1", "в1", "а2", "в2"])
+
+    def test_window_makes_no_side_requests_and_reports_dropped_messages(self):
+        transport = FakeTransport()
+        agent = Agent(AgentConfig(window=2), transport)
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        snapshot = agent.snapshot()
+
+        self.assertEqual(len(transport.payloads), 3)
+        self.assertEqual(snapshot["strategy"], "window")
+        self.assertEqual(snapshot["context"]["messages"], 2)
+        self.assertEqual(snapshot["context"]["dropped"], 4)
+        self.assertEqual(snapshot["facts"], {})
+
+    def test_estimate_is_by_characters_because_the_payload_changes_every_turn(self):
+        agent = Agent(AgentConfig(window=2), FakeTransport())
+        agent.ask("в0")
+        agent.ask("в1")
+
+        # Заглушка отдаёт prompt_tokens=10, но для окна цифры API не годятся.
+        self.assertNotEqual(agent.estimate_context(), 15)
+
+    def test_config_allows_only_one_strategy(self):
+        from advent.agent import CompressionPolicy, FactsPolicy
+
+        with self.assertRaises(ValueError):
+            AgentConfig(window=2, facts=FactsPolicy())
+        with self.assertRaises(ValueError):
+            AgentConfig(window=2, compression=CompressionPolicy())
+        with self.assertRaises(ValueError):
+            AgentConfig(window=0)
+
+
+class FactsJsonTransport(FakeTransport):
+    """Заглушка, которая на запрос фактов отдаёт JSON, а на ходы — обычный текст."""
+
+    def __init__(self, replies=None, facts=None):
+        super().__init__(replies=replies)
+        self._facts = list(facts or [])
+
+    def send(self, payload):
+        if payload.get("response_format") == {"type": "json_object"}:
+            self.payloads.append(payload)
+            content = self._facts.pop(0) if self._facts else '{"facts": {}}'
+            return {
+                "model": "deepseek-v4-flash",
+                "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 8},
+            }
+        return super().send(payload)
+
+
+class StickyFactsTestCase(unittest.TestCase):
+    """День 10, стратегия 2: блок «ключ — значение» плюс последние N."""
+
+    def _agent(self, transport, **policy):
+        from advent.agent import FactsPolicy
+
+        return Agent(AgentConfig(system_prompt="Кратко.", facts=FactsPolicy(**policy)), transport)
+
+    def test_updates_facts_after_each_user_message_and_sends_them_with_the_tail(self):
+        transport = FactsJsonTransport(
+            replies=["а1", "а2"],
+            facts=['{"facts": {"платформа": "Android 10"}}', '{"facts": {"платформа": "Android 10", "бюджет": "800 тыс."}}'],
+        )
+        agent = self._agent(transport, keep_last=2)
+
+        agent.ask("Платформа — Android 10")
+        self.assertEqual(agent.facts, {"платформа": "Android 10"})
+        agent.ask("Бюджет 800 тысяч")
+
+        self.assertEqual(agent.facts, {"платформа": "Android 10", "бюджет": "800 тыс."})
+        # Запрос второго хода: системный промпт с фактами первого хода плюс хвост.
+        second_turn = transport.payloads[2]["messages"]
+        self.assertEqual([m["role"] for m in second_turn], ["system", "user", "assistant", "user"])
+        self.assertIn("Кратко.", second_turn[0]["content"])
+        self.assertIn("- платформа: Android 10", second_turn[0]["content"])
+        # Запрос на факты: JSON-режим, текущие факты, реплика и ответ.
+        facts_request = transport.payloads[3]
+        self.assertEqual(facts_request["response_format"], {"type": "json_object"})
+        self.assertFalse(facts_request["stream"])
+        self.assertIn("Бюджет 800 тысяч", facts_request["messages"][1]["content"])
+        self.assertIn('"платформа": "Android 10"', facts_request["messages"][1]["content"])
+        self.assertIn("Ответ ассистента:\nа2", facts_request["messages"][1]["content"])
+        # Четыре запроса — два хода и два обновления — в одном счётчике.
+        self.assertEqual(agent.usage.requests, 4)
+        self.assertEqual(agent.usage.total_tokens, 2 * 15 + 2 * 28)
+
+    def test_records_what_changed(self):
+        transport = FactsJsonTransport(
+            replies=["а1", "а2"],
+            facts=['{"бюджет": "800 тыс.", "срок": "3 месяца"}', '{"бюджет": "1 млн", "платформа": "Android"}'],
+        )
+        agent = self._agent(transport, keep_last=2)
+
+        agent.ask("в1")
+        agent.ask("в2")
+
+        first, second = agent.fact_updates
+        self.assertEqual((first.added, first.changed, first.removed), (("бюджет", "срок"), (), ()))
+        self.assertEqual((second.added, second.changed, second.removed), (("платформа",), ("бюджет",), ("срок",)))
+        self.assertEqual(second.facts, {"бюджет": "1 млн", "платформа": "Android"})
+        self.assertEqual(second.after_turn, 2)
+
+    def test_only_the_tail_goes_to_the_model_the_rest_lives_in_facts(self):
+        transport = FactsJsonTransport(replies=["а1", "а2", "а3"], facts=['{"facts": {"цель": "ТЗ"}}'] * 3)
+        agent = self._agent(transport, keep_last=2)
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        sent = [m["content"] for m in transport.payloads[4]["messages"]]  # третий ход
+        self.assertEqual(sent[1:], ["в1", "а2", "в2"])
+        self.assertEqual(len(agent.history), 6)
+        self.assertEqual(agent.snapshot()["context"]["dropped"], 4)
+
+    def test_stream_reports_facts_events_after_the_answer(self):
+        from advent.agent import FactsRecord, FactsStarted
+
+        transport = FactsJsonTransport(replies=["а1"], facts=['{"facts": {"цель": "ТЗ"}}'])
+        agent = self._agent(transport, keep_last=2)
+
+        events, reply = _drive(agent.stream("в1"))
+
+        self.assertEqual(reply.content, "а1")
+        self.assertIsInstance(events[0], FactsStarted)
+        self.assertIsInstance(events[1], FactsRecord)
+        self.assertEqual(events[1].facts, {"цель": "ТЗ"})
+
+    def test_broken_json_keeps_the_previous_facts_and_the_turn(self):
+        from advent.agent import FactsFailed
+
+        transport = FactsJsonTransport(replies=["а1", "а2"], facts=['{"facts": {"цель": "ТЗ"}}', "не json"])
+        agent = self._agent(transport, keep_last=2)
+        agent.ask("в1")
+
+        events, reply = _drive(agent.stream("в2"))
+
+        self.assertIsInstance(events[-1], FactsFailed)
+        self.assertEqual(agent.facts, {"цель": "ТЗ"})
+        self.assertEqual(len(agent.history), 4)
+
+    def test_facts_are_cleaned_and_capped(self):
+        from advent.agent.agent import _parse_facts
+
+        facts = _parse_facts('{"facts": {" валюты ": ["RUB", "USD"], "пусто": "", "срок": {"мес": 3}}}', limit=10)
+        self.assertEqual(facts, {"валюты": "RUB, USD", "срок": '{"мес": 3}'})
+        self.assertEqual(len(_parse_facts('{"a": "1", "b": "2", "c": "3"}', limit=2)), 2)
+        with self.assertRaises(ValueError):
+            _parse_facts('["список"]', limit=10)
+
+    def test_snapshot_restore_and_reset_carry_the_facts(self):
+        transport = FactsJsonTransport(replies=["а1"], facts=['{"facts": {"цель": "ТЗ"}}'])
+        agent = self._agent(transport, keep_last=2)
+        agent.ask("в1")
+
+        restored = Agent.restore(agent.snapshot(), FactsJsonTransport(replies=["а2"]))
+        self.assertEqual(restored.facts, {"цель": "ТЗ"})
+        self.assertEqual(restored.fact_updates, agent.fact_updates)
+        self.assertEqual(restored.config.facts, agent.config.facts)
+        restored.ask("в2")
+        self.assertIn("- цель: ТЗ", restored._transport.payloads[0]["messages"][0]["content"])
+
+        agent.reset()
+        self.assertEqual(agent.facts, {})
+        self.assertEqual(agent.fact_updates, ())
+
+
+class ForkTestCase(unittest.TestCase):
+    """День 10, стратегия 3: ветка — агент из обрезанного слепка."""
+
+    def test_fork_cuts_the_snapshot_at_the_checkpoint(self):
+        transport = FakeTransport(replies=["а1", "а2", "а3"])
+        agent = Agent(AgentConfig(system_prompt="Кратко."), transport)
+        for i in range(3):
+            agent.ask(f"в{i}")
+
+        saved = agent.fork(4)
+        branch = Agent.restore(saved, FakeTransport(replies=["ветка"]))
+
+        self.assertEqual([m.content for m in branch.history], ["в0", "а1", "в1", "а2"])
+        self.assertEqual([t.index for t in branch.turns], [1, 2])
+        self.assertEqual(branch.usage.requests, 2)
+        self.assertEqual(branch.usage.total_tokens, 30)
+        self.assertEqual(branch.config, agent.config)
+        # Ветка живёт дальше сама, родитель не меняется.
+        branch.ask("в-ветка")
+        self.assertEqual(len(branch.history), 6)
+        self.assertEqual(len(agent.history), 6)
+        self.assertEqual(agent.history[4].content, "в2")
+
+    def test_fork_requires_a_turn_boundary_inside_the_stack(self):
+        agent = Agent(AgentConfig(), FakeTransport())
+        agent.ask("в0")
+
+        for bad in (1, 3, -2):
+            with self.subTest(at=bad):
+                with self.assertRaises(ValueError):
+                    agent.fork(bad)
+        self.assertEqual(Agent.restore(agent.fork(0), FakeTransport()).history, ())
+
+    def test_fork_keeps_facts_as_they_were_at_the_checkpoint(self):
+        from advent.agent import FactsPolicy
+
+        transport = FactsJsonTransport(
+            replies=["а1", "а2"],
+            facts=['{"facts": {"цель": "ТЗ"}}', '{"facts": {"цель": "ТЗ", "бюджет": "800"}}'],
+        )
+        agent = Agent(AgentConfig(facts=FactsPolicy(keep_last=2)), transport)
+        agent.ask("в1")
+        agent.ask("в2")
+
+        branch = Agent.restore(agent.fork(2), FactsJsonTransport())
+
+        self.assertEqual(branch.facts, {"цель": "ТЗ"})
+        self.assertEqual(len(branch.fact_updates), 1)
+        # Расход ветки — ход плюс одно обновление фактов.
+        self.assertEqual(branch.usage.requests, 2)
+        self.assertEqual(branch.usage.total_tokens, 15 + 28)
+
+    def test_fork_drops_a_summary_made_after_the_checkpoint(self):
+        from advent.agent import CompressionPolicy
+
+        transport = FakeTransport(replies=["а1", "а2", "а3", "конспект"])
+        agent = Agent(AgentConfig(compression=CompressionPolicy(keep_last=2, every=6)), transport)
+        for i in range(3):
+            agent.ask(f"в{i}")
+        self.assertIsNotNone(agent.summary)
+
+        early = Agent.restore(agent.fork(2), FakeTransport())
+        late = Agent.restore(agent.fork(6), FakeTransport())
+
+        self.assertIsNone(early.summary)
+        self.assertEqual(early.compressions, ())
+        self.assertEqual(late.summary, agent.summary)
+        self.assertEqual(late.usage.requests, 4)
+
+
+class RegistrySpawnTestCase(unittest.TestCase):
+    def test_spawn_registers_and_stores_an_agent_from_a_snapshot(self):
+        import tempfile
+        from pathlib import Path
+
+        from advent.agent import AgentRegistry, JsonStore
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            registry = AgentRegistry(
+                lambda saved: Agent.restore(saved, FakeTransport()) if saved else Agent(AgentConfig(), FakeTransport()),
+                store=JsonStore(store_dir),
+            )
+            root = registry.get("s-main")
+            root.ask("в0")
+            root.ask("в1")
+
+            branch = registry.spawn("s-b1", root.fork(2))
+
+            self.assertIs(registry.get("s-b1"), branch)
+            self.assertEqual(len(branch.history), 2)
+            self.assertTrue(Path(store_dir, "s-b1.json").exists())
+
+
+class DialogTreeTestCase(unittest.TestCase):
+    def test_checkpoint_fork_switch_and_round_trip(self):
+        from advent.agent import DialogTree
+
+        tree = DialogTree.fresh()
+        point = tree.add_checkpoint("main", 10, "после десяти")
+        branch_a = tree.add_branch(point.id, "A")
+        branch_b = tree.add_branch(point.id)
+        tree.switch(branch_b.id)
+
+        self.assertEqual((point.id, point.branch, point.message), ("c1", "main", 10))
+        self.assertEqual((branch_a.id, branch_a.parent, branch_a.forked_at), ("b1", "main", 10))
+        self.assertEqual(branch_b.title, "Ветка 2")
+        self.assertEqual(tree.active, "b2")
+
+        restored = DialogTree.from_dict(tree.as_dict())
+        self.assertEqual(restored.as_dict(), tree.as_dict())
+
+    def test_rejects_bad_points(self):
+        from advent.agent import DialogTree
+
+        tree = DialogTree.fresh()
+        with self.assertRaises(ValueError):
+            tree.add_checkpoint("main", 3)
+        with self.assertRaises(ValueError):
+            tree.add_checkpoint("nope", 2)
+        with self.assertRaises(ValueError):
+            tree.add_branch("c9")
+        with self.assertRaises(ValueError):
+            tree.switch("b9")
+
+    def test_store_round_trips_and_survives_a_broken_file(self):
+        import tempfile
+        from pathlib import Path
+
+        from advent.agent import DialogTree, TreeStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = TreeStore(directory)
+            tree = DialogTree.fresh(runs=[{"strategy": "window"}])
+            tree.add_checkpoint("main", 2)
+            store.save("s1", tree)
+
+            self.assertEqual(store.load("s1").as_dict(), tree.as_dict())
+            self.assertEqual(store.load("s2").active, "main")
+            Path(directory, "s1-tree.json").write_text("{", encoding="utf-8")
+            self.assertEqual(store.load("s1").checkpoints, [])
+            self.assertTrue(store.delete("s1"))
+            self.assertFalse(store.delete("s1"))
 
 
 class DeepSeekTransportTestCase(unittest.TestCase):
