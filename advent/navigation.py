@@ -91,6 +91,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=11,
+        title="Модель памяти",
+        description="Краткосрочная, рабочая и долговременная",
+        endpoint="day11.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

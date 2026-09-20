@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}День 11. Модель памяти · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day11.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 11</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Memory · Layers · Scopes</span>
+    </div>
+    <h1>День 11.<br><span>Модель памяти агента</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание одиннадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Опишите и реализуйте модель памяти для агента.</p>
+      <ul class="homework-brief__steps">
+        <li>Разделите информацию минимум на три типа: <strong>краткосрочная</strong> — текущий диалог, <strong>рабочая</strong> — данные текущей задачи, <strong>долговременная</strong> — профиль, решения, знания.</li>
+        <li>Сделайте так, чтобы разные типы памяти хранились отдельно.</li>
+        <li>Сделайте так, чтобы вы явно выбирали, что и куда сохраняется.</li>
+        <li>Проверьте, какие данные попадают в каждый слой.</li>
+        <li>Проверьте, как это влияет на ответы агента.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент с явной моделью памяти (memory layers).</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код / текст</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day11-lab" aria-labelledby="day11-lab-title">
+    <div class="day11-lab__intro">
+      <p class="day11-kicker">Практика</p>
+      <h2 id="day11-lab-title">Три слоя вместо одного стека</h2>
+      <p>Слои делятся не по важности, а по сроку жизни. Каждый лежит в своём файле, каждый уходит в промпт отдельным подписанным блоком, и у каждого своя кнопка, которая его убивает. Выключите слой — и тот же вопрос получит другой ответ.</p>
+    </div>
+
+    <ol class="day11-layers">
+      <li class="day11-layer">
+        <span class="day11-layer__rank">01</span>
+        <h3>Краткосрочная</h3>
+        <p class="day11-layer__scope">chat scope</p>
+        <p>Текущий разговор: то, что обсуждаем прямо сейчас и не жалко потерять.</p>
+        <p class="day11-layer__life">живёт: до конца диалога</p>
+      </li>
+      <li class="day11-layer">
+        <span class="day11-layer__rank">02</span>
+        <h3>Рабочая</h3>
+        <p class="day11-layer__scope">task scope</p>
+        <p>Данные задачи: требования, бюджет, ограничения. Переживает диалог, умирает с задачей.</p>
+        <p class="day11-layer__life">живёт: до конца задачи</p>
+      </li>
+      <li class="day11-layer">
+        <span class="day11-layer__rank">03</span>
+        <h3>Долговременная</h3>
+        <p class="day11-layer__scope">user scope</p>
+        <p>Кто вы и как с вами разговаривать. Переживает и диалог, и задачу.</p>
+        <p class="day11-layer__life">живёт: пока не удалим</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day11-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day11-controls">
+      <form id="day11-mode" class="day11-switch" aria-label="Кто раскладывает по слоям">
+        <p class="day11-switch__label">Раскладывает</p>
+        <div class="day11-switch__options" role="radiogroup" aria-label="Режим раскладки">
+          <label class="day11-switch__option" title="Отдельный запрос к модели после каждого хода">
+            <input type="radio" name="mode" value="agent" {% if (state.mode if state else 'agent') == 'agent' %}checked{% endif %}>
+            <span>нарезатель</span>
+          </label>
+          <label class="day11-switch__option" title="Слова-маркеры в реплике, ноль запросов и ноль токенов">
+            <input type="radio" name="mode" value="heuristic" {% if state and state.mode == 'heuristic' %}checked{% endif %}>
+            <span>эвристика</span>
+          </label>
+          <label class="day11-switch__option" title="Ничего не раскладывается само — только руками">
+            <input type="radio" name="mode" value="manual" {% if state and state.mode == 'manual' %}checked{% endif %}>
+            <span>вручную</span>
+          </label>
+        </div>
+      </form>
+
+      <form id="day11-enabled" class="day11-switch" aria-label="Какие слои уходят в промпт">
+        <p class="day11-switch__label">В промпт</p>
+        <div class="day11-switch__options day11-switch__options--checks">
+          {% for scope in scopes %}
+            <label class="day11-switch__option" title="Выключить слой — он останется на диске, но агент его не увидит">
+              <input type="checkbox" name="enabled" value="{{ scope }}" {% if not state or scope in state.enabled %}checked{% endif %}>
+              <span>{{ scope }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </form>
+
+      <div class="day11-actions">
+        {% if scenario %}
+          <button id="day11-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day11.scenario') }}">[▶] «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="day11-new-task" class="agent-chat__restart" type="button" title="Рабочий слой умирает, диалог и пользователь остаются">[◇] Новая задача</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек и краткосрочный слой умирают, остальные два — нет">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day11-mode-hint" data-mode-hint>раскладывает нарезатель</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day11-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Напишите что-нибудь или запустите сценарий.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day11.chat_stream') }}"
+          data-state-url="{{ url_for('day11.state') }}"
+          data-reset-url="{{ url_for('day11.reset') }}"
+          data-mode-url="{{ url_for('day11.set_mode') }}"
+          data-layers-url="{{ url_for('day11.set_layers') }}"
+          data-memory-url="{{ url_for('day11.put_memory') }}"
+          data-move-url="{{ url_for('day11.move_memory') }}"
+          data-clear-url="{{ url_for('day11.clear_memory') }}"
+          data-new-task-url="{{ url_for('day11.new_task') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: меня зовут Максим, отвечай коротко"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">Память</p>
+          <h3 id="agent-debug-title">Три слоя</h3>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>в стеке</dt><dd data-debug="stack">0</dd></div>
+            <div><dt>≈ слои в промпт</dt><dd data-debug="memory_tokens">0</dd></div>
+            <div><dt>запросов диалога</dt><dd data-debug="requests">0</dd></div>
+            <div><dt>запросов на память</dt><dd data-debug="side_requests">0</dd></div>
+            <div><dt>токенов диалога</dt><dd data-debug="total_tokens">0</dd></div>
+            <div><dt>токенов на память</dt><dd data-debug="side_tokens">0</dd></div>
+            <div><dt>токенов итого</dt><dd data-debug="all_tokens">0</dd></div>
+          </dl>
+
+          <div class="day11-panels" data-panels></div>
+
+          <p class="agent-kicker day11-debug-kicker">Положить руками</p>
+          <form id="day11-manual" class="day11-manual">
+            <div class="day11-manual__row">
+              {# Свой выпадающий список вместо <select>: нативный попап рисует
+                 система, и в терминальную тему он не попадает никак. #}
+              <div class="day11-select" data-select>
+                <input type="hidden" name="scope" value="{{ scopes[0] }}">
+                <button
+                  type="button"
+                  class="day11-select__button"
+                  data-select-button
+                  aria-label="Слой памяти"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                >
+                  <span data-select-value>{{ scopes[0] }}</span>
+                  <span class="day11-select__caret" aria-hidden="true">▾</span>
+                </button>
+                <ul class="day11-select__list" role="listbox" aria-label="Слой памяти" hidden>
+                  {% for scope in scopes %}
+                    <li
+                      class="day11-select__option"
+                      role="option"
+                      tabindex="-1"
+                      data-value="{{ scope }}"
+                      aria-selected="{{ 'true' if loop.first else 'false' }}"
+                    >{{ scope }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              <input name="key" type="text" maxlength="40" required placeholder="ключ">
+            </div>
+            <div class="day11-manual__row">
+              <input name="value" type="text" maxlength="200" required placeholder="значение">
+              <button type="submit">[+]</button>
+            </div>
+          </form>
+
+          <p class="agent-kicker day11-debug-kicker">Файлы слоёв</p>
+          <ul class="day11-files" data-files></ul>
+        </div>
+      </aside>
+    </div>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+    <template id="day11-marker-template">
+      <div class="day11-marker" data-marker>
+        <span class="day11-marker__icon" aria-hidden="true">≡</span>
+        <span data-marker-text></span>
+      </div>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day11.js') }}"></script>
+{% endblock %}

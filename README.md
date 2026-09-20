@@ -43,7 +43,8 @@ advent/
 │   ├── store.py             #   JSON-файл на сессию: агент переживает перезапуск
 │   ├── tokens.py            #   оценка токенов по символам, до запроса
 │   ├── scenarios.py         #   заготовленные диалоги для сравнений и факты для проверки
-│   └── branches.py          #   дерево веток диалога и его индекс на диске (день 10)
+│   ├── branches.py          #   дерево веток диалога и его индекс на диске (день 10)
+│   └── memory.py            #   три слоя памяти, нарезатель и файлы слоёв (день 11)
 ├── days/
 │   ├── day01/routes.py      # страница и API первого дня
 │   ├── day02/routes.py      # страница и API второго дня
@@ -55,6 +56,7 @@ advent/
 │   ├── day08/routes.py      # токены по ходам, лимит контекста, сценарий (день 8)
 │   ├── day09/routes.py      # две дорожки: без сжатия и со сжатием истории (день 9)
 │   ├── day10/routes.py      # стратегии контекста, ветки от checkpoint, таблица прогонов (день 10)
+│   ├── day11/routes.py      # три слоя памяти, раскладка и их сроки жизни (день 11)
 │   └── agent_chat.py        # общие маршруты чата с агентом для дней 7+
 ├── services/
 │   ├── deepseek.py          # интеграция с DeepSeek
@@ -66,6 +68,8 @@ advent/
     ├── css/                 # общие и дневные стили
     └── js/                  # скрипты конкретных дней
 ```
+
+`docs/day11-memory-model.md` — описание модели памяти агента (текстовая часть задания дня 11).
 
 - `/` перенаправляет на `/days/1/`.
 - Day 1 использует `POST /days/1/api/chat`.
@@ -90,6 +94,12 @@ advent/
   `POST /days/10/api/strategy` переключает стратегию контекста (`full` / `window` / `facts`, N) у активной ветки,
   `POST /days/10/api/checkpoint`, `POST /days/10/api/fork`, `POST /days/10/api/switch` — ветки от checkpoint,
   `POST|DELETE /days/10/api/runs` — таблица прогонов, плюс `chat/stream`, `state`, `reset`, `scenario?key=spec|spec-branches`.
+- Day 11 держит три слоя памяти в отдельных файлах: `<сессия>-mem-chat.json`, `-task.json`, `-user.json`
+  (плюс `-settings.json` с режимом раскладки); `POST /days/11/api/mode` выбирает, кто раскладывает
+  (`agent` — отдельный запрос к модели, `heuristic` — слова-маркеры, `manual` — только руками),
+  `POST /days/11/api/layers` — какие слои уходят в промпт, `POST|DELETE /days/11/api/memory`,
+  `POST /days/11/api/memory/move` и `/memory/clear` — правка руками, `POST /days/11/api/task/new`
+  убивает рабочий слой, `POST /days/11/api/reset` — диалог и краткосрочный, долговременный переживает оба.
 
 ## Как добавить новый день
 

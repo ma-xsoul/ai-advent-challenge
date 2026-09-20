@@ -80,6 +80,7 @@ def stream_chat(
     *,
     state_fn: Callable[[Agent], dict[str, Any]] | None = None,
     store_id: str | None = None,
+    after_turn: Callable[[Agent, str], Any] | None = None,
 ) -> Response:
     """
     Потоковый ответ агента в NDJSON. После полного ответа стек уходит на
@@ -89,6 +90,10 @@ def stream_chat(
 
     store_id — под каким идентификатором агент живёт в реестре, если это
     не сама сессия: день 9 держит на одну сессию двух агентов.
+
+    after_turn — генератор событий, который прогоняется после ответа и до
+    события done: день 11 раскладывает реплику по слоям памяти отдельным
+    запросом и показывает это в ленте.
     """
     store_id = store_id or sid
     snapshot_of = state_fn or (lambda a: state(reg, store_id, a))
@@ -118,6 +123,10 @@ def stream_chat(
             reg.save(store_id)
         except OSError as error:
             save_error = f"Ответ получен, но не сохранён на диск: {error}"
+
+        if after_turn is not None:
+            for extra in after_turn(agent, text):
+                yield _event(extra)
 
         yield _event(
             {

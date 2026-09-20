@@ -1403,5 +1403,155 @@ class DeepSeekTransportTestCase(unittest.TestCase):
         self.assertIsInstance(agent._transport, DeepSeekTransport)
 
 
+class MemoryLayersTestCase(unittest.TestCase):
+    """День 11: три слоя памяти с разным сроком жизни."""
+
+    def _memory(self):
+        from advent.agent import LayeredMemory
+
+        return LayeredMemory()
+
+    def test_layer_reports_added_and_changed_and_keeps_its_ceiling(self):
+        from advent.agent import MemoryLayer
+
+        layer = MemoryLayer("chat")
+
+        self.assertEqual(layer.put("name", "Максим"), "added")
+        self.assertEqual(layer.put("name", "Максим"), "")
+        self.assertEqual(layer.put("name", "Максим П."), "changed")
+
+        for index in range(layer.limit + 3):
+            layer.put(f"k{index}", f"v{index}")
+
+        self.assertEqual(len(layer.items), layer.limit)
+        # Вытесняется самое старое, а не самое новое.
+        self.assertNotIn("name", layer.items)
+
+    def test_render_signs_every_layer_and_says_there_are_three(self):
+        memory = self._memory()
+        memory["user"].put("name", "Максим")
+        memory["task"].put("budget", "800 тысяч")
+
+        text = memory.render()
+
+        self.assertIn("три раздельные памяти", text)
+        self.assertIn("Долговременная память", text)
+        self.assertIn("- name: Максим", text)
+        self.assertIn("Рабочая память", text)
+        self.assertIn("- budget: 800 тысяч", text)
+        # Пустой слой в промпт не лезет.
+        self.assertNotIn("Краткосрочная память", text)
+
+    def test_disabled_layer_is_not_rendered_but_stays_in_memory(self):
+        memory = self._memory()
+        memory["task"].put("budget", "800 тысяч")
+        memory["user"].put("name", "Максим")
+
+        text = memory.render(["user"])
+
+        self.assertNotIn("800 тысяч", text)
+        self.assertIn("Максим", text)
+        self.assertEqual(len(memory["task"].items), 1)
+
+    def test_apply_reports_what_landed_where(self):
+        memory = self._memory()
+        memory["task"].put("budget", "700 тысяч")
+
+        update = memory.apply(
+            {"chat": {"now": "думаем"}, "task": {"budget": "800 тысяч"}, "user": {"name": "Максим"}, "forget": []},
+            mode="agent",
+            turn=3,
+        )
+
+        self.assertEqual(update.added["user"], ["name"])
+        self.assertEqual(update.added["chat"], ["now"])
+        self.assertEqual(update.changed["task"], ["budget"])
+        self.assertEqual(update.after_turn, 3)
+        self.assertFalse(update.empty)
+
+    def test_apply_forgets_what_the_reply_cancelled(self):
+        memory = self._memory()
+        memory["user"].put("style", "коротко")
+
+        update = memory.apply({"forget": ["style"]}, mode="agent", turn=1)
+
+        self.assertEqual(update.forgotten, ["style"])
+        self.assertEqual(memory["user"].items, {})
+
+    def test_heuristic_sorts_by_markers_without_a_request(self):
+        from advent.agent import route_by_heuristic
+
+        self.assertTrue(route_by_heuristic("Меня зовут Максим", 1)["user"])
+        self.assertTrue(route_by_heuristic("Бюджет 800 тысяч", 2)["task"])
+        self.assertTrue(route_by_heuristic("Ну давай подумаем", 3)["chat"])
+
+    def test_router_parses_json_and_reports_its_cost(self):
+        from advent.agent import route_by_agent
+
+        transport = FakeTransport(replies=['{"chat": {}, "task": {"budget": "800"}, "user": {}}'])
+        routed, reply = route_by_agent(transport, "deepseek-v4-flash", self._memory(), "вопрос", "ответ")
+
+        self.assertEqual(routed["task"], {"budget": "800"})
+        self.assertEqual(reply.input_tokens, 10)
+        self.assertEqual(transport.payloads[0]["response_format"], {"type": "json_object"})
+
+    def test_router_failure_is_a_transport_error(self):
+        from advent.agent import route_by_agent
+
+        with self.assertRaises(TransportError):
+            route_by_agent(FakeTransport(replies=["не json"]), "m", self._memory(), "в", "о")
+
+    def test_store_keeps_one_file_per_layer_and_clears_them_apart(self):
+        import tempfile
+
+        from advent.agent import MemoryStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore(directory)
+            memory = self._memory()
+            memory["chat"].put("now", "думаем")
+            memory["task"].put("budget", "800")
+            memory["user"].put("name", "Максим")
+            store.save("s1", memory)
+
+            self.assertEqual([f["exists"] for f in store.files("s1")], [True, True, True])
+
+            store.clear("s1", "chat")
+            back = store.load("s1")
+
+            self.assertEqual(back["chat"].items, {})
+            self.assertEqual(back["task"].items["budget"].value, "800")
+            self.assertEqual(back["user"].items["name"].value, "Максим")
+
+    def test_store_survives_a_broken_layer_file(self):
+        import tempfile
+        from pathlib import Path
+
+        from advent.agent import MemoryStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = MemoryStore(directory)
+            memory = self._memory()
+            memory["user"].put("name", "Максим")
+            store.save("s1", memory)
+            Path(directory, "s1-mem-task.json").write_text("{битый", encoding="utf-8")
+
+            back = store.load("s1")
+
+            self.assertEqual(back["task"].items, {})
+            self.assertEqual(back["user"].items["name"].value, "Максим")
+
+    def test_agent_puts_memory_text_into_the_system_prompt(self):
+        transport = FakeTransport(replies=["ок"])
+        agent = Agent(AgentConfig(system_prompt="Кратко."), transport)
+        agent.memory_text = "Долговременная память:\n- name: Максим"
+
+        agent.ask("привет")
+
+        system = next(m for m in transport.payloads[-1]["messages"] if m["role"] == "system")["content"]
+        self.assertIn("Кратко.", system)
+        self.assertIn("name: Максим", system)
+
+
 if __name__ == "__main__":
     unittest.main()

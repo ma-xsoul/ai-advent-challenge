@@ -173,3 +173,72 @@ SCENARIOS: dict[str, Scenario] = {
 
 def get_scenario(key: str) -> Scenario | None:
     return SCENARIOS.get(key)
+
+
+@dataclass(frozen=True)
+class MemoryScenario:
+    """
+    Сценарий для модели памяти (день 11).
+
+    В одной ленте вперемешку идёт то, что относится к пользователю, к
+    задаче и только к текущему разговору. Дальше две проверки: собрать ТЗ
+    (уцелела ли рабочая память) и — после «Нового диалога» — напомнить,
+    кто я и как со мной разговаривать (уцелела ли долговременная).
+    """
+
+    key: str
+    title: str
+    description: str
+    messages: tuple[str, ...]
+    # Что спрашиваем после сброса диалога: долговременная память обязана
+    # пережить его, остальные две — нет.
+    after_reset: tuple[str, ...]
+    task_facts: tuple[Fact, ...] = field(default_factory=tuple)
+    user_facts: tuple[Fact, ...] = field(default_factory=tuple)
+
+    def check_task(self, text: str) -> list[FactCheck]:
+        return [FactCheck(fact.label, fact.found_in(text)) for fact in self.task_facts]
+
+    def check_user(self, text: str) -> list[FactCheck]:
+        return [FactCheck(fact.label, fact.found_in(text)) for fact in self.user_facts]
+
+
+MEMORY_LAYERS = MemoryScenario(
+    key="layers",
+    title="Три слоя",
+    description=(
+        "Семь реплик вперемешку: кто я, что за задача и о чём думаю прямо сейчас. "
+        "Потом ТЗ по задаче и — после «Нового диалога» — вопрос про меня самого."
+    ),
+    messages=(
+        "Меня зовут Максим, я пишу на Python. Отвечай коротко, одним-двумя предложениями.",
+        "Задача: приложение для учёта личных расходов. Платформа — Android, минимальная версия 10.",
+        "Бюджет на разработку — 800 тысяч рублей, срок — три месяца.",
+        "Я всегда пишу тесты до кода — учитывай это в любой моей задаче.",
+        "Приложение платное, 299 рублей, никакой рекламы.",
+        "Сейчас думаю, не сделать ли тёмную тему по умолчанию — пока не решил.",
+        "Собери короткое ТЗ по задаче: платформа, бюджет, срок, цена.",
+    ),
+    after_reset=(
+        "Напомни, как меня зовут, на чём я пишу и как ты должен со мной разговаривать.",
+    ),
+    task_facts=(
+        Fact("платформа Android", r"android|андроид"),
+        Fact("минимальная версия 10", r"(android|андроид|верси\w*)\W{0,15}10\b"),
+        Fact("бюджет 800 тысяч", r"800"),
+        Fact("срок три месяца", r"тр[её]х?\s*мес|3\s*мес|три месяца"),
+        Fact("цена 299 рублей", r"299"),
+    ),
+    user_facts=(
+        Fact("зовут Максим", r"максим"),
+        Fact("пишет на Python", r"python|питон"),
+        Fact("просил отвечать коротко", r"коротк|кратк|одним-двумя|лаконич"),
+        Fact("тесты до кода", r"тест"),
+    ),
+)
+
+MEMORY_SCENARIOS: dict[str, MemoryScenario] = {MEMORY_LAYERS.key: MEMORY_LAYERS}
+
+
+def get_memory_scenario(key: str) -> MemoryScenario | None:
+    return MEMORY_SCENARIOS.get(key)

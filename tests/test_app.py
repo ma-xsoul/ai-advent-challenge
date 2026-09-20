@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1299,6 +1299,261 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(state["strategy"]["kind"], "window")
             self.assertEqual(len(state["branch"]["messages"]), 4)
             self.assertEqual([b["messages"] for b in state["tree"]["branches"]], [2, 4])
+
+    def test_day_eleven_renders_the_memory_model_homework(self):
+        response = self.client.get("/days/11/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 11.", html)
+        self.assertIn("Модель памяти агента", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Опишите и реализуйте модель памяти для агента", html)
+        self.assertIn("краткосрочная", html)
+        self.assertIn("рабочая", html)
+        self.assertIn("долговременная", html)
+        self.assertIn("хранились отдельно", html)
+        self.assertIn("явно выбирали, что и куда сохраняется", html)
+        self.assertIn("какие данные попадают в каждый слой", html)
+        self.assertIn("как это влияет на ответы агента", html)
+        self.assertIn("Агент с явной моделью памяти (memory layers)", html)
+        self.assertIn("chat scope", html)
+        self.assertIn("task scope", html)
+        self.assertIn("user scope", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day11.css", html)
+        self.assertIn('href="/days/11/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    # ── День 11: три слоя памяти ────────────────────────────────────────
+
+    def _day_eleven_client(self, store_dir, routed=None, replies=None):
+        from tests.test_agent import FakeTransport
+
+        class RoutingTransport(FakeTransport):
+            """На запрос нарезателя отдаёт JSON, на ходы — обычный текст."""
+
+            def __init__(self, replies=None, routed=None):
+                super().__init__(replies=replies)
+                self._routed = list(routed or [])
+
+            def send(self, payload):
+                if payload.get("response_format") == {"type": "json_object"}:
+                    self.payloads.append(payload)
+                    content = self._routed.pop(0) if self._routed else '{"chat": {}, "task": {}, "user": {}}'
+                    return {
+                        "model": "deepseek-v4-flash",
+                        "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                        "usage": {"prompt_tokens": 20, "completion_tokens": 8},
+                    }
+                return super().send(payload)
+
+        transport = RoutingTransport(replies=replies, routed=routed)
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s11")
+        return client, transport
+
+    @staticmethod
+    def _chat11(client, message):
+        response = client.post("/days/11/api/chat/stream", json={"message": message})
+        response.get_data()
+        return response
+
+    @staticmethod
+    def _layer(state, scope):
+        return next(layer for layer in state["memory"]["layers"] if layer["scope"] == scope)
+
+    def test_day_eleven_router_splits_a_reply_into_three_layers(self):
+        import json as json_module
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            routed = ['{"chat": {"now": "выбираем тему"}, "task": {"budget": "800 тысяч"}, "user": {"name": "Максим"}}']
+            client, transport = self._day_eleven_client(store_dir, routed=routed, replies=["ответ"])
+
+            events = [
+                json_module.loads(line)
+                for line in self._chat11(client, "Меня зовут Максим, бюджет 800 тысяч").get_data(as_text=True).splitlines()
+            ]
+            kinds = [event["type"] for event in events]
+            self.assertIn("memory_routing", kinds)
+            self.assertIn("memory_routed", kinds)
+
+            state = client.get("/days/11/api/state").get_json()
+            self.assertEqual([item["key"] for item in self._layer(state, "user")["items"]], ["name"])
+            self.assertEqual([item["key"] for item in self._layer(state, "task")["items"]], ["budget"])
+            self.assertEqual([item["key"] for item in self._layer(state, "chat")["items"]], ["now"])
+
+            # Три слоя — три файла: это и есть «хранятся отдельно».
+            files = sorted(name for name in os.listdir(store_dir) if "-mem-" in name)
+            self.assertEqual(
+                files,
+                ["s11-mem-chat.json", "s11-mem-settings.json", "s11-mem-task.json", "s11-mem-user.json"],
+            )
+            self.assertEqual(state["side"]["requests"], 1)
+            self.assertEqual(state["side"]["input_tokens"], 20)
+
+    def test_day_eleven_puts_enabled_layers_into_the_system_prompt(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            routed = ['{"chat": {}, "task": {"budget": "800 тысяч"}, "user": {"name": "Максим"}}']
+            client, transport = self._day_eleven_client(store_dir, routed=routed, replies=["а1", "а2"])
+            self._chat11(client, "в1")
+            self._chat11(client, "в2")
+
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertIn("три раздельные памяти", system)
+            self.assertIn("Рабочая память (текущая задача):", system)
+            self.assertIn("budget: 800 тысяч", system)
+            self.assertIn("Долговременная память", system)
+            self.assertIn("name: Максим", system)
+
+    def test_day_eleven_disabled_layer_leaves_the_prompt_but_stays_on_disk(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            routed = ['{"chat": {}, "task": {"budget": "800 тысяч"}, "user": {"name": "Максим"}}']
+            client, transport = self._day_eleven_client(store_dir, routed=routed, replies=["а1", "а2"])
+            self._chat11(client, "в1")
+
+            state = client.post("/days/11/api/layers", json={"enabled": ["chat", "user"]}).get_json()
+            self.assertEqual(state["enabled"], ["chat", "user"])
+            self.assertFalse(self._layer(state, "task")["enabled"])
+            # Выключили — но не стёрли: запись на месте.
+            self.assertEqual([item["key"] for item in self._layer(state, "task")["items"]], ["budget"])
+
+            self._chat11(client, "в2")
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertNotIn("Рабочая память", system)
+            self.assertIn("Долговременная память", system)
+
+    def test_day_eleven_new_dialogue_kills_only_the_chat_layer(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            routed = ['{"chat": {"now": "думаем"}, "task": {"budget": "800"}, "user": {"name": "Максим"}}']
+            client, _ = self._day_eleven_client(store_dir, routed=routed, replies=["а1"])
+            self._chat11(client, "в1")
+
+            state = client.post("/days/11/api/reset", json={}).get_json()
+            self.assertEqual(state["messages"], [])
+            self.assertEqual(self._layer(state, "chat")["items"], [])
+            self.assertEqual([item["key"] for item in self._layer(state, "task")["items"]], ["budget"])
+            self.assertEqual([item["key"] for item in self._layer(state, "user")["items"]], ["name"])
+
+    def test_day_eleven_new_task_kills_only_the_task_layer(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            routed = ['{"chat": {"now": "думаем"}, "task": {"budget": "800"}, "user": {"name": "Максим"}}']
+            client, _ = self._day_eleven_client(store_dir, routed=routed, replies=["а1"])
+            self._chat11(client, "в1")
+
+            state = client.post("/days/11/api/task/new", json={}).get_json()
+            self.assertEqual(self._layer(state, "task")["items"], [])
+            self.assertEqual([item["key"] for item in self._layer(state, "chat")["items"]], ["now"])
+            self.assertEqual([item["key"] for item in self._layer(state, "user")["items"]], ["name"])
+            self.assertEqual(len(state["messages"]), 2)
+
+    def test_day_eleven_manual_mode_puts_moves_and_forgets_by_hand(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_eleven_client(store_dir, replies=["а1"])
+            client.post("/days/11/api/mode", json={"mode": "manual"})
+
+            state = client.post("/days/11/api/memory", json={"scope": "task", "key": "stack", "value": "Flask"}).get_json()
+            self.assertEqual(self._layer(state, "task")["items"][0]["source"], "manual")
+
+            state = client.post("/days/11/api/memory/move", json={"from": "task", "to": "user", "key": "stack"}).get_json()
+            self.assertEqual(self._layer(state, "task")["items"], [])
+            self.assertEqual(self._layer(state, "user")["items"][0]["value"], "Flask")
+
+            # В ручном режиме ход не тратит запрос на раскладку.
+            self._chat11(client, "в1")
+            self.assertEqual(client.get("/days/11/api/state").get_json()["side"]["requests"], 0)
+
+            state = client.delete("/days/11/api/memory", json={"scope": "user", "key": "stack"}).get_json()
+            self.assertEqual(self._layer(state, "user")["items"], [])
+
+    def test_day_eleven_heuristic_mode_sorts_without_a_request(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_eleven_client(store_dir, replies=["а1", "а2"])
+            client.post("/days/11/api/mode", json={"mode": "heuristic"})
+
+            self._chat11(client, "Меня зовут Максим")
+            self._chat11(client, "Бюджет 800 тысяч рублей")
+
+            state = client.get("/days/11/api/state").get_json()
+            self.assertEqual(len(self._layer(state, "user")["items"]), 1)
+            self.assertEqual(len(self._layer(state, "task")["items"]), 1)
+            # Ни одного побочного запроса: эвристика бесплатна.
+            self.assertEqual(state["side"]["requests"], 0)
+            self.assertEqual(state["side"]["input_tokens"], 0)
+
+    def test_day_eleven_keeps_the_answer_when_the_router_fails(self):
+        import json as json_module
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eleven_client(store_dir, routed=["не json"], replies=["ответ дошёл"])
+
+            events = [
+                json_module.loads(line)
+                for line in self._chat11(client, "в1").get_data(as_text=True).splitlines()
+            ]
+            failed = next(event for event in events if event["type"] == "memory_failed")
+            self.assertIn("не JSON", failed["error"])
+            done = events[-1]
+            self.assertEqual(done["type"], "done")
+            self.assertEqual(done["reply"]["content"], "ответ дошёл")
+            self.assertEqual(len(done["snapshot"]["messages"]), 2)
+
+    def test_day_eleven_serves_the_scenario_with_both_checks(self):
+        response = self.client.get("/days/11/api/scenario")
+        scenario = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(scenario["key"], "layers")
+        self.assertEqual(len(scenario["messages"]), 7)
+        self.assertEqual(len(scenario["after_reset"]), 1)
+        self.assertTrue(any("Максим" in message for message in scenario["messages"]))
+        self.assertEqual(len(scenario["user_facts"]), 4)
+        self.assertEqual(len(scenario["task_facts"]), 5)
+
+    def test_day_eleven_picks_the_scope_with_its_own_listbox(self):
+        """Нативный <option> не стилизуется — список свой, значение в скрытом поле."""
+        html = self.client.get("/days/11/").get_data(as_text=True)
+
+        self.assertNotIn("<select", html)
+        self.assertIn('role="listbox"', html)
+        self.assertEqual(html.count('role="option"'), 3)
+        self.assertIn('<input type="hidden" name="scope" value="chat">', html)
+        self.assertIn('aria-expanded="false"', html)
+        self.assertIn('data-value="user"', html)
+
+    def test_day_eleven_validates_mode_layers_and_scope(self):
+        for url, payload, message in (
+            ("/days/11/api/mode", {"mode": "магия"}, "Режим раскладки"),
+            ("/days/11/api/layers", {"enabled": ["chat", "нет"]}, "Ожидался список слоёв"),
+            ("/days/11/api/memory", {"scope": "нет", "key": "k", "value": "v"}, "Укажите слой"),
+            ("/days/11/api/memory", {"scope": "task", "key": " ", "value": "v"}, "Укажите ключ"),
+            ("/days/11/api/memory/clear", {"scope": "нет"}, "Укажите слой"),
+            ("/days/11/api/memory/move", {"from": "task", "to": "task", "key": "k"}, "разные слои"),
+        ):
+            with self.subTest(url=url):
+                response = self.client.post(url, json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(message, response.get_json()["error"])
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

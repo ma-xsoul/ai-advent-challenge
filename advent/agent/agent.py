@@ -309,6 +309,11 @@ class Agent:
         self._compressions: list[CompressionRecord] = []
         self._facts: dict[str, str] = {}
         self._fact_updates: list[FactsRecord] = []
+        # День 11: слои памяти живут снаружи агента — как дерево веток в
+        # дне 10. Сюда их кладут готовым текстом перед ходом, и агент
+        # подмешивает его в системный промпт. В слепок не попадает:
+        # у слоёв своё хранилище и свои сроки жизни.
+        self._memory_text: str | None = None
 
     @classmethod
     def restore(
@@ -453,6 +458,15 @@ class Agent:
         else:
             start = 0
         return tuple(self._messages[start:])
+
+    @property
+    def memory_text(self) -> str | None:
+        """Слои памяти дня 11 текстом. Пусто, пока их не подложили."""
+        return self._memory_text
+
+    @memory_text.setter
+    def memory_text(self, value: str | None) -> None:
+        self._memory_text = value or None
 
     @property
     def facts(self) -> dict[str, str]:
@@ -919,6 +933,8 @@ class Agent:
             parts.append(SUMMARY_PREFIX.format(count=self._summary.covers) + "\n" + self._summary.text)
         if self._config.facts is not None and self._facts:
             parts.append(FACTS_PREFIX + "\n" + self._facts_text(self._facts))
+        if self._memory_text:
+            parts.append(self._memory_text)
         return "\n\n".join(parts) or None
 
     def _build_payload(self, *, stream: bool = False) -> dict[str, Any]:
