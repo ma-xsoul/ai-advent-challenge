@@ -314,6 +314,9 @@ class Agent:
         # подмешивает его в системный промпт. В слепок не попадает:
         # у слоёв своё хранилище и свои сроки жизни.
         self._memory_text: str | None = None
+        # День 12: профиль пользователя — тоже снаружи, тоже текстом. Идёт
+        # сразу за базовым промптом: это конфиг поведения, а не данные.
+        self._profile_text: str | None = None
 
     @classmethod
     def restore(
@@ -467,6 +470,20 @@ class Agent:
     @memory_text.setter
     def memory_text(self, value: str | None) -> None:
         self._memory_text = value or None
+
+    @property
+    def profile_text(self) -> str | None:
+        """Профиль пользователя дня 12 текстом. Пусто, пока не подложили."""
+        return self._profile_text
+
+    @profile_text.setter
+    def profile_text(self, value: str | None) -> None:
+        self._profile_text = value or None
+
+    @property
+    def system_text(self) -> str | None:
+        """Системный промпт целиком, как он уйдёт в модель, — для превью на странице."""
+        return self._system_text()
 
     @property
     def facts(self) -> dict[str, str]:
@@ -929,6 +946,8 @@ class Agent:
         parts = []
         if self._config.system_prompt:
             parts.append(self._config.system_prompt)
+        if self._profile_text:
+            parts.append(self._profile_text)
         if self._summary is not None:
             parts.append(SUMMARY_PREFIX.format(count=self._summary.covers) + "\n" + self._summary.text)
         if self._config.facts is not None and self._facts:

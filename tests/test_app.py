@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1554,6 +1554,192 @@ class AdventAppTestCase(unittest.TestCase):
                 response = self.client.post(url, json=payload)
                 self.assertEqual(response.status_code, 400)
                 self.assertIn(message, response.get_json()["error"])
+
+    def test_day_twelve_renders_the_personalization_homework(self):
+        response = self.client.get("/days/12/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 12.", html)
+        self.assertIn("Персонализация ассистента", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Добавьте персонализацию поверх модели памяти", html)
+        self.assertIn("Создайте профиль пользователя", html)
+        self.assertIn("стиль, формат, ограничения", html)
+        self.assertIn("Подключите профиль к каждому запросу", html)
+        self.assertIn("ответы для разных профилей", html)
+        self.assertIn("учитывает автоматически", html)
+        self.assertIn("Персонализированный агент, адаптированный под пользователя", html)
+        self.assertIn("Пайплайн", html)
+        self.assertEqual(html.count('class="day12-lane"'), 2)
+        self.assertIn('role="listbox"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day12.css", html)
+        self.assertIn('href="/days/12/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    # ── День 12: профиль поверх памяти ──────────────────────────────────
+
+    def _day_twelve_client(self, store_dir, replies=None):
+        from tests.test_agent import FakeTransport
+
+        transport = FakeTransport(replies=replies)
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s12")
+        return client, transport
+
+    @staticmethod
+    def _chat12(client, message, lane):
+        response = client.post("/days/12/api/chat/stream", json={"message": message, "lane": lane})
+        response.get_data()
+        return response
+
+    @staticmethod
+    def _system_of(transport):
+        turns = [item for item in transport.payloads if "response_format" not in item]
+        return next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+
+    def test_day_twelve_starts_with_two_different_presets_on_the_lanes(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_twelve_client(store_dir)
+            state = client.get("/days/12/api/state").get_json()
+
+            self.assertEqual([p["id"] for p in state["profiles"]], ["maksim", "customer", "reviewer"])
+            self.assertEqual(state["lanes"]["a"]["profile"], "maksim")
+            self.assertEqual(state["lanes"]["b"]["profile"], "customer")
+            self.assertIn("Профиль пользователя «Максим · коротко»", state["lanes"]["a"]["system_text"])
+            self.assertIn("Профиль пользователя «Заказчик · на вы»", state["lanes"]["b"]["system_text"])
+
+    def test_day_twelve_puts_the_profile_into_every_request(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_twelve_client(store_dir, replies=["а1", "а2"])
+            self._chat12(client, "в1", "a")
+            self.assertIn("на ты, по имени — Максим", self._system_of(transport))
+            self.assertIn("Порядок работы над задачей", self._system_of(transport))
+
+            self._chat12(client, "в1", "b")
+            self.assertIn("на вы, без имени", self._system_of(transport))
+            self.assertNotIn("Максим", self._system_of(transport))
+
+    def test_day_twelve_profile_sits_on_top_of_day_eleven_memory(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            from advent.agent import MemoryStore
+
+            memory_store = MemoryStore(store_dir)
+            memory = memory_store.load("s12")
+            memory["user"].put("stack", "Flask")
+            memory_store.save("s12", memory)
+
+            client, transport = self._day_twelve_client(store_dir, replies=["а1"])
+            self._chat12(client, "в1", "a")
+            system = self._system_of(transport)
+
+            # Сначала профиль (как работать), потом память (что знаем).
+            self.assertLess(system.index("Профиль пользователя"), system.index("Долговременная память"))
+            self.assertIn("stack: Flask", system)
+            state = client.get("/days/12/api/state").get_json()
+            self.assertEqual(state["memory"]["counts"]["user"], 1)
+
+    def test_day_twelve_rebinds_a_lane_without_losing_its_dialogue(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_twelve_client(store_dir, replies=["а1", "а2"])
+            self._chat12(client, "в1", "a")
+
+            state = client.post("/days/12/api/lane", json={"lane": "a", "profile": "reviewer"}).get_json()
+            self.assertEqual(state["lanes"]["a"]["profile"], "reviewer")
+            self.assertEqual(len(state["lanes"]["a"]["messages"]), 2)
+
+            self._chat12(client, "в2", "a")
+            self.assertIn("Ревьюер · строго", self._system_of(transport))
+
+            missing = client.post("/days/12/api/lane", json={"lane": "a", "profile": "нет"})
+            self.assertEqual(missing.status_code, 404)
+
+    def test_day_twelve_saves_a_custom_profile_and_protects_presets(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_twelve_client(store_dir, replies=["а1"])
+            payload = {
+                "id": "mine",
+                "title": "Мой",
+                "address": "на ты, по имени — Макс",
+                "tone": "сухо",
+                "format": "таблицей",
+                "limits": ["шутить"],
+                "pipeline": ["план", "код"],
+            }
+            state = client.post("/days/12/api/profile", json=payload).get_json()
+            mine = next(p for p in state["profiles"] if p["id"] == "mine")
+            self.assertFalse(mine["preset"])
+            self.assertEqual(mine["pipeline"], ["план", "код"])
+
+            client.post("/days/12/api/lane", json={"lane": "b", "profile": "mine"})
+            self._chat12(client, "в1", "b")
+            self.assertIn("Профиль пользователя «Мой»", self._system_of(transport))
+            self.assertIn("1) план; 2) код", self._system_of(transport))
+
+            clash = client.post("/days/12/api/profile", json={**payload, "id": "maksim"})
+            self.assertEqual(clash.status_code, 400)
+            empty = client.post("/days/12/api/profile", json={**payload, "tone": " "})
+            self.assertEqual(empty.status_code, 400)
+
+            protected = client.delete("/days/12/api/profile", json={"id": "maksim"})
+            self.assertEqual(protected.status_code, 400)
+            state = client.delete("/days/12/api/profile", json={"id": "mine"}).get_json()
+            self.assertNotIn("mine", [p["id"] for p in state["profiles"]])
+            # Дорожка со снесённым профилем откатилась к встроенному.
+            self.assertEqual(state["lanes"]["b"]["profile"], "customer")
+
+    def test_day_twelve_reports_what_the_answer_shows(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_twelve_client(
+                store_dir,
+                replies=["Максим, тебе нужно:\n- раз\n- два\n```py\nx = 1\n```", "Вам стоит подумать.\n\nВо-первых…"],
+            )
+            self._chat12(client, "в1", "a")
+            self._chat12(client, "в1", "b")
+            state = client.get("/days/12/api/state").get_json()
+
+            a = state["lanes"]["a"]["check"]
+            self.assertEqual((a["address"], a["list_items"], a["has_code"], a["named"]), ("ты", 2, True, True))
+            b = state["lanes"]["b"]["check"]
+            self.assertEqual((b["address"], b["list_items"], b["has_code"], b["paragraphs"]), ("вы", 0, False, 2))
+
+    def test_day_twelve_reset_clears_both_lanes_but_keeps_profiles(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_twelve_client(store_dir, replies=["а1", "а2"])
+            client.post("/days/12/api/lane", json={"lane": "a", "profile": "reviewer"})
+            self._chat12(client, "в1", "a")
+            self._chat12(client, "в1", "b")
+
+            state = client.post("/days/12/api/reset", json={}).get_json()
+            self.assertEqual(state["lanes"]["a"]["messages"], [])
+            self.assertEqual(state["lanes"]["b"]["messages"], [])
+            self.assertEqual(state["lanes"]["a"]["profile"], "reviewer")
+
+    def test_day_twelve_serves_the_scenario_and_validates_the_lane(self):
+        response = self.client.get("/days/12/api/scenario")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["messages"]), 3)
+
+        bad = self.client.post("/days/12/api/chat/stream", json={"message": "в", "lane": "c"})
+        self.assertEqual(bad.status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

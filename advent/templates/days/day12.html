@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}День 12. Персонализация · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day12.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 12</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Profile · Preferences · Pipeline</span>
+    </div>
+    <h1>День 12.<br><span>Персонализация ассистента</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двенадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Добавьте персонализацию поверх модели памяти.</p>
+      <ul class="homework-brief__steps">
+        <li>Создайте профиль пользователя.</li>
+        <li>Опишите предпочтения: стиль, формат, ограничения.</li>
+        <li>Подключите профиль к каждому запросу.</li>
+        <li>Проверьте ответы для разных профилей.</li>
+        <li>Проверьте, что ассистент учитывает автоматически.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Персонализированный агент, адаптированный под пользователя.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day12-lab" aria-labelledby="day12-lab-title">
+    <div class="day12-lab__intro">
+      <p class="day12-kicker">Практика</p>
+      <h2 id="day12-lab-title">Профиль — не память, а конфиг</h2>
+      <p>Память дня 11 — то, что накопилось в разговоре. Профиль — то, как пользователь настроил агента под себя: как обращаться, в каком формате отвечать, чего не делать и какими шагами решать задачу. Один вопрос уходит двум дорожкам с разными профилями — и всё, что различается в ответах, агент взял из профиля сам.</p>
+    </div>
+
+    <ol class="day12-parts">
+      <li class="day12-part">
+        <span class="day12-part__rank">01</span>
+        <h3>Стиль</h3>
+        <p>Как обращаться и каким тоном: «на ты, коротко» или «на вы, развёрнуто».</p>
+        <p class="day12-part__formula">обращение + тон → промпт</p>
+      </li>
+      <li class="day12-part">
+        <span class="day12-part__rank">02</span>
+        <h3>Формат</h3>
+        <p>В каком виде отдавать ответ: списком, абзацами, кодом без прозы.</p>
+        <p class="day12-part__formula">форма ответа → промпт</p>
+      </li>
+      <li class="day12-part">
+        <span class="day12-part__rank">03</span>
+        <h3>Ограничения</h3>
+        <p>Чего не делать: не показывать код, не предлагать платное, не хвалить.</p>
+        <p class="day12-part__formula">запреты → промпт</p>
+      </li>
+      <li class="day12-part">
+        <span class="day12-part__rank">04</span>
+        <h3>Пайплайн</h3>
+        <p>Какими шагами решать: «переформулируй → два варианта → рекомендация». Это делает профиль конфигом оркестрации, а не карточкой вкусов.</p>
+        <p class="day12-part__formula">шаги → порядок работы</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day12-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day12-controls">
+      <p class="day12-controls__memory" data-memory-note>Память дня 11 подмешана обеим дорожкам: <span data-memory-counts>—</span></p>
+      <div class="day12-actions">
+        {% if scenario %}
+          <button id="day12-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day12.scenario') }}">[▶] «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="day12-new-profile" class="agent-chat__restart" type="button">[+] Свой профиль</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек обеих дорожек очищается, профили и память остаются">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="day12-lanes">
+      {% for lane in lanes %}
+        <section class="day12-lane" data-lane="{{ lane }}" aria-label="Дорожка {{ lane | upper }}">
+          <header class="day12-lane__head">
+            <div class="day12-lane__pick">
+              <span class="day12-lane__letter">{{ lane | upper }}</span>
+              <div class="day12-select" data-select data-lane-select="{{ lane }}">
+                <input type="hidden" name="profile" value="">
+                <button type="button" class="day12-select__button" data-select-button aria-label="Профиль дорожки {{ lane | upper }}" aria-haspopup="listbox" aria-expanded="false">
+                  <span data-select-value>—</span>
+                  <span class="day12-select__caret" aria-hidden="true">▾</span>
+                </button>
+                <ul class="day12-select__list" role="listbox" aria-label="Профиль дорожки {{ lane | upper }}" hidden></ul>
+              </div>
+            </div>
+            <dl class="day12-lane__stats">
+              <div><dt>≈ профиль</dt><dd data-lane-stat="profile_tokens">0</dd></div>
+              <div><dt>запросов</dt><dd data-lane-stat="requests">0</dd></div>
+              <div><dt>токенов</dt><dd data-lane-stat="total">0</dd></div>
+            </dl>
+          </header>
+
+          <dl class="day12-card" data-lane-card>
+            <div><dt>обращение</dt><dd data-card="address">—</dd></div>
+            <div><dt>тон</dt><dd data-card="tone">—</dd></div>
+            <div><dt>формат</dt><dd data-card="format">—</dd></div>
+            <div><dt>нельзя</dt><dd data-card="limits">—</dd></div>
+            <div><dt>шаги</dt><dd data-card="pipeline">—</dd></div>
+          </dl>
+
+          <details class="day12-prompt">
+            <summary>системный промпт целиком</summary>
+            <pre data-lane-prompt></pre>
+          </details>
+
+          <div class="agent-log day12-log" data-lane-log aria-live="polite">
+            <p class="agent-log__empty" data-log-empty>Стек пуст. Вопрос уйдёт сюда с профилем выше.</p>
+          </div>
+
+          <p class="day12-check" data-lane-check hidden></p>
+        </section>
+      {% endfor %}
+    </div>
+
+    <form
+      id="agent-form"
+      class="agent-composer day12-composer"
+      data-chat-url="{{ url_for('day12.chat_stream') }}"
+      data-state-url="{{ url_for('day12.state') }}"
+      data-reset-url="{{ url_for('day12.reset') }}"
+      data-lane-url="{{ url_for('day12.set_lane') }}"
+      data-profile-url="{{ url_for('day12.save_profile') }}"
+    >
+      <label for="agent-message">Один вопрос обеим дорожкам</label>
+      <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: объясни, что такое декоратор в Python"></textarea>
+      <div class="agent-composer__actions">
+        <span id="agent-status" class="agent-status" aria-live="polite"></span>
+        <button id="agent-submit" class="agent-submit" type="submit">Спросить обоих <span aria-hidden="true">→</span></button>
+      </div>
+    </form>
+
+    <section class="day12-editor" id="day12-editor" aria-labelledby="day12-editor-title" hidden>
+      <div class="day12-heading">
+        <div>
+          <p class="day12-kicker">Свой профиль</p>
+          <h3 id="day12-editor-title">Настроить агента под себя</h3>
+        </div>
+        <p>Заполните и сохраните — профиль появится в списке у обеих дорожек. Ограничения и шаги — по одному на строку.</p>
+      </div>
+      <form id="day12-profile-form" class="day12-form">
+        <label><span>id</span><input name="id" type="text" maxlength="40" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="my-profile"></label>
+        <label><span>название</span><input name="title" type="text" maxlength="200" required placeholder="Я · как мне удобно"></label>
+        <label><span>обращение</span><input name="address" type="text" maxlength="200" required placeholder="на ты, по имени — Максим"></label>
+        <label><span>тон</span><input name="tone" type="text" maxlength="200" required placeholder="коротко, без вступлений"></label>
+        <label><span>формат</span><input name="format" type="text" maxlength="200" required placeholder="списком; код — блоком"></label>
+        <label><span>нельзя</span><textarea name="limits" rows="3" placeholder="предлагать платные сервисы&#10;выходить за Python"></textarea></label>
+        <label><span>шаги</span><textarea name="pipeline" rows="3" placeholder="уточни, если непонятно&#10;план в три пункта&#10;код"></textarea></label>
+        <div class="day12-form__actions">
+          <button type="submit" class="agent-submit">Сохранить профиль <span aria-hidden="true">→</span></button>
+          <button type="button" class="agent-chat__reset" data-editor-close>Закрыть</button>
+        </div>
+      </form>
+    </section>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day12.js') }}"></script>
+{% endblock %}

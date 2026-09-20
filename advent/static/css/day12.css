@@ -1,0 +1,569 @@
+/* День 12: персонализация — профиль поверх модели памяти. */
+
+.day12-lab {
+  margin-top: 36px;
+}
+
+.day12-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day12-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day12-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day12-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day12-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Четыре части профиля — четыре карточки в ряд. */
+.day12-parts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day12-part {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day12-part__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day12-part h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day12-part p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — куда часть профиля попадает у агента. */
+.day12-part__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day12-part__formula::before {
+  content: "> ";
+}
+
+/* Вопросы, на которые практика должна ответить. */
+.day12-questions {
+  display: grid;
+  gap: 0;
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day12-questions > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.28fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 18px;
+}
+
+.day12-questions > div + div {
+  border-top: 1px solid var(--line);
+}
+
+.day12-questions dt {
+  color: var(--muted);
+  font-size: 12.5px;
+  text-transform: lowercase;
+}
+
+.day12-questions dt::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day12-questions dd {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day12-note {
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px 18px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day12-note > span {
+  margin-right: 8px;
+  color: var(--accent);
+}
+
+.day12-note strong {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .day12-parts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day12-parts {
+    grid-template-columns: 1fr;
+  }
+
+  .day12-questions > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+/* ── Практика: две дорожки, профили, редактор ───────────────────────── */
+
+.day12-parts {
+  margin-bottom: 14px;
+}
+
+.day12-store-error {
+  margin: 0 0 14px;
+  border: 1px solid rgba(232, 112, 95, 0.4);
+  background: var(--error-soft);
+  padding: 11px 14px;
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.day12-store-error::before {
+  content: "! ";
+}
+
+.day12-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-soft);
+  padding: 10px 14px;
+}
+
+.day12-controls__memory {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day12-controls__memory span {
+  color: var(--muted-bright);
+}
+
+.day12-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day12-lanes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.day12-lane {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.day12-lane[data-lane="b"] {
+  border-color: var(--accent);
+}
+
+.day12-lane__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px 14px;
+}
+
+.day12-lane__pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.day12-lane__letter {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.day12-lane__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+}
+
+.day12-lane__stats > div {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.day12-lane__stats dt {
+  color: var(--muted);
+}
+
+.day12-lane__stats dd {
+  margin: 0;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Свой выпадающий список — тот же, что в дне 11, но пункты шире. */
+.day12-select {
+  position: relative;
+  min-width: 0;
+}
+
+.day12-select__button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 5px 9px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease);
+}
+
+.day12-select__button [data-select-value] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day12-select__button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.day12-select__button:focus-visible,
+.day12-select__button[aria-expanded="true"] {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.day12-select__button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.day12-select__caret {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 9px;
+  transition: transform var(--speed) var(--ease);
+}
+
+.day12-select__button[aria-expanded="true"] .day12-select__caret {
+  transform: rotate(180deg);
+}
+
+.day12-select__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 240px;
+  margin: 0;
+  border: 1px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 0;
+  list-style: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.day12-select__list[hidden] {
+  display: none;
+}
+
+.day12-select__option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day12-select__option + .day12-select__option {
+  border-top: 1px solid var(--line);
+}
+
+.day12-select__option small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day12-select__option > span::before {
+  content: "  ";
+  white-space: pre;
+}
+
+.day12-select__option[aria-selected="true"] {
+  color: var(--accent);
+}
+
+.day12-select__option[aria-selected="true"] > span::before {
+  content: "› ";
+  white-space: pre;
+}
+
+.day12-select__option:hover,
+.day12-select__option:focus {
+  outline: none;
+  background: var(--accent-soft);
+  color: var(--text-bright);
+}
+
+/* Карточка профиля: что именно ушло в промпт этой дорожки. */
+.day12-card {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.day12-card > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.day12-card dt {
+  color: var(--accent);
+}
+
+.day12-card dd {
+  margin: 0;
+  color: var(--muted-bright);
+  overflow-wrap: anywhere;
+}
+
+.day12-prompt {
+  border-bottom: 1px solid var(--line);
+  padding: 6px 14px;
+  font-size: 11px;
+}
+
+.day12-prompt summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.day12-prompt summary::marker {
+  color: var(--accent);
+}
+
+.day12-prompt pre {
+  margin: 8px 0 4px;
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-soft);
+  padding: 8px 10px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day12-log {
+  min-height: 220px;
+}
+
+/* Признаки в последнем ответе — что агент учёл сам. */
+.day12-check {
+  margin: 0;
+  border-top: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  padding: 7px 14px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.day12-check[hidden] {
+  display: none;
+}
+
+.day12-composer {
+  margin-top: 14px;
+}
+
+/* Редактор своего профиля. */
+.day12-editor {
+  margin-top: 18px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  padding: 14px 16px;
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.day12-editor[hidden] {
+  display: none;
+}
+
+.day12-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6px 20px;
+  margin-bottom: 12px;
+}
+
+.day12-heading h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.day12-heading > p {
+  margin: 0;
+  max-width: 460px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.day12-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.day12-form label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.day12-form label > span {
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day12-form input,
+.day12-form textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-soft);
+  padding: 6px 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.day12-form input:focus,
+.day12-form textarea:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.day12-form__actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 900px) {
+  .day12-lanes,
+  .day12-form {
+    grid-template-columns: 1fr;
+  }
+
+  .day12-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

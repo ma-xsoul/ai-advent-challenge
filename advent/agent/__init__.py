@@ -29,6 +29,15 @@ from .memory import (
     route_by_agent,
     route_by_heuristic,
 )
+from .profile import (
+    PRESETS,
+    Profile,
+    ProfileError,
+    ProfileStore,
+    all_profiles,
+    check_answer,
+    find_profile,
+)
 from .registry import AgentRegistry
 from .scenarios import (
     BRANCH_SCENARIOS,
@@ -54,10 +63,12 @@ __all__ = [
     "AgentRegistry",
     "AgentReply",
     "AgentUsage",
+    "all_profiles",
     "Branch",
     "BRANCH_SCENARIOS",
     "BranchScenario",
     "BranchTail",
+    "check_answer",
     "Checkpoint",
     "CompressionFailed",
     "CompressionPolicy",
@@ -73,6 +84,7 @@ __all__ = [
     "FactsPolicy",
     "FactsRecord",
     "FactsStarted",
+    "find_profile",
     "get_branch_scenario",
     "get_memory_scenario",
     "get_scenario",
@@ -85,6 +97,10 @@ __all__ = [
     "MemoryStore",
     "MemoryUpdate",
     "Message",
+    "PRESETS",
+    "Profile",
+    "ProfileError",
+    "ProfileStore",
     "route_by_agent",
     "route_by_heuristic",
     "Scenario",

@@ -140,7 +140,20 @@
       if (bullet || ORDERED.test(line)) {
         const marker = bullet ? BULLET : ORDERED;
         const items = [];
-        while (index < lines.length && marker.test(lines[index])) {
+        while (index < lines.length) {
+          if (!marker.test(lines[index])) {
+            // Модели любят разделять пункты пустой строкой. Раньше на ней
+            // список обрывался, и каждый следующий пункт открывал новый
+            // <ol> — нумерация шла «1, 1, 1». Смотрим за пустые строки:
+            // если дальше снова маркер того же списка, это тот же список.
+            let look = index;
+            while (look < lines.length && !lines[look].trim()) look += 1;
+            if (look > index && look < lines.length && marker.test(lines[look])) {
+              index = look;
+              continue;
+            }
+            break;
+          }
           const item = [lines[index].replace(marker, "")];
           index += 1;
           // Продолжение пункта: строки без собственного маркера.

@@ -242,3 +242,24 @@ MEMORY_SCENARIOS: dict[str, MemoryScenario] = {MEMORY_LAYERS.key: MEMORY_LAYERS}
 
 def get_memory_scenario(key: str) -> MemoryScenario | None:
     return MEMORY_SCENARIOS.get(key)
+
+
+# Сценарий для профилей (день 12): три вопроса без единого слова о стиле.
+# Всё, что различается в ответах двух дорожек, — обращение, длина, формат,
+# порядок шагов — агент взял из профиля сам. Это и есть «учитывает
+# автоматически» из задания.
+PROFILE_QUESTIONS = Scenario(
+    key="profiles",
+    title="Три вопроса",
+    description=(
+        "Три вопроса без намёка на стиль: про декораторы, про пароли и про функцию. "
+        "Разница между дорожками — целиком из профилей."
+    ),
+    messages=(
+        "Объясни, что такое декоратор в Python.",
+        "Как безопасно хранить пароли пользователей?",
+        "Нужна функция, которая считает сумму расходов за месяц по списку операций.",
+    ),
+)
+
+SCENARIOS[PROFILE_QUESTIONS.key] = PROFILE_QUESTIONS

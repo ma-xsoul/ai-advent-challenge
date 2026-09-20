@@ -99,6 +99,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=12,
+        title="Персонализация",
+        description="Профиль пользователя поверх памяти",
+        endpoint="day12.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 
