@@ -1553,5 +1553,172 @@ class MemoryLayersTestCase(unittest.TestCase):
         self.assertIn("name: Максим", system)
 
 
+class TaskStateMachineTestCase(unittest.TestCase):
+    """День 13: задача как конечный автомат."""
+
+    def _task(self, plan=("шаг 1", "шаг 2", "шаг 3")):
+        from advent.agent import new_task
+
+        task = new_task("Нужна утилита для расходов из CSV", "t1")
+        task.set_plan(list(plan))
+        return task
+
+    def test_task_is_born_in_planning_with_a_title_from_the_goal(self):
+        from advent.agent import new_task
+
+        task = new_task("Нужна утилита на Python: читает CSV с расходами и печатает сумму по категориям", "t1")
+
+        self.assertEqual(task.stage, "planning")
+        self.assertEqual(task.title, "Нужна утилита на Python: читает CSV с…")
+        self.assertEqual(task.steps, [])
+        self.assertIn("план", task.expected)
+
+    def test_happy_path_walks_all_four_stages(self):
+        task = self._task()
+
+        task.approve_plan(turn=1)
+        self.assertEqual((task.stage, task.current), ("execution", 0))
+        self.assertIn("шаг 1", task.expected)
+
+        task.complete_step(turn=2, note="сделано")
+        task.complete_step(turn=3)
+        self.assertEqual((task.stage, task.current), ("execution", 2))
+
+        task.complete_step(turn=4)
+        self.assertEqual(task.stage, "validation")
+        self.assertTrue(all(step.done for step in task.steps))
+
+        task.validate(True, turn=5)
+        self.assertEqual(task.stage, "done")
+        self.assertEqual([t["to"] for t in [x.as_dict() for x in task.log]], ["execution", "validation", "done"])
+
+    def test_failed_validation_reopens_the_step_and_everything_after_it(self):
+        task = self._task()
+        task.approve_plan(turn=1)
+        for turn in (2, 3, 4):
+            task.complete_step(turn=turn)
+
+        task.validate(False, turn=5, step=2, issues=["нет группировки"])
+
+        self.assertEqual((task.stage, task.current), ("execution", 1))
+        self.assertEqual([step.done for step in task.steps], [True, False, False])
+        self.assertIn("возврат на шаг 2", task.log[-1].reason)
+
+    def test_illegal_transitions_raise(self):
+        from advent.agent import TaskError, new_task
+
+        empty = new_task("цель", "t0")
+        with self.assertRaises(TaskError):
+            empty.approve_plan(turn=1)  # плана нет
+
+        task = self._task()
+        with self.assertRaises(TaskError):
+            task.complete_step(turn=1)  # ещё planning
+        with self.assertRaises(TaskError):
+            task.validate(True, turn=1)  # ещё не validation
+
+        task.approve_plan(turn=1)
+        with self.assertRaises(TaskError):
+            task.set_plan(["другой план"])  # план заморожен после утверждения
+
+    def test_pause_and_resume_keep_the_stage_and_write_the_journal(self):
+        task = self._task()
+        task.approve_plan(turn=1)
+        task.complete_step(turn=2)
+
+        task.pause(turn=3)
+        self.assertTrue(task.paused)
+        self.assertIn("НА ПАУЗЕ", task.render())
+        self.assertEqual((task.stage, task.current), ("execution", 1))
+
+        task.resume(turn=3)
+        self.assertFalse(task.paused)
+        self.assertEqual([t.reason for t in task.log[-2:]], ["пауза", "продолжение"])
+
+    def test_render_tells_the_agent_where_it_is_and_not_to_retell(self):
+        task = self._task()
+        task.approve_plan(turn=1)
+        task.complete_step(turn=2)
+
+        text = task.render()
+
+        self.assertIn("Этап: execution", text)
+        self.assertIn("[x] 1. шаг 1", text)
+        self.assertIn("[>] 2. шаг 2", text)
+        self.assertIn("Текущий шаг: 2 из 3", text)
+        self.assertIn("Не пересказывай задачу", text)
+
+    def test_observer_report_moves_the_machine_but_never_jumps_stages(self):
+        task = self._task()
+
+        record = task.apply_report({"plan": ["a", "b"], "plan_ready": True}, turn=1)
+        self.assertEqual(record.applied, "план: 2 шагов")
+        self.assertEqual(task.stage, "planning")  # утверждает пользователь, не наблюдатель
+
+        task.approve_plan(turn=1)
+        task.apply_report({"step_done": False, "note": ""}, turn=2)
+        self.assertEqual(task.current, 0)
+        task.apply_report({"step_done": True, "note": "ок"}, turn=3)
+        self.assertEqual(task.current, 1)
+        record = task.apply_report({"step_done": True, "note": "ок"}, turn=4)
+        self.assertEqual(task.stage, "validation")
+        self.assertIn("→ проверка", record.applied)
+
+        task.apply_report({"verdict": "fail", "step": 1, "issues": ["x"]}, turn=5)
+        self.assertEqual((task.stage, task.current), ("execution", 0))
+
+    def test_observer_parses_json_per_stage_and_counts_tokens(self):
+        from advent.agent import observe
+
+        task = self._task()
+        transport = FakeTransport(replies=['{"plan": ["один", "два"], "plan_ready": true}'])
+        report, reply = observe(transport, "m", task, "вопрос", "ответ")
+
+        self.assertEqual(report, {"plan": ["один", "два"], "plan_ready": True})
+        self.assertEqual(reply.input_tokens, 10)
+        self.assertEqual(transport.payloads[0]["response_format"], {"type": "json_object"})
+        self.assertIn("планирования", transport.payloads[0]["messages"][0]["content"])
+
+        task.approve_plan(turn=1)
+        report, _ = observe(FakeTransport(replies=['{"step_done": "yes"}']), "m", task, "в", "о")
+        self.assertEqual(report["step_done"], False)  # только настоящий true
+
+        with self.assertRaises(TransportError):
+            observe(FakeTransport(replies=["не json"]), "m", task, "в", "о")
+
+    def test_retelling_detects_explanations_from_scratch(self):
+        from advent.agent import retelling
+
+        task = self._task()
+        retold = retelling("Напомню, задача была: утилита для расходов из CSV. Итак…", task)
+        clean = retelling("Шаг 2 сделан: функция group_by_category возвращает словарь.", task)
+
+        self.assertTrue(retold["retold"])
+        self.assertIn("Напомню", retold["phrases"])
+        self.assertFalse(clean["retold"])
+
+    def test_store_round_trips_the_task_and_survives_a_broken_file(self):
+        import tempfile
+        from pathlib import Path
+
+        from advent.agent import TaskStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = TaskStore(directory)
+            task = self._task()
+            task.approve_plan(turn=1)
+            task.complete_step(turn=2, note="ок")
+            task.pause(turn=3)
+            store.save("s1", task)
+
+            back = store.load("s1")
+            self.assertEqual((back.stage, back.current, back.paused), ("execution", 1, True))
+            self.assertEqual(back.steps[0].note, "ок")
+            self.assertEqual(len(back.log), 2)
+
+            Path(directory, "s1-task.json").write_text("{битый", encoding="utf-8")
+            self.assertIsNone(store.load("s1"))
+
+
 if __name__ == "__main__":
     unittest.main()

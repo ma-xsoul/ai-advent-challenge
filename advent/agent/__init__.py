@@ -52,8 +52,12 @@ from .scenarios import (
     get_branch_scenario,
     get_memory_scenario,
     get_scenario,
+    get_task_scenario,
+    TaskScenario,
+    TaskStep,
 )
 from .store import JsonStore, StoreError, StoredSession
+from .task import STAGES, STAGE_TITLES, TaskError, TaskState, TaskStore, observe, new_task, retelling
 from .tokens import estimate_tokens
 from .transport import DeepSeekTransport, Transport, TransportError
 
@@ -74,6 +78,7 @@ __all__ = [
     "CompressionPolicy",
     "CompressionRecord",
     "CompressionStarted",
+    "observe",
     "ContextOverflowError",
     "DeepSeekTransport",
     "DialogTree",
@@ -88,6 +93,7 @@ __all__ = [
     "get_branch_scenario",
     "get_memory_scenario",
     "get_scenario",
+    "get_task_scenario",
     "JsonStore",
     "LayeredMemory",
     "MEMORY_SCENARIOS",
@@ -97,10 +103,12 @@ __all__ = [
     "MemoryStore",
     "MemoryUpdate",
     "Message",
+    "new_task",
     "PRESETS",
     "Profile",
     "ProfileError",
     "ProfileStore",
+    "retelling",
     "route_by_agent",
     "route_by_heuristic",
     "Scenario",
@@ -108,9 +116,16 @@ __all__ = [
     "SCOPE_LIVES",
     "SCOPE_TITLES",
     "SCOPES",
+    "STAGE_TITLES",
+    "STAGES",
     "StoredSession",
     "StoreError",
     "Summary",
+    "TaskError",
+    "TaskScenario",
+    "TaskState",
+    "TaskStep",
+    "TaskStore",
     "Transport",
     "TransportError",
     "TreeStore",

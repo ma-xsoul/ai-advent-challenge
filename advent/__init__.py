@@ -18,6 +18,7 @@ from .days.day09.routes import bp as day09_blueprint
 from .days.day10.routes import bp as day10_blueprint
 from .days.day11.routes import bp as day11_blueprint
 from .days.day12.routes import bp as day12_blueprint
+from .days.day13.routes import bp as day13_blueprint
 from .agent import Agent, AgentConfig, AgentRegistry, JsonStore
 from .navigation import DAYS
 
@@ -74,6 +75,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(day10_blueprint)
     app.register_blueprint(day11_blueprint)
     app.register_blueprint(day12_blueprint)
+    app.register_blueprint(day13_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(
@@ -86,6 +88,15 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/")
     def index():
         return redirect(url_for("day01.index"))
+
+    # Кнопка «сбросить всё» в боковой панели — чистый лист перед записью видео.
+    @app.post("/api/reset-all")
+    def reset_all():
+        from flask import jsonify
+
+        from .days.agent_chat import reset_everything
+
+        return jsonify(reset_everything())
 
     @app.context_processor
     def inject_navigation():

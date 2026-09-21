@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}День 13. Состояние задачи · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day13.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 13</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Task · State · Machine</span>
+    </div>
+    <h1>День 13.<br><span>Состояние задачи</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тринадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Реализуйте состояние задачи как конечный автомат (Task State Machine).</p>
+      <ul class="homework-brief__steps">
+        <li>У задачи есть <strong>этап</strong>, <strong>текущий шаг</strong> и <strong>ожидаемое действие</strong>.</li>
+        <li>Пример состояний: <code>planning → execution → validation → done</code>.</li>
+        <li>Проверьте паузу на любом этапе.</li>
+        <li>Проверьте продолжение без повторных объяснений.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент с формализованным состоянием задачи.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код / текст</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day13-lab" aria-labelledby="day13-lab-title">
+    <div class="day13-lab__intro">
+      <p class="day13-kicker">Практика</p>
+      <h2 id="day13-lab-title">Задача — это объект, а не разговор</h2>
+      <p>До сих пор задача жила только в голове пользователя и в стеке сообщений. Теперь она — отдельная сущность с формальным состоянием: на каком этапе, какой шаг внутри этапа, чего ждём дальше. Задача рождается с первой репликой, двигается по этапам, и её можно поставить на паузу и продолжить без пересказа.</p>
+    </div>
+
+    <ol class="day13-stages">
+      <li class="day13-stage">
+        <span class="day13-stage__rank">01</span>
+        <h3>planning</h3>
+        <p>Уточнить, что нужно, и собрать план. Выход — согласованный список шагов.</p>
+        <p class="day13-stage__formula">ждём: план утверждён</p>
+      </li>
+      <li class="day13-stage">
+        <span class="day13-stage__rank">02</span>
+        <h3>execution</h3>
+        <p>Идти по шагам плана по одному. Выход — результат каждого шага.</p>
+        <p class="day13-stage__formula">ждём: шаг сделан</p>
+      </li>
+      <li class="day13-stage">
+        <span class="day13-stage__rank">03</span>
+        <h3>validation</h3>
+        <p>Проверить результат против плана и требований. Выход — принято или возврат на шаг.</p>
+        <p class="day13-stage__formula">ждём: проверка пройдена</p>
+      </li>
+      <li class="day13-stage">
+        <span class="day13-stage__rank">04</span>
+        <h3>done</h3>
+        <p>Задача закрыта. Состояние остаётся, чтобы к нему можно было вернуться.</p>
+        <p class="day13-stage__formula">ждём: ничего</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day13-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day13-controls">
+      <p class="day13-controls__note">Задача рождается с первой реплики и живёт в своём файле. «Новый диалог» стирает стек, но не задачу — так проверяется продолжение без пересказа.</p>
+      <div class="day13-actions">
+        {% if scenario %}
+          <button id="day13-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day13.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="day13-new-task" class="agent-chat__restart" type="button" title="Снять задачу: следующая реплика создаст новую">[◇] Новая задача</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек очищается, задача остаётся">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench day13-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day13-stage-hint" data-stage-hint>задачи нет — первая реплика её создаст</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day13-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Опишите задачу — агент предложит план.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day13.chat_stream') }}"
+          data-state-url="{{ url_for('day13.state') }}"
+          data-reset-url="{{ url_for('day13.reset') }}"
+          data-approve-url="{{ url_for('day13.approve') }}"
+          data-step-url="{{ url_for('day13.step_done') }}"
+          data-verdict-url="{{ url_for('day13.verdict') }}"
+          data-pause-url="{{ url_for('day13.pause') }}"
+          data-resume-url="{{ url_for('day13.resume') }}"
+          data-new-task-url="{{ url_for('day13.drop_task') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: игра в крестики-нолики на Python, консоль, 3×3, два игрока — составь план из четырёх шагов"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">Задача</p>
+          <h3 id="agent-debug-title" data-task="title">—</h3>
+          <p class="day13-goal" data-task="goal">Задачи ещё нет.</p>
+
+          <ol class="day13-stepper" data-stepper aria-label="Этапы">
+            {% for stage in stages %}
+              <li data-stage="{{ stage }}"><span>{{ loop.index }}</span>{{ stage }}</li>
+            {% endfor %}
+          </ol>
+
+          <dl class="day13-now">
+            <div><dt>этап</dt><dd data-task="stage">—</dd></div>
+            <div><dt>текущий шаг</dt><dd data-task="step">—</dd></div>
+            <div><dt>ожидаем</dt><dd data-task="expected">—</dd></div>
+          </dl>
+
+          <p class="agent-kicker day13-debug-kicker">План</p>
+          <ol class="day13-plan" data-plan>
+            <li class="day13-plan__empty">Плана ещё нет.</li>
+          </ol>
+
+          <div class="day13-buttons" data-buttons>
+            <button type="button" data-action="approve" class="day13-btn day13-btn--go">[→] Утвердить план</button>
+            <button type="button" data-action="step" class="day13-btn">[✓] Шаг сделан</button>
+            <button type="button" data-action="accept" class="day13-btn day13-btn--go">[✓] Принять</button>
+            <button type="button" data-action="reject" class="day13-btn">[↩] Вернуть на шаг</button>
+            <button type="button" data-action="pause" class="day13-btn">[‖] Пауза</button>
+            <button type="button" data-action="resume" class="day13-btn day13-btn--go">[▶] Продолжить</button>
+          </div>
+
+          <p class="day13-retell" data-retell hidden></p>
+
+          <p class="agent-kicker day13-debug-kicker">Журнал переходов</p>
+          <ol class="day13-journal" data-journal>
+            <li class="day13-journal__empty">Переходов ещё не было.</li>
+          </ol>
+
+          <p class="agent-kicker day13-debug-kicker">Расход</p>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>в стеке</dt><dd data-debug="stack">0</dd></div>
+            <div><dt>≈ задача в промпт</dt><dd data-debug="task_tokens">0</dd></div>
+            <div><dt>запросов диалога</dt><dd data-debug="requests">0</dd></div>
+            <div><dt>запросов наблюдателя</dt><dd data-debug="side_requests">0</dd></div>
+            <div><dt>токенов диалога</dt><dd data-debug="total_tokens">0</dd></div>
+            <div><dt>токенов наблюдателя</dt><dd data-debug="side_tokens">0</dd></div>
+          </dl>
+
+          <details class="day13-prompt">
+            <summary>системный промпт целиком</summary>
+            <pre data-system-text></pre>
+          </details>
+          <p class="day13-file" data-task-file></p>
+        </div>
+      </aside>
+    </div>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+    <template id="day13-marker-template">
+      <div class="day13-marker" data-marker>
+        <span class="day13-marker__icon" aria-hidden="true">≡</span>
+        <span data-marker-text></span>
+      </div>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day13.js') }}"></script>
+{% endblock %}

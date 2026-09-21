@@ -263,3 +263,59 @@ PROFILE_QUESTIONS = Scenario(
 )
 
 SCENARIOS[PROFILE_QUESTIONS.key] = PROFILE_QUESTIONS
+
+
+@dataclass(frozen=True)
+class TaskStep:
+    """Шаг сценария-задачи: реплика агенту (say) или действие с автоматом (do)."""
+
+    kind: str  # say | approve | pause | reset | resume
+    text: str = ""
+
+
+@dataclass(frozen=True)
+class TaskScenario:
+    """
+    Сценарий для автомата задачи (день 13): не просто реплики, а реплики
+    вперемешку с переходами. Пауза посреди выполнения, сброс диалога и
+    продолжение — главная проверка: агент продолжит с шага или начнёт
+    объяснять всё заново.
+    """
+
+    key: str
+    title: str
+    description: str
+    steps: tuple[TaskStep, ...]
+
+
+TASK_TICTACTOE = TaskScenario(
+    key="task-tictactoe",
+    title="Крестики-нолики",
+    description=(
+        "Задача на четыре этапа: план, утверждение, два шага выполнения, пауза посреди "
+        "работы, сброс диалога и продолжение с того же шага."
+    ),
+    steps=(
+        # Все допущения — в постановке: без них агент вместо плана задаёт
+        # четыре уточняющих вопроса, и наблюдатель честно не находит плана.
+        TaskStep(
+            "say",
+            "Нужно написать игру в крестики-нолики: Python, консоль, поле 3×3, два игрока "
+            "по очереди, без компьютерного соперника. Составь план из четырёх шагов, "
+            "код пока не пиши.",
+        ),
+        TaskStep("approve"),
+        TaskStep("say", "Делай первый шаг."),
+        TaskStep("say", "Дальше."),
+        TaskStep("pause"),
+        TaskStep("reset"),
+        TaskStep("resume"),
+        TaskStep("say", "Дальше."),
+    ),
+)
+
+TASK_SCENARIOS: dict[str, TaskScenario] = {TASK_TICTACTOE.key: TASK_TICTACTOE}
+
+
+def get_task_scenario(key: str) -> TaskScenario | None:
+    return TASK_SCENARIOS.get(key)

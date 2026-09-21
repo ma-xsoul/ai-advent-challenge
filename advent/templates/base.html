@@ -38,6 +38,14 @@
             {{ completed_days }} из {{ advent_days|length }}
           </progress>
           <p>Каждый день — отдельная маленькая лаборатория.</p>
+          <button
+            id="reset-all"
+            class="reset-all"
+            type="button"
+            data-reset-all-url="{{ url_for('reset_all') }}"
+            title="Удалить все диалоги, слои памяти, профили и задачи — чистый лист"
+          >[x] сбросить всё</button>
+          <span id="reset-all-status" class="reset-all__status" aria-live="polite"></span>
         </div>
       </aside>
 
@@ -46,6 +54,7 @@
       </main>
     </div>
 
+    <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

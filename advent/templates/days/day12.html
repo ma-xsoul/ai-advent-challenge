@@ -89,7 +89,7 @@
       <p class="day12-controls__memory" data-memory-note>Память дня 11 подмешана обеим дорожкам: <span data-memory-counts>—</span></p>
       <div class="day12-actions">
         {% if scenario %}
-          <button id="day12-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day12.scenario') }}">[▶] «{{ scenario.title }}»</button>
+          <button id="day12-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day12.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
         {% endif %}
         <button id="day12-new-profile" class="agent-chat__restart" type="button">[+] Свой профиль</button>
         <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек обеих дорожек очищается, профили и память остаются">[x] Новый диалог</button>

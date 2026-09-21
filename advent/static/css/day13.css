@@ -1,0 +1,549 @@
+/* День 13: состояние задачи как конечный автомат. */
+
+.day13-lab {
+  margin-top: 36px;
+}
+
+.day13-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day13-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day13-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day13-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day13-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Четыре этапа — четыре карточки в ряд, слева направо, как по автомату. */
+.day13-stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day13-stage {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day13-stage__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day13-stage h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day13-stage p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Чего ждём на этапе — ожидаемое действие из задания. */
+.day13-stage__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day13-stage__formula::before {
+  content: "> ";
+}
+
+/* Вопросы, на которые практика должна ответить. */
+.day13-questions {
+  display: grid;
+  gap: 0;
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day13-questions > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.28fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 18px;
+}
+
+.day13-questions > div + div {
+  border-top: 1px solid var(--line);
+}
+
+.day13-questions dt {
+  color: var(--muted);
+  font-size: 12.5px;
+  text-transform: lowercase;
+}
+
+.day13-questions dt::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day13-questions dd {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day13-note {
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px 18px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day13-note > span {
+  margin-right: 8px;
+  color: var(--accent);
+}
+
+.day13-note strong {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .day13-stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day13-stages {
+    grid-template-columns: 1fr;
+  }
+
+  .day13-questions > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+
+/* ── Практика: автомат задачи ───────────────────────────────────────── */
+
+.day13-stages {
+  margin-bottom: 14px;
+}
+
+.day13-store-error {
+  margin: 0 0 14px;
+  border: 1px solid rgba(232, 112, 95, 0.4);
+  background: var(--error-soft);
+  padding: 11px 14px;
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.day13-store-error::before {
+  content: "! ";
+}
+
+.day13-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-soft);
+  padding: 10px 14px;
+}
+
+.day13-controls__note {
+  margin: 0;
+  max-width: 560px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.day13-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day13-stage-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day13-log {
+  min-height: 260px;
+}
+
+/* Отметки в ленте: задача создана, наблюдатель посмотрел, диалог сброшен. */
+.day13-marker {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  padding: 8px 12px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  line-height: 1.5;
+  animation: block-in var(--speed) var(--ease) both;
+}
+
+.day13-marker__icon {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.day13-marker.is-pending {
+  border-style: dotted;
+  color: var(--muted);
+}
+
+.day13-marker.is-pending .day13-marker__icon {
+  animation: caret-blink 1.1s steps(1, end) infinite;
+}
+
+.day13-marker.is-failed {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.day13-marker.is-failed .day13-marker__icon {
+  color: var(--error);
+}
+
+.day13-marker.is-cut {
+  border-style: solid;
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+}
+
+.day13-debug-kicker {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.day13-goal {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* Четыре этапа в ряд: где мы сейчас, что пройдено. */
+.day13-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.day13-stepper li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 6px 4px;
+  color: var(--muted);
+  font-size: 8.5px;
+  letter-spacing: 0.01em;
+  text-align: center;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.day13-stepper li span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.day13-stepper li.is-passed {
+  border-color: var(--line-strong);
+  color: var(--muted-bright);
+}
+
+.day13-stepper li.is-passed span::after {
+  content: " ✓";
+  color: var(--accent);
+}
+
+.day13-stepper li.is-current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.day13-stepper li.is-current span {
+  color: var(--accent);
+}
+
+/* Задача закрыта: done подсвечен и с галочкой одновременно. */
+.day13-stepper li.is-current.is-passed span::after {
+  content: " ✓";
+  color: var(--accent);
+}
+
+.day13-stepper li.is-paused {
+  border-style: dashed;
+}
+
+.day13-stepper li.is-paused span::after {
+  content: " ‖";
+}
+
+.day13-now {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+}
+
+.day13-now > div {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.day13-now dt {
+  color: var(--muted);
+}
+
+.day13-now dd {
+  margin: 0;
+  color: var(--text-bright);
+  overflow-wrap: anywhere;
+}
+
+/* План: [x] сделано, [>] текущий, [ ] впереди. */
+.day13-plan {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+}
+
+.day13-plan li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 6px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.day13-plan__mark {
+  color: var(--muted);
+}
+
+.day13-plan li.is-current {
+  color: var(--text-bright);
+}
+
+.day13-plan li.is-current .day13-plan__mark {
+  color: var(--accent);
+}
+
+.day13-plan li.is-done {
+  color: var(--muted-bright);
+}
+
+.day13-plan li.is-done .day13-plan__mark {
+  color: var(--accent);
+}
+
+.day13-plan__text small {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day13-plan li.day13-plan__empty,
+.day13-journal li.day13-journal__empty {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+/* Кнопки-переходы: видны только допустимые. */
+.day13-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.day13-buttons[hidden] {
+  display: none;
+}
+
+.day13-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 5px 9px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day13-btn:hover {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day13-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day13-btn--go:hover {
+  background: var(--accent-soft);
+}
+
+.day13-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.day13-btn[hidden] {
+  display: none;
+}
+
+/* Пересказал или продолжил — главный признак дня. */
+.day13-retell {
+  margin: 0 0 12px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  padding: 7px 10px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.day13-retell.is-bad {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.day13-retell[hidden] {
+  display: none;
+}
+
+.day13-journal {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.day13-journal li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--muted-bright);
+  line-height: 1.45;
+}
+
+.day13-journal__arrow {
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.day13-journal li small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.day13-prompt {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.day13-prompt summary {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.day13-prompt summary::marker {
+  color: var(--accent);
+}
+
+.day13-prompt pre {
+  margin: 8px 0 4px;
+  border: 1px dashed var(--line-strong);
+  background: var(--surface-soft);
+  padding: 8px 10px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day13-file {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}

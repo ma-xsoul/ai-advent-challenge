@@ -96,8 +96,8 @@
         <button class="day10-switch__apply" type="submit">Применить</button>
       </form>
       <div class="day10-actions">
-        <button class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day10.scenario', key=scenario.key) }}">[▶] «{{ scenario.title }}»</button>
-        <button id="day10-branch-scenario" class="agent-chat__scenario" type="button" title="{{ branch_scenario.description }}" data-scenario-url="{{ url_for('day10.scenario', key=branch_scenario.key) }}">[▶] «{{ branch_scenario.title }}»</button>
+        <button class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day10.scenario', key=scenario.key) }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        <button id="day10-branch-scenario" class="agent-chat__scenario" type="button" title="{{ branch_scenario.description }}" data-scenario-url="{{ url_for('day10.scenario', key=branch_scenario.key) }}">[▶] Сценарий «{{ branch_scenario.title }}»</button>
         <button id="agent-reset" class="agent-chat__reset" type="button">[x] Новый диалог</button>
       </div>
     </div>

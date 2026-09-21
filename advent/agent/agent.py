@@ -317,6 +317,10 @@ class Agent:
         # День 12: профиль пользователя — тоже снаружи, тоже текстом. Идёт
         # сразу за базовым промптом: это конфиг поведения, а не данные.
         self._profile_text: str | None = None
+        # День 13: состояние задачи — этап, шаг, ожидание. Тоже снаружи,
+        # тоже текстом: агент продолжает с места, потому что ему сказали,
+        # где это место, а не потому что помнит.
+        self._task_text: str | None = None
 
     @classmethod
     def restore(
@@ -479,6 +483,15 @@ class Agent:
     @profile_text.setter
     def profile_text(self, value: str | None) -> None:
         self._profile_text = value or None
+
+    @property
+    def task_text(self) -> str | None:
+        """Состояние задачи дня 13 текстом. Пусто, пока задачи нет."""
+        return self._task_text
+
+    @task_text.setter
+    def task_text(self, value: str | None) -> None:
+        self._task_text = value or None
 
     @property
     def system_text(self) -> str | None:
@@ -948,6 +961,8 @@ class Agent:
             parts.append(self._config.system_prompt)
         if self._profile_text:
             parts.append(self._profile_text)
+        if self._task_text:
+            parts.append(self._task_text)
         if self._summary is not None:
             parts.append(SUMMARY_PREFIX.format(count=self._summary.covers) + "\n" + self._summary.text)
         if self._config.facts is not None and self._facts:

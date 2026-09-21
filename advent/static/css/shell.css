@@ -226,6 +226,39 @@
   content: "# ";
 }
 
+/* «Сбросить всё»: чистый лист одной кнопкой. */
+.reset-all {
+  justify-self: start;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 5px 9px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color var(--speed) var(--ease), color var(--speed) var(--ease), background var(--speed) var(--ease);
+}
+
+.reset-all:hover {
+  border-color: var(--error);
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+.reset-all:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reset-all__status {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.reset-all__status:empty {
+  display: none;
+}
+
 .workspace {
   min-width: 0;
   padding: 30px 0 96px;

@@ -125,6 +125,13 @@ class AgentRegistry:
         with self._lock:
             return self._agents.pop(session_id, None) is not None
 
+    def clear(self) -> int:
+        """Выкинуть всех агентов из памяти. Файлы не трогает — это дело хранилища."""
+        with self._lock:
+            count = len(self._agents)
+            self._agents.clear()
+            return count
+
     def stored(self, session_id: str) -> StoredSession | None:
         if not self._store:
             return None

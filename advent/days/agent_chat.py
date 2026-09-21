@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from pathlib import Path
 from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
@@ -195,3 +196,32 @@ def _event(data: dict[str, Any]) -> str:
 
 def store_error_response(error: StoreError):
     return jsonify({"error": str(error)}), 500
+
+
+def reset_everything() -> dict[str, int]:
+    """
+    Кнопка «сбросить всё» в боковой панели: снести все файлы сессий —
+    диалоги, слои памяти, профили, задачи, деревья веток — и выкинуть
+    агентов из памяти обоих реестров. То, что раньше делалось руками
+    через rm -rf data/agents перед записью видео.
+    """
+    directory = Path(current_app.config["AGENT_STORE_DIR"])
+    files = 0
+    if directory.exists():
+        for path in directory.glob("*.json"):
+            try:
+                path.unlink()
+                files += 1
+            except OSError:
+                pass
+        for path in directory.glob("*.tmp"):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+    agents = 0
+    for name in ("agent_registry", "persistent_agent_registry"):
+        reg = current_app.extensions.get(name)
+        if reg is not None:
+            agents += reg.clear()
+    return {"files": files, "agents": agents}

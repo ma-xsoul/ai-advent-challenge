@@ -115,7 +115,7 @@
 
       <div class="day11-actions">
         {% if scenario %}
-          <button id="day11-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day11.scenario') }}">[▶] «{{ scenario.title }}»</button>
+          <button id="day11-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day11.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
         {% endif %}
         <button id="day11-new-task" class="agent-chat__restart" type="button" title="Рабочий слой умирает, диалог и пользователь остаются">[◇] Новая задача</button>
         <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек и краткосрочный слой умирают, остальные два — нет">[x] Новый диалог</button>

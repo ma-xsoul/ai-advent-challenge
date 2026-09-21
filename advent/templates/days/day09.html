@@ -97,7 +97,7 @@
       </form>
       <div class="day9-actions">
         {% for item in scenarios %}
-          <button class="agent-chat__scenario" type="button" title="{{ item.description }}" data-scenario-url="{{ url_for('day09.scenario', key=item.key) }}">[▶] «{{ item.title }}»</button>
+          <button class="agent-chat__scenario" type="button" title="{{ item.description }}" data-scenario-url="{{ url_for('day09.scenario', key=item.key) }}">[▶] Сценарий «{{ item.title }}»</button>
         {% endfor %}
         <button id="day9-compress" class="agent-chat__restart" type="button" title="Свернуть старую часть стека правого агента прямо сейчас">[⇣] Сжать сейчас</button>
         <button id="agent-reset" class="agent-chat__reset" type="button">[x] Новый диалог</button>

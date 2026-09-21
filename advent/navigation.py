@@ -107,6 +107,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=13,
+        title="Состояние задачи",
+        description="planning → execution → validation → done",
+        endpoint="day13.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

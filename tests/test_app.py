@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1740,6 +1740,204 @@ class AdventAppTestCase(unittest.TestCase):
 
         bad = self.client.post("/days/12/api/chat/stream", json={"message": "в", "lane": "c"})
         self.assertEqual(bad.status_code, 400)
+
+    def test_day_thirteen_renders_the_task_state_homework(self):
+        response = self.client.get("/days/13/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 13.", html)
+        self.assertIn("Состояние задачи", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("конечный автомат", html)
+        self.assertIn("planning → execution → validation → done", html)
+        self.assertIn("паузу на любом этапе", html)
+        self.assertIn("продолжение без повторных объяснений", html)
+        self.assertIn("Агент с формализованным состоянием задачи", html)
+        self.assertEqual(html.count('class="day13-stage"'), 4)
+        self.assertIn('data-stepper', html)
+        self.assertIn('data-action="approve"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day13.css", html)
+        self.assertIn('href="/days/13/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    # ── День 13: автомат задачи ─────────────────────────────────────────
+
+    def _day_thirteen_client(self, store_dir, reports=None, replies=None):
+        from tests.test_agent import FakeTransport
+
+        class ObservingTransport(FakeTransport):
+            """На запрос наблюдателя отдаёт JSON, на ходы — обычный текст."""
+
+            def __init__(self, replies=None, reports=None):
+                super().__init__(replies=replies)
+                self._reports = list(reports or [])
+
+            def send(self, payload):
+                if payload.get("response_format") == {"type": "json_object"}:
+                    self.payloads.append(payload)
+                    content = self._reports.pop(0) if self._reports else '{"plan": [], "plan_ready": false}'
+                    return {
+                        "model": "deepseek-v4-flash",
+                        "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                        "usage": {"prompt_tokens": 30, "completion_tokens": 9},
+                    }
+                return super().send(payload)
+
+        transport = ObservingTransport(replies=replies, reports=reports)
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s13")
+        return client, transport
+
+    @staticmethod
+    def _chat13(client, message):
+        import json as json_module
+
+        response = client.post("/days/13/api/chat/stream", json={"message": message})
+        return [json_module.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+    def test_day_thirteen_first_message_creates_the_task_and_the_observer_extracts_a_plan(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_thirteen_client(
+                store_dir, reports=['{"plan": ["прочитать CSV", "сгруппировать"], "plan_ready": true}'], replies=["план такой"]
+            )
+            events = self._chat13(client, "Нужна утилита для расходов. Составь план.")
+            kinds = [e["type"] for e in events]
+
+            self.assertIn("task_created", kinds)
+            self.assertIn("task_updated", kinds)
+            done = events[-1]
+            task = done["snapshot"]["task"]
+            self.assertEqual(task["stage"], "planning")
+            self.assertEqual([s["text"] for s in task["steps"]], ["прочитать CSV", "сгруппировать"])
+            self.assertEqual(task["expected"], "утвердить план")
+            self.assertIn("s13-task.json", os.listdir(store_dir))
+            # Задача уходит в системный промпт уже на первом ходу.
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertIn("Текущая задача:", system)
+            self.assertIn("Этап: planning", system)
+
+    def test_day_thirteen_buttons_move_the_machine_and_illegal_moves_are_refused(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_thirteen_client(store_dir, reports=['{"plan": ["a", "b"], "plan_ready": true}'], replies=["ок"])
+            self.assertEqual(client.post("/days/13/api/task/approve", json={}).status_code, 404)  # задачи нет
+
+            self._chat13(client, "цель")
+            self.assertEqual(client.post("/days/13/api/task/step", json={}).status_code, 409)  # ещё planning
+
+            state = client.post("/days/13/api/task/approve", json={}).get_json()
+            self.assertEqual(state["task"]["stage"], "execution")
+            state = client.post("/days/13/api/task/step", json={}).get_json()
+            self.assertEqual(state["task"]["current"], 1)
+            state = client.post("/days/13/api/task/step", json={}).get_json()
+            self.assertEqual(state["task"]["stage"], "validation")
+            state = client.post("/days/13/api/task/verdict", json={"ok": False, "step": 1}).get_json()
+            self.assertEqual((state["task"]["stage"], state["task"]["current"]), ("execution", 0))
+            self.assertEqual(client.post("/days/13/api/task/verdict", json={"ok": "да"}).status_code, 400)
+
+    def test_day_thirteen_pause_survives_reset_and_the_agent_resumes_from_the_step(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_thirteen_client(
+                store_dir,
+                reports=['{"plan": ["a", "b", "c"], "plan_ready": true}', '{"step_done": true, "note": "готово"}', '{"step_done": true, "note": "ок"}'],
+                replies=["план", "шаг 1 готов", "шаг 2 готов"],
+            )
+            self._chat13(client, "цель")
+            client.post("/days/13/api/task/approve", json={})
+            self._chat13(client, "делай")
+            state = client.post("/days/13/api/task/pause", json={}).get_json()
+            self.assertTrue(state["task"]["paused"])
+            self.assertEqual(state["task"]["current"], 1)
+
+            state = client.post("/days/13/api/reset", json={}).get_json()
+            self.assertEqual(state["messages"], [])
+            self.assertEqual((state["task"]["stage"], state["task"]["current"], state["task"]["paused"]), ("execution", 1, True))
+
+            # На паузе наблюдатель не зовётся — ход есть, автомат стоит.
+            events = self._chat13(client, "что там?")
+            self.assertNotIn("task_observing", [e["type"] for e in events])
+
+            client.post("/days/13/api/task/resume", json={})
+            events = self._chat13(client, "Продолжаем.")
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertIn("Текущий шаг: 2 из 3 — b", system)
+            self.assertIn("Не пересказывай задачу", system)
+            self.assertEqual(events[-1]["snapshot"]["task"]["current"], 2)
+            self.assertFalse(events[-1]["snapshot"]["retelling"]["retold"])
+
+    def test_day_thirteen_observer_failure_keeps_the_answer_and_the_state(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_thirteen_client(store_dir, reports=["не json"], replies=["ответ дошёл"])
+            events = self._chat13(client, "цель")
+
+            self.assertIn("task_failed", [e["type"] for e in events])
+            done = events[-1]
+            self.assertEqual(done["reply"]["content"], "ответ дошёл")
+            self.assertEqual(done["snapshot"]["task"]["stage"], "planning")
+            self.assertEqual(done["snapshot"]["side"]["requests"], 0)
+
+    def test_day_thirteen_new_task_drops_the_file_and_the_next_message_starts_over(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_thirteen_client(store_dir, reports=['{"plan": ["a"], "plan_ready": true}'], replies=["п", "п2"])
+            self._chat13(client, "первая")
+            state = client.post("/days/13/api/task/new", json={}).get_json()
+            self.assertIsNone(state["task"])
+            self.assertFalse(state["task_file"]["exists"])
+            events = self._chat13(client, "вторая задача")
+            self.assertEqual(events[-1]["snapshot"]["task"]["goal"], "вторая задача")
+
+    def test_day_thirteen_serves_the_scenario_with_actions(self):
+        response = self.client.get("/days/13/api/scenario")
+        scenario = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s["kind"] for s in scenario["steps"]], ["say", "approve", "say", "say", "pause", "reset", "resume", "say"])
+
+    def test_reset_all_wipes_every_session_file_and_the_registries(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_eleven_client(
+                store_dir, routed=['{"chat": {}, "task": {}, "user": {"name": "Максим"}}'], replies=["а1", "а2"]
+            )
+            self._chat11(client, "в1")
+            client.post("/days/12/api/lane", json={"lane": "a", "profile": "reviewer"})
+            self.assertGreater(len(os.listdir(store_dir)), 3)
+
+            response = client.post("/api/reset-all")
+            data = response.get_json()
+
+            self.assertEqual(response.status_code, 200)
+            self.assertGreaterEqual(data["files"], 4)
+            self.assertEqual(os.listdir(store_dir), [])
+            state = client.get("/days/11/api/state").get_json()
+            self.assertEqual(state["messages"], [])
+            self.assertEqual([layer["items"] for layer in state["memory"]["layers"]], [[], [], []])
+            self.assertEqual(client.get("/days/12/api/state").get_json()["lanes"]["a"]["profile"], "maksim")
+
+    def test_every_page_has_the_reset_all_button(self):
+        html = self.client.get("/days/13/").get_data(as_text=True)
+        self.assertIn('id="reset-all"', html)
+        self.assertIn('data-reset-all-url="/api/reset-all"', html)
+        self.assertIn("js/shell.js", html)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})
