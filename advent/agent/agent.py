@@ -321,6 +321,9 @@ class Agent:
         # тоже текстом: агент продолжает с места, потому что ему сказали,
         # где это место, а не потому что помнит.
         self._task_text: str | None = None
+        # День 14: инварианты — правила, которые нельзя нарушать. Идут
+        # первыми после базового промпта: сильнее профиля и задачи.
+        self._invariants_text: str | None = None
 
     @classmethod
     def restore(
@@ -492,6 +495,15 @@ class Agent:
     @task_text.setter
     def task_text(self, value: str | None) -> None:
         self._task_text = value or None
+
+    @property
+    def invariants_text(self) -> str | None:
+        """Инварианты дня 14 текстом. Пусто, пока не подложили."""
+        return self._invariants_text
+
+    @invariants_text.setter
+    def invariants_text(self, value: str | None) -> None:
+        self._invariants_text = value or None
 
     @property
     def system_text(self) -> str | None:
@@ -959,6 +971,8 @@ class Agent:
         parts = []
         if self._config.system_prompt:
             parts.append(self._config.system_prompt)
+        if self._invariants_text:
+            parts.append(self._invariants_text)
         if self._profile_text:
             parts.append(self._profile_text)
         if self._task_text:

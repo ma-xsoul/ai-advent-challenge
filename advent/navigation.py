@@ -115,6 +115,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=14,
+        title="Инварианты",
+        description="Правила, которые нельзя нарушать",
+        endpoint="day14.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

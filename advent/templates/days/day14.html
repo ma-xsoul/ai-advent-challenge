@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}День 14. Инварианты · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day14.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 14</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Invariants · Constraints · Refusal</span>
+    </div>
+    <h1>День 14.<br><span>Инварианты и ограничения</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание четырнадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Добавьте в ассистента инварианты, которые он не имеет права нарушать.</p>
+      <ul class="homework-brief__steps">
+        <li>Примеры инвариантов: выбранная архитектура, принятые технические решения, ограничения по стеку, бизнес-правила.</li>
+        <li>Инварианты хранятся отдельно от диалога.</li>
+        <li>Ассистент явно учитывает их в рассуждениях.</li>
+        <li>Ассистент отказывается предлагать решения, которые их нарушают.</li>
+        <li>Проверьте, что происходит при конфликте запроса и инварианта.</li>
+        <li>Проверьте, как ассистент объясняет отказ.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Ассистент, который работает в рамках заданных инвариантов.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код / текст</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day14-lab" aria-labelledby="day14-lab-title">
+    <div class="day14-lab__intro">
+      <p class="day14-kicker">Практика</p>
+      <h2 id="day14-lab-title">Правила, которые держит код, а не модель</h2>
+      <p>Профиль дня 12 говорил, <em>как</em> работать; память дня 11 — <em>что</em> мы знаем. Инвариант — то, чего нельзя, что бы пользователь ни попросил: стек, архитектура, принятые решения, бизнес-правила. Модель — формула без состояния, инвариант она «держать» не может. Держит наш код: правило лежит отдельно, уходит в рассуждения явно, а ответ проверяется после.</p>
+    </div>
+
+    <ol class="day14-kinds">
+      <li class="day14-kind">
+        <span class="day14-kind__rank">01</span>
+        <h3>Стек</h3>
+        <p>«Только Python и Flask, без Django и без Node». Самый проверяемый: нарушение видно по словам и импортам.</p>
+        <p class="day14-kind__formula">проверка: регулярка по ответу</p>
+      </li>
+      <li class="day14-kind">
+        <span class="day14-kind__rank">02</span>
+        <h3>Архитектура</h3>
+        <p>«Состояние только в файлах, никакой базы данных». Проверяется частично — по ключевым словам и предложенным зависимостям.</p>
+        <p class="day14-kind__formula">проверка: слова-маркеры + ревизор</p>
+      </li>
+      <li class="day14-kind">
+        <span class="day14-kind__rank">03</span>
+        <h3>Принятые решения</h3>
+        <p>«План утверждён — новые шаги не добавляем». Живёт в автомате дня 13 как запрет перехода.</p>
+        <p class="day14-kind__formula">проверка: правило перехода в коде</p>
+      </li>
+      <li class="day14-kind">
+        <span class="day14-kind__rank">04</span>
+        <h3>Бизнес-правила</h3>
+        <p>«Не предлагать платные сервисы», «не советовать хранить пароли открыто». Программно не проверишь — только внешним взглядом.</p>
+        <p class="day14-kind__formula">проверка: ревизор-модель, без гарантии</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day14-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day14-controls">
+      <p class="day14-controls__note">Два рубежа: модель должна отказать сама и назвать правило; после ответа код проверяет улики регуляркой, а ревизор — вторым запросом. Что поймали — в журнале внизу.</p>
+      <div class="day14-actions">
+        {% if scenario %}
+          <button id="day14-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day14.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="day14-add" class="agent-chat__restart" type="button">[+] Свой инвариант</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек очищается, инварианты и журнал остаются">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench day14-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day14-hint" data-hint>в промпте: 0 инвариантов</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day14-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Попросите что-нибудь — или что-нибудь запрещённое.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day14.chat_stream') }}"
+          data-state-url="{{ url_for('day14.state') }}"
+          data-reset-url="{{ url_for('day14.reset') }}"
+          data-add-url="{{ url_for('day14.add_invariant') }}"
+          data-delete-url="{{ url_for('day14.delete_invariant') }}"
+          data-toggle-url="{{ url_for('day14.toggle_invariant') }}"
+          data-clear-url="{{ url_for('day14.clear_checks') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: давай перепишем бэкенд на Django"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">Инварианты</p>
+          <h3 id="agent-debug-title">Нельзя ни по какой просьбе</h3>
+          <ol class="day14-list" data-invariants></ol>
+
+          <form id="day14-form" class="day14-form" hidden>
+            <input name="id" type="text" maxlength="40" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="id: латиницей">
+            <textarea name="rule" rows="2" maxlength="300" required placeholder="правило одной фразой"></textarea>
+            <div class="day14-form__row">
+              <div class="day14-select" data-select>
+                <input type="hidden" name="kind" value="decision">
+                <button type="button" class="day14-select__button" data-select-button aria-label="Вид инварианта" aria-haspopup="listbox" aria-expanded="false">
+                  <span data-select-value>решение</span>
+                  <span class="day14-select__caret" aria-hidden="true">▾</span>
+                </button>
+                <ul class="day14-select__list" role="listbox" aria-label="Вид инварианта" hidden>
+                  {% for kind in kinds %}
+                    <li class="day14-select__option" role="option" tabindex="-1" data-value="{{ kind }}" aria-selected="{{ 'true' if kind == 'decision' else 'false' }}">{{ {'stack': 'стек', 'architecture': 'архитектура', 'decision': 'решение', 'business': 'бизнес-правило'}[kind] }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              <input name="check" type="text" maxlength="200" placeholder="регулярка-улика (необязательно)">
+            </div>
+            <div class="day14-form__actions">
+              <button type="submit" class="day14-btn day14-btn--go">[+] Добавить</button>
+              <button type="button" class="day14-btn" data-form-close>Закрыть</button>
+            </div>
+          </form>
+
+          <p class="agent-kicker day14-debug-kicker">Сводка</p>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>ходов проверено</dt><dd data-debug="turns">0</dd></div>
+            <div><dt>отказал сам</dt><dd data-debug="refused">0</dd></div>
+            <div><dt>назвал правило</dt><dd data-debug="named">0</dd></div>
+            <div><dt>тревог регулярки</dt><dd data-debug="alarms">0</dd></div>
+            <div><dt>из них ложных</dt><dd data-debug="false_alarms">0</dd></div>
+            <div><dt>уступил, поймал код</dt><dd data-debug="caught">0</dd></div>
+            <div><dt>≈ инварианты в промпт</dt><dd data-debug="invariants_tokens">0</dd></div>
+            <div><dt>запросов ревизора</dt><dd data-debug="side_requests">0</dd></div>
+            <div><dt>токенов ревизора</dt><dd data-debug="side_tokens">0</dd></div>
+          </dl>
+
+          <details class="day14-prompt">
+            <summary>системный промпт целиком</summary>
+            <pre data-system-text></pre>
+          </details>
+        </div>
+      </aside>
+    </div>
+
+    <section class="day14-journal" aria-labelledby="day14-journal-title">
+      <div class="day14-heading">
+        <div>
+          <p class="day14-kicker">Журнал проверок</p>
+          <h3 id="day14-journal-title">Кто удержал правило</h3>
+        </div>
+        <button id="day14-clear" class="agent-chat__reset" type="button">[x] Очистить журнал</button>
+      </div>
+      <p class="day14-journal__note">Строка на каждый ход. «Отказал» и «назвал» — что сделал агент сам. «Регулярка» — тревога по словам-уликам, «ревизор» — судья: когда он отработал, его слово главнее. Регулярка легко срабатывает на «никакого base64» в правильном ответе — это ложная тревога, и ревизор её снимает.</p>
+      <div class="day14-table__scroll">
+        <table class="day14-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>запрос</th>
+              <th>отказал</th>
+              <th>назвал</th>
+              <th>регулярка</th>
+              <th>ревизор</th>
+              <th>итог</th>
+            </tr>
+          </thead>
+          <tbody data-checks></tbody>
+        </table>
+        <p class="day14-journal__empty" data-checks-empty>Пока ни одной проверки.</p>
+      </div>
+    </section>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+    <template id="day14-marker-template">
+      <div class="day14-marker" data-marker>
+        <span class="day14-marker__icon" aria-hidden="true">≡</span>
+        <span data-marker-text></span>
+      </div>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day14.js') }}"></script>
+{% endblock %}

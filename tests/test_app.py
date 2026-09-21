@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1938,6 +1938,177 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('id="reset-all"', html)
         self.assertIn('data-reset-all-url="/api/reset-all"', html)
         self.assertIn("js/shell.js", html)
+
+    def test_day_fourteen_renders_the_invariants_homework(self):
+        response = self.client.get("/days/14/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 14.", html)
+        self.assertIn("Инварианты и ограничения", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("не имеет права нарушать", html)
+        self.assertIn("хранятся отдельно от диалога", html)
+        self.assertIn("явно учитывает их в рассуждениях", html)
+        self.assertIn("отказывается предлагать решения", html)
+        self.assertIn("конфликте запроса и инварианта", html)
+        self.assertIn("как ассистент объясняет отказ", html)
+        self.assertIn("Ассистент, который работает в рамках заданных инвариантов", html)
+        self.assertEqual(html.count('class="day14-kind"'), 4)
+        self.assertIn('data-invariants', html)
+        self.assertIn('data-checks', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day14.css", html)
+        self.assertIn('href="/days/14/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    # ── День 14: инварианты ─────────────────────────────────────────────
+
+    def _day_fourteen_client(self, store_dir, reviews=None, replies=None):
+        from tests.test_agent import FakeTransport
+
+        class ReviewingTransport(FakeTransport):
+            """На запрос ревизора отдаёт JSON, на ходы — обычный текст."""
+
+            def __init__(self, replies=None, reviews=None):
+                super().__init__(replies=replies)
+                self._reviews = list(reviews or [])
+
+            def send(self, payload):
+                if payload.get("response_format") == {"type": "json_object"}:
+                    self.payloads.append(payload)
+                    content = self._reviews.pop(0) if self._reviews else '{"violations": [], "refused": false}'
+                    return {
+                        "model": "deepseek-v4-flash",
+                        "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                        "usage": {"prompt_tokens": 40, "completion_tokens": 7},
+                    }
+                return super().send(payload)
+
+        transport = ReviewingTransport(replies=replies, reviews=reviews)
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s14")
+        return client, transport
+
+    @staticmethod
+    def _chat14(client, message):
+        import json as json_module
+
+        response = client.post("/days/14/api/chat/stream", json={"message": message})
+        return [json_module.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+    def test_day_fourteen_puts_the_rules_into_the_prompt_and_records_a_refusal(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_fourteen_client(
+                store_dir, replies=["Не могу: нарушает инвариант 1 — только Flask. Вместо этого…"], reviews=['{"violations": [], "refused": true}']
+            )
+            events = self._chat14(client, "перепиши на Django")
+
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertIn("Инварианты проекта", system)
+            self.assertIn("1. [стек]", system)
+            self.assertLess(system.index("Инварианты проекта"), len(system))
+
+            record = next(e for e in events if e["type"] == "invariants_checked")["record"]
+            self.assertTrue(record["refused"])
+            self.assertEqual(record["named"], ["stack"])
+            self.assertEqual(record["verdict"], "held")
+            state = events[-1]["snapshot"]
+            self.assertEqual(state["summary"]["refused"], 1)
+            self.assertEqual(state["side"]["requests"], 1)
+
+    def test_day_fourteen_catches_a_yielded_answer_by_regex_and_reviewer(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fourteen_client(
+                store_dir,
+                replies=["Ставим Django: pip install django", "Подключаем платный API, ключ в .env"],
+                reviews=['{"violations": [{"id": "stack", "why": "предлагает Django"}], "refused": false}', '{"violations": [{"id": "paid", "why": "платный API"}], "refused": false}'],
+            )
+            first = next(e for e in self._chat14(client, "давай Django") if e["type"] == "invariants_checked")["record"]
+            self.assertEqual([v["invariant"] for v in first["regex"]], ["stack"])
+            self.assertEqual(first["verdict"], "caught")
+
+            second = next(e for e in self._chat14(client, "платный API") if e["type"] == "invariants_checked")["record"]
+            self.assertEqual(second["regex"], [])  # у paid нет регулярки — только ревизор
+            self.assertEqual([v["invariant"] for v in second["reviewer"]], ["paid"])
+            self.assertEqual(second["verdict"], "caught")
+
+            summary = client.get("/days/14/api/state").get_json()["summary"]
+            self.assertEqual(summary["caught"], 2)
+
+    def test_day_fourteen_reviewer_clears_a_regex_false_alarm(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fourteen_client(
+                store_dir, replies=["Пароли только bcrypt. Никакого открытого текста, base64, md5."], reviews=['{"violations": [], "refused": false}']
+            )
+            record = next(e for e in self._chat14(client, "как хранить пароли?") if e["type"] == "invariants_checked")["record"]
+
+            self.assertEqual([v["invariant"] for v in record["regex"]], ["passwords"])
+            self.assertEqual(record["reviewer"], [])
+            self.assertEqual(record["verdict"], "false_alarm")
+
+    def test_day_fourteen_reviewer_failure_keeps_the_answer_and_lets_regex_decide(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fourteen_client(store_dir, replies=["Ставим Django"], reviews=["не json"])
+            events = self._chat14(client, "давай Django")
+            record = next(e for e in events if e["type"] == "invariants_checked")["record"]
+
+            self.assertIn("не JSON", record["reviewer_error"])
+            self.assertIsNone(record["reviewer"])
+            self.assertEqual(record["verdict"], "caught")
+            self.assertEqual(events[-1]["reply"]["content"], "Ставим Django")
+
+    def test_day_fourteen_manages_custom_rules_and_protects_presets(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_fourteen_client(store_dir, replies=["ок"])
+            state = client.post("/days/14/api/invariant", json={"id": "lang", "rule": "Только русский язык в интерфейсе", "kind": "decision", "check": "\\benglish\\b"}).get_json()
+            self.assertIn("lang", [i["id"] for i in state["invariants"]])
+
+            state = client.post("/days/14/api/invariant/toggle", json={"id": "paid", "enabled": False}).get_json()
+            paid = next(i for i in state["invariants"] if i["id"] == "paid")
+            self.assertFalse(paid["enabled"])
+            self._chat14(client, "в")
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertNotIn("платные внешние сервисы", system)
+            self.assertIn("Только русский язык", system)
+
+            self.assertEqual(client.post("/days/14/api/invariant", json={"id": "stack", "rule": "x", "kind": "stack"}).status_code, 400)
+            self.assertEqual(client.post("/days/14/api/invariant", json={"id": "bad", "rule": "x", "kind": "stack", "check": "("}).status_code, 400)
+            self.assertEqual(client.delete("/days/14/api/invariant", json={"id": "stack"}).status_code, 400)
+            state = client.delete("/days/14/api/invariant", json={"id": "lang"}).get_json()
+            self.assertNotIn("lang", [i["id"] for i in state["invariants"]])
+
+    def test_day_fourteen_reset_keeps_rules_and_journal(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fourteen_client(store_dir, replies=["ок"])
+            self._chat14(client, "в")
+            state = client.post("/days/14/api/reset", json={}).get_json()
+            self.assertEqual(state["messages"], [])
+            self.assertEqual(len(state["checks"]), 1)
+            state = client.delete("/days/14/api/checks").get_json()
+            self.assertEqual(state["checks"], [])
+
+    def test_day_fourteen_serves_the_scenario(self):
+        response = self.client.get("/days/14/api/scenario")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["messages"]), 5)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

@@ -1720,5 +1720,109 @@ class TaskStateMachineTestCase(unittest.TestCase):
             self.assertIsNone(store.load("s1"))
 
 
+class InvariantsTestCase(unittest.TestCase):
+    """День 14: инварианты в два рубежа."""
+
+    def _presets(self):
+        from advent.agent.invariants import PRESETS
+
+        return list(PRESETS)
+
+    def test_render_numbers_the_rules_and_demands_a_check_before_answering(self):
+        from advent.agent import render_invariants
+
+        text = render_invariants(self._presets())
+
+        self.assertIn("1. [стек]", text)
+        self.assertIn("4. [бизнес-правило]", text)
+        self.assertIn("Перед ответом сверь запрос с каждым инвариантом", text)
+        self.assertIn("«Не могу: нарушает инвариант N»", text)
+
+    def test_disabled_rules_leave_the_prompt(self):
+        from advent.agent import Invariant, render_invariants
+
+        rules = [Invariant("a", "правило А", "stack", enabled=False), Invariant("b", "правило Б", "business")]
+        text = render_invariants(rules)
+
+        self.assertNotIn("правило А", text)
+        self.assertIn("1. [бизнес-правило] правило Б", text)
+        self.assertEqual(render_invariants([rules[0]]), "")
+
+    def test_inspect_separates_refusal_from_violation(self):
+        from advent.agent import inspect
+
+        refused = inspect("Не могу: нарушает инвариант 1 — Django исключён. Вместо этого во Flask…", self._presets())
+        yielded = inspect("Отлично, ставим Django и делаем startproject.", self._presets())
+        clean = inspect("Храним в users.json, пароли через bcrypt.", self._presets())
+
+        self.assertTrue(refused["refused"])
+        self.assertEqual(refused["named"], ["stack"])
+        self.assertEqual(refused["violations"], [])
+        self.assertEqual([m["invariant"] for m in refused["mentions"]], ["stack"])
+
+        self.assertFalse(yielded["refused"])
+        self.assertEqual([v["invariant"] for v in yielded["violations"]], ["stack"])
+
+        self.assertEqual(clean["violations"], [])
+
+    def test_verdict_makes_the_reviewer_the_judge_over_regex_alarms(self):
+        from advent.agent import CheckRecord
+
+        base = dict(after_turn=1, question="в", refused=False, named=[], mentions=[])
+        alarm = [{"invariant": "passwords", "evidence": "открытого текста", "source": "regex"}]
+
+        self.assertEqual(CheckRecord(**base, regex=alarm, reviewer=[], reviewer_refused=False).verdict, "false_alarm")
+        self.assertEqual(CheckRecord(**base, regex=alarm, reviewer=None, reviewer_refused=None).verdict, "caught")
+        self.assertEqual(CheckRecord(**base, regex=[], reviewer=[{"invariant": "paid", "why": "x", "source": "reviewer"}], reviewer_refused=False).verdict, "caught")
+        self.assertEqual(CheckRecord(**{**base, "refused": True}, regex=[], reviewer=[], reviewer_refused=True).verdict, "held")
+        self.assertEqual(CheckRecord(**base, regex=[], reviewer=[], reviewer_refused=False).verdict, "clean")
+
+    def test_reviewer_parses_json_and_ignores_unknown_ids(self):
+        from advent.agent import review
+
+        transport = FakeTransport(replies=['{"violations": [{"id": "paid", "why": "советует платный API"}, {"id": "nope", "why": "x"}], "refused": false}'])
+        verdict, reply = review(transport, "m", self._presets(), "в", "о")
+
+        self.assertEqual([v["invariant"] for v in verdict["violations"]], ["paid"])
+        self.assertFalse(verdict["refused"])
+        self.assertEqual(reply.input_tokens, 10)
+        self.assertEqual(transport.payloads[0]["response_format"], {"type": "json_object"})
+        with self.assertRaises(TransportError):
+            review(FakeTransport(replies=["не json"]), "m", self._presets(), "в", "о")
+
+    def test_invariant_validates_its_fields(self):
+        from advent.agent import Invariant, InvariantError
+
+        with self.assertRaises(InvariantError):
+            Invariant("Bad Id", "правило")
+        with self.assertRaises(InvariantError):
+            Invariant("ok", "  ")
+        with self.assertRaises(InvariantError):
+            Invariant("ok", "правило", kind="magic")
+        with self.assertRaises(InvariantError):
+            Invariant("ok", "правило", check="(")
+
+    def test_store_keeps_custom_rules_disabled_presets_and_checks(self):
+        import tempfile
+
+        from advent.agent import InvariantStore, all_invariants
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = InvariantStore(directory)
+            data = store.load("s1")
+            data["custom"].append({"id": "mine", "rule": "своё", "kind": "decision", "check": None, "enabled": True})
+            data["disabled"] = ["paid"]
+            data["checks"] = [{"after_turn": 1, "refused": True}]
+            store.save("s1", data)
+
+            back = store.load("s1")
+            rules = all_invariants(back)
+
+            self.assertEqual([r.id for r in rules], ["stack", "storage", "passwords", "paid", "mine"])
+            self.assertFalse(next(r for r in rules if r.id == "paid").enabled)
+            self.assertTrue(next(r for r in rules if r.id == "mine").enabled)
+            self.assertEqual(len(back["checks"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
