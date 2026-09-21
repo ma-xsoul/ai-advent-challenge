@@ -2263,6 +2263,31 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(state["task"]["allowed"], [])
             self.assertEqual(client.post("/days/15/api/task/transition", json={"to": "execution"}).status_code, 409)
 
+    def test_day_fifteen_return_to_step_reopens_it_and_manual_close_gets_out(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fifteen_client(
+                store_dir, reports=['{"plan": ["a", "b"], "plan_ready": true}', '{"step_done": true, "note": "ок"}', '{"step_done": true, "note": "ок"}'], replies=["план", "1", "2"]
+            )
+            self._chat15(client, "цель")
+            client.post("/days/15/api/task/transition", json={"to": "execution"})
+            self._chat15(client, "делай")
+            state = self._chat15(client, "дальше")[-1]["snapshot"]
+            self.assertEqual(state["task"]["stage"], "validation")
+            self.assertEqual(state["task"]["allowed"], ["done", "execution"])
+
+            # «→ execution» с проверки — возврат: последний шаг открывается заново.
+            back = client.post("/days/15/api/task/transition", json={"to": "execution"}).get_json()
+            self.assertEqual(back["task"]["stage"], "execution")
+            self.assertEqual([s["done"] for s in back["task"]["steps"]], [True, False])
+            self.assertEqual(client.post("/days/15/api/task/transition", json={"to": "validation"}).status_code, 409)
+
+            # Закрыть шаг руками — и проверка снова разрешена.
+            closed = client.post("/days/15/api/task/step", json={}).get_json()
+            self.assertEqual(closed["task"]["stage"], "validation")
+            self.assertEqual(client.post("/days/15/api/task/step", json={}).status_code, 409)
+
     def test_day_fifteen_keeps_its_task_apart_from_day_thirteen(self):
         import os
         import tempfile

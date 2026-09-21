@@ -117,6 +117,7 @@
           data-state-url="{{ url_for('day15.state') }}"
           data-reset-url="{{ url_for('day15.reset') }}"
           data-transition-url="{{ url_for('day15.transition') }}"
+          data-step-url="{{ url_for('day15.step_done') }}"
           data-pause-url="{{ url_for('day15.pause') }}"
           data-resume-url="{{ url_for('day15.resume') }}"
           data-new-task-url="{{ url_for('day15.drop_task') }}"
@@ -152,10 +153,11 @@
           <p class="agent-kicker day15-debug-kicker">Запросить переход</p>
           <div class="day15-jump" data-jump>
             {% for stage in stages %}
-              <button type="button" class="day15-jump__btn" data-jump-to="{{ stage }}" title="Запросить переход в {{ stage }} — разрешит таблица">→ {{ stage }}</button>
+              <button type="button" class="day15-jump__btn" data-jump-to="{{ stage }}" title="Запросить переход в {{ stage }} — разрешит таблица"><span data-jump-label>→ {{ stage }}</span></button>
             {% endfor %}
           </div>
           <div class="day15-buttons" data-buttons>
+            <button type="button" data-action="step" class="day15-btn" title="Закрыть текущий шаг руками — это не переход, ворота не при чём">[✓] Шаг сделан</button>
             <button type="button" data-action="pause" class="day15-btn">[‖] Пауза</button>
             <button type="button" data-action="resume" class="day15-btn day15-btn--go">[▶] Продолжить</button>
           </div>

@@ -35,6 +35,7 @@
     state: form.dataset.stateUrl,
     reset: form.dataset.resetUrl,
     transition: form.dataset.transitionUrl,
+    step: form.dataset.stepUrl,
     pause: form.dataset.pauseUrl,
     resume: form.dataset.resumeUrl,
     newTask: form.dataset.newTaskUrl,
@@ -283,11 +284,21 @@
 
   // Пауза и продолжение — не переходы, а заморозка. А кнопки этапов
   // показываются все: любой можно запросить, разрешит таблица.
+  // Разрешённый переход подписывается своим смыслом: «→ execution» с этапа
+  // проверки — это возврат на доработку, и кнопка обязана это сказать.
+  const EDGE_LABELS = {
+    "planning→execution": "[→] утвердить план",
+    "execution→validation": "[→] на проверку",
+    "validation→done": "[✓] принять",
+    "validation→execution": "[↩] вернуть на шаг",
+  };
+
   const renderButtons = (task) => {
     const allow = new Set();
     if (task) {
       if (task.paused) allow.add("resume");
       else if (task.stage !== "done") allow.add("pause");
+      if (!task.paused && task.stage === "execution") allow.add("step");
     }
     buttonsBox.querySelectorAll("[data-action]").forEach((button) => {
       button.hidden = !allow.has(button.dataset.action);
@@ -297,7 +308,10 @@
       const allowed = new Set(task && !task.paused ? task.allowed || [] : []);
       jumpBox.querySelectorAll("[data-jump-to]").forEach((button) => {
         const target = button.dataset.jumpTo;
-        button.classList.toggle("is-allowed", allowed.has(target));
+        const isAllowed = allowed.has(target);
+        const label = isAllowed ? EDGE_LABELS[`${task.stage}→${target}`] : null;
+        button.querySelector("[data-jump-label]").textContent = label ? `${label} (${target})` : `→ ${target}`;
+        button.classList.toggle("is-allowed", isAllowed);
         button.classList.toggle("is-current", Boolean(task) && task.stage === target);
         button.disabled = !task || busy || task.stage === target;
       });
@@ -538,6 +552,7 @@
     approve: () => jump("execution"),
     accept: () => jump("done"),
     jump: (target) => jump(target),
+    step: () => apply(() => postJson(urls.step), "Шаг закрыт вручную"),
     pause: () => apply(() => postJson(urls.pause), "Пауза: состояние сохранено"),
     // Продолжение — не только флаг: агент сразу получает реплику и должен
     // ответить следующим шагом, а не вопросом «о чём была задача».

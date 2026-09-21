@@ -183,6 +183,16 @@ def transition():
     return _with_task(session_id(), lambda task, turn: task.request(target, actor="user", turn=turn))
 
 
+@bp.post("/api/task/step")
+def step_done():
+    """
+    Закрыть текущий шаг руками. Это не переход между этапами — ворота не
+    при чём; но без него после возврата на шаг было не выбраться:
+    наблюдатель закрывает шаги только после ответа агента.
+    """
+    return _with_task(session_id(), lambda task, turn: task.complete_step(turn=turn, reason="шаг закрыт вручную"))
+
+
 @bp.post("/api/task/pause")
 def pause():
     return _with_task(session_id(), lambda task, turn: task.pause(turn=turn))
