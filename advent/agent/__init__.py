@@ -69,11 +69,25 @@ from .scenarios import (
     TaskStep,
 )
 from .store import JsonStore, StoreError, StoredSession
-from .task import STAGES, STAGE_TITLES, TaskError, TaskState, TaskStore, observe, new_task, retelling
+from .task import (
+    ACTORS,
+    STAGES,
+    STAGE_TITLES,
+    TRANSITIONS,
+    TaskError,
+    TaskState,
+    TaskStore,
+    allowed_targets,
+    new_task,
+    observe,
+    requested_transition,
+    retelling,
+)
 from .tokens import estimate_tokens
 from .transport import DeepSeekTransport, Transport, TransportError
 
 __all__ = [
+    "ACTORS",
     "Agent",
     "AgentConfig",
     "AgentRegistry",
@@ -81,6 +95,7 @@ __all__ = [
     "AgentUsage",
     "all_invariants",
     "all_profiles",
+    "allowed_targets",
     "Branch",
     "BRANCH_SCENARIOS",
     "BranchScenario",
@@ -129,6 +144,7 @@ __all__ = [
     "ProfileError",
     "ProfileStore",
     "render_invariants",
+    "requested_transition",
     "retelling",
     "review",
     "route_by_agent",
@@ -148,6 +164,7 @@ __all__ = [
     "TaskState",
     "TaskStep",
     "TaskStore",
+    "TRANSITIONS",
     "Transport",
     "TransportError",
     "TreeStore",

@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -2109,6 +2109,177 @@ class AdventAppTestCase(unittest.TestCase):
         response = self.client.get("/days/14/api/scenario")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["messages"]), 5)
+
+    def test_day_fifteen_renders_the_transitions_homework(self):
+        response = self.client.get("/days/15/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 15.", html)
+        self.assertIn("Контролируемые переходы", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("явные переходы между состояниями задачи", html)
+        self.assertIn("допустимые состояния", html)
+        self.assertIn("разрешённые переходы", html)
+        self.assertIn("«перепрыгнуть» этап", html)
+        self.assertIn("нельзя делать реализацию до утверждённого плана", html)
+        self.assertIn("нельзя делать финал без валидации", html)
+        self.assertIn("продолжения после паузы", html)
+        self.assertIn("Ассистент с контролируемым жизненным циклом задачи", html)
+        self.assertEqual(html.count('class="day15-rule"'), 4)
+        self.assertIn('data-jump-to="done"', html)
+        self.assertIn("planning → execution", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day15.css", html)
+        self.assertIn('href="/days/15/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    # ── День 15: контролируемые переходы ───────────────────────────────
+
+    def _day_fifteen_client(self, store_dir, reports=None, replies=None):
+        from tests.test_agent import FakeTransport
+
+        class ObservingTransport(FakeTransport):
+            def __init__(self, replies=None, reports=None):
+                super().__init__(replies=replies)
+                self._reports = list(reports or [])
+
+            def send(self, payload):
+                if payload.get("response_format") == {"type": "json_object"}:
+                    self.payloads.append(payload)
+                    content = self._reports.pop(0) if self._reports else '{"plan": [], "plan_ready": false}'
+                    return {
+                        "model": "deepseek-v4-flash",
+                        "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                        "usage": {"prompt_tokens": 30, "completion_tokens": 9},
+                    }
+                return super().send(payload)
+
+        transport = ObservingTransport(replies=replies, reports=reports)
+        app = create_app({"TESTING": True, "AGENT_STORE_DIR": store_dir, "AGENT_TRANSPORT": transport})
+        client = app.test_client()
+        client.set_cookie("agent_session", "s15")
+        return client, transport
+
+    @staticmethod
+    def _chat15(client, message):
+        import json as json_module
+
+        response = client.post("/days/15/api/chat/stream", json={"message": message})
+        return [json_module.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+    def test_day_fifteen_button_cannot_jump_and_the_refusal_is_logged(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fifteen_client(store_dir, reports=['{"plan": ["a", "b"], "plan_ready": true}'], replies=["план"])
+            self._chat15(client, "цель")
+
+            response = client.post("/days/15/api/task/transition", json={"to": "done"})
+            data = response.get_json()
+
+            self.assertEqual(response.status_code, 409)
+            self.assertTrue(data["transition"]["refused"])
+            self.assertIn("переход planning → done не разрешён", data["transition"]["reason"])
+            self.assertEqual(data["task"]["stage"], "planning")
+            self.assertEqual(data["summary"]["refused_user"], 1)
+            self.assertEqual(data["task"]["allowed"], ["execution"])
+
+            ok = client.post("/days/15/api/task/transition", json={"to": "execution"})
+            self.assertEqual(ok.status_code, 200)
+            self.assertEqual(ok.get_json()["task"]["stage"], "execution")
+            self.assertEqual(client.post("/days/15/api/task/transition", json={"to": "нет"}).status_code, 400)
+
+    def test_day_fifteen_model_requests_go_through_the_gate(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, transport = self._day_fifteen_client(
+                store_dir,
+                reports=['{"plan": ["a"], "plan_ready": true}', '{"step_done": true, "note": "ок"}'],
+                replies=["план\n[переход: execution]", "шаг сделан\n[переход: validation]"],
+            )
+            events = self._chat15(client, "цель")
+            refused = next(e for e in events if e["type"] == "task_transition")["record"]
+            self.assertTrue(refused["refused"])
+            self.assertEqual(refused["actor"], "model")
+            turns = [item for item in transport.payloads if "response_format" not in item]
+            system = next(m for m in turns[-1]["messages"] if m["role"] == "system")["content"]
+            self.assertIn("Разрешённые переходы", system)
+
+            client.post("/days/15/api/task/transition", json={"to": "execution"})
+            events = self._chat15(client, "делай")
+            # Модель попросила validation, пока шаг открыт — отказ; потом наблюдатель
+            # закрыл последний шаг, и автомат сам ушёл на проверку разрешённым переходом.
+            transitions = [e["record"] for e in events if e["type"] == "task_transition"]
+            self.assertTrue(transitions[0]["refused"])
+            self.assertIn("не закрыты шаги 1", transitions[0]["reason"])
+            self.assertEqual(events[-1]["snapshot"]["task"]["stage"], "validation")
+            self.assertEqual(events[-1]["snapshot"]["summary"]["refused_model"], 2)
+
+    def test_day_fifteen_observer_cannot_finish_the_task(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fifteen_client(
+                store_dir,
+                reports=['{"plan": ["a"], "plan_ready": true}', '{"step_done": true, "note": "ок"}', '{"verdict": "ok", "step": null, "issues": []}'],
+                replies=["план", "сделал", "всё сходится"],
+            )
+            self._chat15(client, "цель")
+            client.post("/days/15/api/task/transition", json={"to": "execution"})
+            self._chat15(client, "делай")
+            events = self._chat15(client, "проверь")
+
+            refused = [e["record"] for e in events if e["type"] == "task_transition" and e["record"]["refused"]]
+            self.assertEqual(refused[-1]["actor"], "observer")
+            self.assertIn("только пользователь", refused[-1]["reason"])
+            self.assertEqual(events[-1]["snapshot"]["task"]["stage"], "validation")
+
+            done = client.post("/days/15/api/task/transition", json={"to": "done"}).get_json()
+            self.assertEqual(done["task"]["stage"], "done")
+
+    def test_day_fifteen_refusing_answer_keeps_the_plan_and_pause_survives_reset(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fifteen_client(
+                store_dir,
+                reports=['{"plan": ["a", "b"], "plan_ready": true}', '{"plan": [], "plan_ready": false}'],
+                replies=["план", "Не могу: сначала утвердите план"],
+            )
+            self._chat15(client, "цель")
+            events = self._chat15(client, "пиши код сейчас")
+            check = next(e for e in events if e["type"] == "task_jump_check")
+            self.assertTrue(check["refused"])
+            self.assertEqual(len(events[-1]["snapshot"]["task"]["steps"]), 2)
+
+            client.post("/days/15/api/task/pause", json={})
+            state = client.post("/days/15/api/reset", json={}).get_json()
+            self.assertEqual(state["messages"], [])
+            self.assertTrue(state["task"]["paused"])
+            self.assertEqual(state["task"]["allowed"], [])
+            self.assertEqual(client.post("/days/15/api/task/transition", json={"to": "execution"}).status_code, 409)
+
+    def test_day_fifteen_keeps_its_task_apart_from_day_thirteen(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_fifteen_client(store_dir, reports=['{"plan": ["a"], "plan_ready": true}'], replies=["план"])
+            self._chat15(client, "цель")
+            self.assertIn("s15-task15.json", os.listdir(store_dir))
+            self.assertIn("s15-d15.json", os.listdir(store_dir))
+            self.assertNotIn("s15-task.json", os.listdir(store_dir))
+
+    def test_day_fifteen_serves_the_guarded_scenario(self):
+        response = self.client.get("/days/15/api/scenario")
+        scenario = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(scenario["key"], "task-guarded")
+        self.assertEqual([s["kind"] for s in scenario["steps"]].count("jump"), 2)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

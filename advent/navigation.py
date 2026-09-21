@@ -123,6 +123,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=15,
+        title="Контролируемые переходы",
+        description="Этап нельзя перепрыгнуть",
+        endpoint="day15.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

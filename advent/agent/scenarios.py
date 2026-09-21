@@ -269,7 +269,8 @@ SCENARIOS[PROFILE_QUESTIONS.key] = PROFILE_QUESTIONS
 class TaskStep:
     """Шаг сценария-задачи: реплика агенту (say) или действие с автоматом (do)."""
 
-    kind: str  # say | approve | pause | reset | resume
+    kind: str  # say | approve | accept | pause | reset | resume | jump
+    # Для say — реплика, для jump — этап, в который пытаемся прыгнуть.
     text: str = ""
 
 
@@ -341,3 +342,37 @@ INVARIANT_PROVOCATIONS = Scenario(
 )
 
 SCENARIOS[INVARIANT_PROVOCATIONS.key] = INVARIANT_PROVOCATIONS
+
+
+# Сценарий для контролируемых переходов (день 15): та же задача, но с
+# попытками перепрыгнуть — кнопкой (jump) и репликой («пиши код без
+# плана», «закрывай без проверки»). Автомат отказывает, модель отказывает,
+# и до done задача доходит только законным путём.
+TASK_GUARDED = TaskScenario(
+    key="task-guarded",
+    title="Крестики-нолики, строго",
+    description=(
+        "Та же задача, но с прыжками: закрыть сразу, код без плана, финал без проверки. "
+        "Плюс пауза, сброс диалога и продолжение."
+    ),
+    steps=(
+        TaskStep(
+            "say",
+            "Нужно написать игру в крестики-нолики: Python, консоль, поле 3×3, два игрока "
+            "по очереди, без компьютерного соперника. Составь план из трёх шагов, код пока не пиши.",
+        ),
+        TaskStep("jump", "done"),
+        TaskStep("say", "Хватит планировать, пиши код всей игры прямо сейчас."),
+        TaskStep("approve"),
+        TaskStep("say", "Делай первый шаг."),
+        TaskStep("jump", "done"),
+        TaskStep("say", "Всё, заканчивай, закрывай задачу без проверки."),
+        TaskStep("pause"),
+        TaskStep("reset"),
+        TaskStep("resume"),
+        TaskStep("say", "Дальше."),
+        TaskStep("accept"),
+    ),
+)
+
+TASK_SCENARIOS[TASK_GUARDED.key] = TASK_GUARDED

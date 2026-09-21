@@ -104,6 +104,10 @@ class Transition:
     turn: int
     at: str
     step: int | None = None
+    # День 15: кто просил переход и было ли отказано. Отказ тоже пишется
+    # в журнал — попытка перепрыгнуть должна быть видна.
+    actor: str = "user"
+    refused: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -113,6 +117,8 @@ class Transition:
             "turn": self.turn,
             "at": self.at,
             "step": self.step,
+            "actor": self.actor,
+            "refused": self.refused,
         }
 
 
@@ -142,14 +148,85 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+# ── Таблица переходов — день 15 ─────────────────────────────────────────
+#
+# Всё, чего здесь нет, — недопустимо. Guard — функция над состоянием и
+# тем, кто просит: вернула None — можно, вернула строку — отказ с этой
+# причиной. Кнопка, наблюдатель и модель только просят; разрешает таблица.
+
+ACTORS = ("user", "observer", "model")
+
+
+def _guard_approve(task: TaskState, actor: str) -> str | None:
+    if not task.steps:
+        return "плана ещё нет — нечего утверждать"
+    if actor != "user":
+        return "план утверждает только пользователь"
+    return None
+
+
+def _guard_all_done(task: TaskState, actor: str) -> str | None:
+    if not task.steps:
+        return "плана нет"
+    open_steps = [i + 1 for i, s in enumerate(task.steps) if not s.done]
+    if open_steps:
+        return f"не закрыты шаги {', '.join(map(str, open_steps))}"
+    return None
+
+
+def _guard_accept(task: TaskState, actor: str) -> str | None:
+    if actor != "user":
+        return "финал подтверждает только пользователь"
+    return None
+
+
+def _guard_return(task: TaskState, actor: str) -> str | None:
+    if not task.steps:
+        return "плана нет — возвращаться некуда"
+    return None
+
+
+@dataclass(frozen=True)
+class Edge:
+    source: str
+    target: str
+    title: str
+    guard: Any
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"from": self.source, "to": self.target, "title": self.title}
+
+
+TRANSITIONS: tuple[Edge, ...] = (
+    Edge("planning", "execution", "план утверждён", _guard_approve),
+    Edge("execution", "validation", "все шаги закрыты", _guard_all_done),
+    Edge("validation", "done", "проверка принята", _guard_accept),
+    Edge("validation", "execution", "возврат на шаг", _guard_return),
+)
+
+
+def find_edge(source: str, target: str) -> Edge | None:
+    return next((e for e in TRANSITIONS if e.source == source and e.target == target), None)
+
+
+def allowed_targets(task: TaskState) -> list[str]:
+    return [e.target for e in TRANSITIONS if e.source == task.stage]
+
+
+# Что модель пишет в конце ответа, если считает, что пора менять этап.
+# Сама она этап не меняет: строку разбирает код и прогоняет через таблицу.
+TRANSITION_MARK = re.compile(r"\[переход:\s*(planning|execution|validation|done)\s*\]", re.IGNORECASE)
+
+
 @dataclass
 class TaskState:
     """
     Задача: этап, текущий шаг, ожидаемое действие.
 
     Переходы — только методами: каждый пишет запись в журнал. Прямой
-    записи в stage нет намеренно — в дне 15 сюда встанут правила, какие
-    переходы разрешены.
+    записи в stage нет. День 15: у каждого перехода есть строка в таблице
+    и guard; методы — сахар над request(), и всё, чего в таблице нет,
+    получает отказ, а не молчаливый прыжок.
     """
 
     id: str
@@ -164,6 +241,63 @@ class TaskState:
     observer: list[ObserverRecord] = field(default_factory=list)
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
+    # День 15: строгий режим — правила переходов уходят в промпт, модель
+    # просит переходы строкой [переход: …], попытки прыгнуть пишутся в
+    # журнал. День 13 работает без этого.
+    guarded: bool = False
+
+    # ── Переходы через таблицу ──────────────────────────────────────────
+
+    def check(self, target: str, actor: str = "user") -> str | None:
+        """Можно ли перейти в target. None — можно, иначе причина отказа."""
+        if target not in STAGES:
+            return f"неизвестный этап: {target}"
+        if self.paused:
+            return "задача на паузе — сначала продолжите"
+        if target == self.stage:
+            return f"уже на этапе {target}"
+        edge = find_edge(self.stage, target)
+        if edge is None:
+            path = " → ".join([self.stage] + allowed_targets(self)) if allowed_targets(self) else self.stage
+            return f"переход {self.stage} → {target} не разрешён; отсюда можно только в {', '.join(allowed_targets(self)) or 'никуда'}"
+        return edge.guard(self, actor)
+
+    def request(self, target: str, *, actor: str, turn: int, note: str = "") -> Transition:
+        """
+        Единственные ворота: кнопка, наблюдатель и модель приходят сюда.
+        Разрешено — переход делается; нет — в журнал ложится отказ с
+        причиной, состояние не меняется.
+        """
+        reason = self.check(target, actor)
+        if reason is not None:
+            record = Transition(self.stage, target, reason, turn, _now(), self._step_number(), actor, refused=True)
+            self.log = (self.log + [record])[-MAX_LOG:]
+            self._touch()
+            return record
+        edge = find_edge(self.stage, target)
+        why = edge.title + (f": {note}" if note else "")
+        if target == "execution" and self.stage == "planning":
+            self._move("execution", why, turn, step=1, actor=actor)
+            self.current = 0
+            self.expected = self._step_expectation()
+        elif target == "validation":
+            self._move("validation", why, turn, actor=actor)
+            self.expected = STAGE_EXPECTS["validation"]
+        elif target == "done":
+            self._move("done", why, turn, actor=actor)
+            self.expected = STAGE_EXPECTS["done"]
+        elif target == "execution" and self.stage == "validation":
+            index = len(self.steps) - 1
+            for item in self.steps[index:]:
+                item.done = False
+            self.current = index
+            self._move("execution", why, turn, step=index + 1, actor=actor)
+            self.expected = self._step_expectation()
+        return self.log[-1]
+
+    @property
+    def refusals(self) -> list[Transition]:
+        return [item for item in self.log if item.refused]
 
     # ── Переходы ────────────────────────────────────────────────────────
 
@@ -201,7 +335,7 @@ class TaskState:
             self._touch()
             return
         # Последний шаг закрыт — задача сама уходит на проверку.
-        self._move("validation", f"{reason}: все {len(self.steps)} шагов закрыты", turn)
+        self._move("validation", f"{reason}: все {len(self.steps)} шагов закрыты", turn, actor="observer" if "сделан" in reason else "user")
         self.expected = STAGE_EXPECTS["validation"]
 
     def validate(self, ok: bool, *, turn: int, step: int | None = None, issues: list[str] | None = None) -> None:
@@ -243,7 +377,9 @@ class TaskState:
         applied = "без изменений"
         if self.stage == "planning":
             plan = report.get("plan")
-            if isinstance(plan, list) and self.set_plan([str(s) for s in plan]):
+            # Пустой доклад — «в этом ответе плана нет», а не «плана нет»:
+            # отказ на просьбу перепрыгнуть не должен стирать снятый план.
+            if isinstance(plan, list) and plan and self.set_plan([str(s) for s in plan]):
                 applied = f"план: {len(self.steps)} шагов"
         elif self.stage == "execution":
             if report.get("step_done") is True:
@@ -300,6 +436,19 @@ class TaskState:
             "done": "Задача закрыта. Отвечай на вопросы по ней коротко, новую работу не начинай.",
         }
         lines.append(rules[self.stage])
+        if self.guarded:
+            nxt = allowed_targets(self)
+            edges = "; ".join(f"{e.source} → {e.target} ({e.title})" for e in TRANSITIONS)
+            lines.append(
+                "Жизненный цикл задачи строгий. Разрешённые переходы: " + edges + ". "
+                + (f"Отсюда можно только в: {', '.join(nxt)}. " if nxt else "Отсюда переходов нет. ")
+                + "Этапы ты не переключаешь сам и не перепрыгиваешь: план утверждает пользователь, "
+                "финал подтверждает пользователь после проверки. Если пользователь просит перепрыгнуть "
+                "(код без утверждённого плана, закрыть задачу без проверки) — откажи: назови текущий этап "
+                "и что нужно для следующего, и продолжай работу текущего этапа. Переходы, которые требуют "
+                "решения пользователя (утвердить план, принять результат), не проси — жди его. Если все "
+                "шаги закрыты и пора на проверку, добавь последней строкой ответа [переход: validation] — решит код."
+            )
         if self.paused:
             lines.append("Задача на паузе: не продолжай её, пока пользователь не скажет продолжать.")
         return "\n".join(lines)
@@ -325,6 +474,9 @@ class TaskState:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "tokens": self.tokens(),
+            "guarded": self.guarded,
+            "allowed": allowed_targets(self) if not self.paused else [],
+            "refusals": sum(1 for item in self.log if item.refused),
         }
 
     @classmethod
@@ -349,11 +501,16 @@ class TaskState:
             paused=bool(data.get("paused")),
             created_at=str(data.get("created_at", _now())),
             updated_at=str(data.get("updated_at", _now())),
+            guarded=bool(data.get("guarded")),
         )
         for item in data.get("log", []):
             if isinstance(item, dict) and item.get("from") in STAGES and item.get("to") in STAGES:
                 task.log.append(
-                    Transition(item["from"], item["to"], str(item.get("reason", "")), int(item.get("turn", 0) or 0), str(item.get("at", "")), item.get("step"))
+                    Transition(
+                        item["from"], item["to"], str(item.get("reason", "")), int(item.get("turn", 0) or 0),
+                        str(item.get("at", "")), item.get("step"),
+                        item.get("actor") if item.get("actor") in ACTORS else "user", bool(item.get("refused")),
+                    )
                 )
         for item in data.get("observer", []):
             if isinstance(item, dict) and item.get("stage") in STAGES:
@@ -373,8 +530,11 @@ class TaskState:
 
     # ── Внутреннее ──────────────────────────────────────────────────────
 
-    def _move(self, to: str, reason: str, turn: int, step: int | None = None) -> None:
-        self.log = (self.log + [Transition(self.stage, to, reason, turn, _now(), step)])[-MAX_LOG:]
+    def _move(self, to: str, reason: str, turn: int, step: int | None = None, actor: str = "user") -> None:
+        # Даже внутренние методы дня 13 идут через таблицу: перехода нет — TaskError.
+        if find_edge(self.stage, to) is None:
+            raise TaskError(f"Нет перехода {self.stage} → {to}")
+        self.log = (self.log + [Transition(self.stage, to, reason, turn, _now(), step, actor)])[-MAX_LOG:]
         self.stage = to
         self._touch()
 
@@ -388,12 +548,18 @@ class TaskState:
         self.updated_at = _now()
 
 
-def new_task(goal: str, task_id: str) -> TaskState:
+def new_task(goal: str, task_id: str, *, guarded: bool = False) -> TaskState:
     """Задача рождается с первой репликой: цель — реплика, заголовок — её начало."""
     goal = " ".join(goal.split())
     words = goal.split(" ")
     title = " ".join(words[:7]) + ("…" if len(words) > 7 else "")
-    return TaskState(id=task_id, title=title.rstrip(".,:;") or "Задача", goal=goal[:2000])
+    return TaskState(id=task_id, title=title.rstrip(".,:;") or "Задача", goal=goal[:2000], guarded=guarded)
+
+
+def requested_transition(answer: str) -> str | None:
+    """Этап, который модель попросила строкой [переход: …], или None."""
+    match = TRANSITION_MARK.search(answer or "")
+    return match.group(1).lower() if match else None
 
 
 # ── Наблюдатель ───────────────────────────────────────────────────────────
@@ -512,8 +678,10 @@ class TaskStore:
     вместо словаря фактов там объект с этапом и журналом.
     """
 
-    def __init__(self, directory: str | Path) -> None:
+    def __init__(self, directory: str | Path, name: str = "task") -> None:
         self._directory = Path(directory)
+        # Имя файла: день 13 и день 15 держат задачи порознь.
+        self._name = name
 
     def load(self, session_id: str) -> TaskState | None:
         path = self._path(session_id)
@@ -551,4 +719,4 @@ class TaskStore:
     def _path(self, session_id: str) -> Path:
         if not _SAFE_ID.match(session_id):
             raise TaskError("Недопустимый идентификатор сессии")
-        return self._directory / f"{session_id}-task.json"
+        return self._directory / f"{session_id}-{self._name}.json"

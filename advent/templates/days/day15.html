@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}День 15. Контролируемые переходы · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/lab.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day15.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 15</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Transitions · Guards · Lifecycle</span>
+    </div>
+    <h1>День 15.<br><span>Контролируемые переходы</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание пятнадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Реализуйте явные переходы между состояниями задачи.</p>
+      <ul class="homework-brief__steps">
+        <li>У задачи есть допустимые состояния.</li>
+        <li>Между ними есть разрешённые переходы.</li>
+        <li>Ассистент не может «перепрыгнуть» этап.</li>
+        <li>Пример: нельзя делать реализацию до утверждённого плана; нельзя делать финал без валидации.</li>
+        <li>Проверьте попытки перейти в недопустимое состояние и реакцию ассистента.</li>
+        <li>Проверьте корректность продолжения после паузы.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Ассистент с контролируемым жизненным циклом задачи.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код / текст</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day15-lab" aria-labelledby="day15-lab-title">
+    <div class="day15-lab__intro">
+      <p class="day15-kicker">Практика</p>
+      <h2 id="day15-lab-title">Переход — это разрешение, а не желание</h2>
+      <p>В дне 13 автомат уже двигал задачу по этапам, но переходы были зашиты в методы и стояли на честном слове: «утвердить» можно было нажать сразу, а модель могла сказать «готово» без проверки. Теперь правила переходов — отдельная таблица: откуда, куда, при каком условии. Всё, чего в таблице нет, — недопустимо, и на такую попытку ассистент отвечает отказом с объяснением, а не тихо перепрыгивает.</p>
+    </div>
+
+    <ol class="day15-rules">
+      <li class="day15-rule">
+        <span class="day15-rule__rank">01</span>
+        <h3>Таблица переходов</h3>
+        <p>planning → execution только по утверждению плана; execution → validation только когда все шаги закрыты; validation → done только по вердикту «принято»; validation → execution — возврат на шаг.</p>
+        <p class="day15-rule__formula">откуда · куда · условие</p>
+      </li>
+      <li class="day15-rule">
+        <span class="day15-rule__rank">02</span>
+        <h3>Guard'ы</h3>
+        <p>Условие перехода — функция над состоянием: план не пуст, шаги закрыты, вердикт стоит. Не выполнилось — перехода нет, даже если нажали кнопку или модель сказала «готово».</p>
+        <p class="day15-rule__formula">guard(state) → да / нет + причина</p>
+      </li>
+      <li class="day15-rule">
+        <span class="day15-rule__rank">03</span>
+        <h3>Прыжок запрещён</h3>
+        <p>Попытка «сразу к финалу» или «давай код без плана» — недопустимый переход. Ассистент отказывает, называет текущий этап и что нужно, чтобы двинуться дальше.</p>
+        <p class="day15-rule__formula">перехода нет в таблице → отказ + путь</p>
+      </li>
+      <li class="day15-rule">
+        <span class="day15-rule__rank">04</span>
+        <h3>Пауза — не состояние</h3>
+        <p>Пауза не меняет этап, а замораживает его: после неё можно только продолжить с того же места. Продолжение проверяется так же, как в дне 13 — без пересказа.</p>
+        <p class="day15-rule__formula">pause ⟲ resume, этап тот же</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day15-store-error" role="alert">Файл сессии повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day15-controls">
+      <p class="day15-controls__note">Одни ворота для всех: кнопка, наблюдатель и модель только просят переход, разрешает таблица. Попробуйте прыгнуть — кнопки этапов ниже запрашивают любой переход, и отказ ляжет в журнал с причиной.</p>
+      <div class="day15-actions">
+        {% if scenario %}
+          <button id="day15-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day15.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="day15-new-task" class="agent-chat__restart" type="button" title="Снять задачу: следующая реплика создаст новую">[◇] Новая задача</button>
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стек очищается, задача остаётся">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench day15-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day15-stage-hint" data-stage-hint>задачи нет — первая реплика её создаст</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day15-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Опишите задачу — агент предложит план. Потом попробуйте попросить его перепрыгнуть.</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day15.chat_stream') }}"
+          data-state-url="{{ url_for('day15.state') }}"
+          data-reset-url="{{ url_for('day15.reset') }}"
+          data-transition-url="{{ url_for('day15.transition') }}"
+          data-pause-url="{{ url_for('day15.pause') }}"
+          data-resume-url="{{ url_for('day15.resume') }}"
+          data-new-task-url="{{ url_for('day15.drop_task') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: хватит планировать, пиши код прямо сейчас"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">Задача</p>
+          <h3 id="agent-debug-title" data-task="title">—</h3>
+          <p class="day15-goal" data-task="goal">Задачи ещё нет.</p>
+
+          <ol class="day15-stepper" data-stepper aria-label="Этапы">
+            {% for stage in stages %}
+              <li data-stage="{{ stage }}"><span>{{ loop.index }}</span>{{ stage }}</li>
+            {% endfor %}
+          </ol>
+
+          <dl class="day15-now">
+            <div><dt>этап</dt><dd data-task="stage">—</dd></div>
+            <div><dt>текущий шаг</dt><dd data-task="step">—</dd></div>
+            <div><dt>ожидаем</dt><dd data-task="expected">—</dd></div>
+            <div><dt>можно в</dt><dd data-task="allowed">—</dd></div>
+          </dl>
+
+          <p class="agent-kicker day15-debug-kicker">Запросить переход</p>
+          <div class="day15-jump" data-jump>
+            {% for stage in stages %}
+              <button type="button" class="day15-jump__btn" data-jump-to="{{ stage }}" title="Запросить переход в {{ stage }} — разрешит таблица">→ {{ stage }}</button>
+            {% endfor %}
+          </div>
+          <div class="day15-buttons" data-buttons>
+            <button type="button" data-action="pause" class="day15-btn">[‖] Пауза</button>
+            <button type="button" data-action="resume" class="day15-btn day15-btn--go">[▶] Продолжить</button>
+          </div>
+          <p class="day15-verdict" data-verdict hidden></p>
+
+          <p class="agent-kicker day15-debug-kicker">План</p>
+          <ol class="day15-plan" data-plan>
+            <li class="day15-plan__empty">Плана ещё нет.</li>
+          </ol>
+
+          <p class="day15-retell" data-retell hidden></p>
+
+          <p class="agent-kicker day15-debug-kicker">Таблица переходов</p>
+          <ul class="day15-edges">
+            {% for edge in edges %}
+              <li><span>{{ edge.from }} → {{ edge.to }}</span><small>{{ edge.title }}</small></li>
+            {% endfor %}
+          </ul>
+
+          <p class="agent-kicker day15-debug-kicker">Журнал переходов</p>
+          <ol class="day15-journal" data-journal>
+            <li class="day15-journal__empty">Переходов ещё не было.</li>
+          </ol>
+
+          <p class="agent-kicker day15-debug-kicker">Сводка</p>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>переходов сделано</dt><dd data-debug="transitions">0</dd></div>
+            <div><dt>отказано всего</dt><dd data-debug="refused">0</dd></div>
+            <div><dt>из них кнопке</dt><dd data-debug="refused_user">0</dd></div>
+            <div><dt>из них модели</dt><dd data-debug="refused_model">0</dd></div>
+            <div><dt>из них наблюдателю</dt><dd data-debug="refused_observer">0</dd></div>
+            <div><dt>в стеке</dt><dd data-debug="stack">0</dd></div>
+            <div><dt>≈ задача в промпт</dt><dd data-debug="task_tokens">0</dd></div>
+            <div><dt>запросов наблюдателя</dt><dd data-debug="side_requests">0</dd></div>
+          </dl>
+
+          <details class="day15-prompt">
+            <summary>системный промпт целиком</summary>
+            <pre data-system-text></pre>
+          </details>
+          <p class="day15-file" data-task-file></p>
+        </div>
+      </aside>
+    </div>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+    <template id="day15-marker-template">
+      <div class="day15-marker" data-marker>
+        <span class="day15-marker__icon" aria-hidden="true">≡</span>
+        <span data-marker-text></span>
+      </div>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day15.js') }}"></script>
+{% endblock %}

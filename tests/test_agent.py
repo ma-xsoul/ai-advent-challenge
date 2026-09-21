@@ -1824,5 +1824,110 @@ class InvariantsTestCase(unittest.TestCase):
             self.assertEqual(len(back["checks"]), 1)
 
 
+class TransitionGateTestCase(unittest.TestCase):
+    """День 15: таблица переходов и guard'ы — одни ворота для всех."""
+
+    def _task(self, plan=("a", "b", "c")):
+        from advent.agent import new_task
+
+        task = new_task("Крестики-нолики", "t1", guarded=True)
+        if plan:
+            task.set_plan(list(plan))
+        return task
+
+    def test_missing_edges_are_refused_and_logged(self):
+        task = self._task()
+
+        record = task.request("done", actor="user", turn=1)
+
+        self.assertTrue(record.refused)
+        self.assertIn("переход planning → done не разрешён", record.reason)
+        self.assertEqual(task.stage, "planning")
+        self.assertEqual(len(task.refusals), 1)
+        self.assertEqual(task.as_dict()["allowed"], ["execution"])
+
+    def test_only_the_user_approves_the_plan_and_accepts_the_result(self):
+        task = self._task()
+
+        self.assertIn("только пользователь", task.request("execution", actor="model", turn=1).reason)
+        self.assertIn("только пользователь", task.request("execution", actor="observer", turn=1).reason)
+        self.assertFalse(task.request("execution", actor="user", turn=1).refused)
+        self.assertEqual(task.stage, "execution")
+
+        for turn in (2, 3, 4):
+            task.complete_step(turn=turn)
+        self.assertEqual(task.stage, "validation")
+        self.assertIn("только пользователь", task.request("done", actor="observer", turn=5).reason)
+        self.assertFalse(task.request("done", actor="user", turn=5).refused)
+        self.assertEqual(task.stage, "done")
+
+    def test_no_plan_no_approval_and_no_validation_with_open_steps(self):
+        from advent.agent import new_task
+
+        empty = new_task("цель", "t0", guarded=True)
+        self.assertIn("плана ещё нет", empty.request("execution", actor="user", turn=1).reason)
+
+        task = self._task()
+        task.request("execution", actor="user", turn=1)
+        self.assertIn("не закрыты шаги 1, 2, 3", task.request("validation", actor="model", turn=2).reason)
+        task.complete_step(turn=2)
+        self.assertIn("не закрыты шаги 2, 3", task.request("validation", actor="model", turn=3).reason)
+
+    def test_paused_task_refuses_every_transition(self):
+        task = self._task()
+        task.pause(turn=1)
+
+        record = task.request("execution", actor="user", turn=1)
+
+        self.assertTrue(record.refused)
+        self.assertIn("на паузе", record.reason)
+        task.resume(turn=1)
+        self.assertFalse(task.request("execution", actor="user", turn=1).refused)
+
+    def test_internal_moves_cannot_skip_edges_either(self):
+        from advent.agent import TaskError
+
+        task = self._task()
+        with self.assertRaises(TaskError):
+            task._move("done", "прыжок", 1)
+
+    def test_empty_observer_report_keeps_the_plan(self):
+        task = self._task()
+
+        record = task.apply_report({"plan": [], "plan_ready": False}, turn=2)
+
+        self.assertEqual(record.applied, "без изменений")
+        self.assertEqual(len(task.steps), 3)
+
+    def test_guarded_prompt_lists_edges_and_forbids_jumping(self):
+        from advent.agent import new_task, requested_transition
+
+        text = self._task().render()
+        self.assertIn("Разрешённые переходы", text)
+        self.assertIn("planning → execution (план утверждён)", text)
+        self.assertIn("Отсюда можно только в: execution", text)
+        self.assertIn("не перепрыгиваешь", text)
+        self.assertNotIn("Разрешённые переходы", new_task("цель", "t2").render())
+
+        self.assertEqual(requested_transition("Все шаги закрыты.\n[переход: validation]"), "validation")
+        self.assertIsNone(requested_transition("Шаг сделан."))
+
+    def test_journal_entries_carry_actor_and_refusal_through_the_store(self):
+        import tempfile
+
+        from advent.agent import TaskStore
+
+        task = self._task()
+        task.request("done", actor="model", turn=1)
+        task.request("execution", actor="user", turn=1)
+        with tempfile.TemporaryDirectory() as directory:
+            store = TaskStore(directory, "task15")
+            store.save("s1", task)
+            back = store.load("s1")
+
+        self.assertTrue(back.guarded)
+        self.assertEqual([(t.actor, t.refused) for t in back.log], [("model", True), ("user", False)])
+
+
 if __name__ == "__main__":
     unittest.main()
