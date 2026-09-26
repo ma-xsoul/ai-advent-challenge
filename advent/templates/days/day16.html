@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}День 16. Подключение MCP · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day16.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 16</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>MCP · Handshake · Tools</span>
+    </div>
+    <h1>День 16.<br><span>Подключение MCP</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание шестнадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Установите MCP SDK / клиент (или поднимите MCP-сервер, если используете локальный вариант).</p>
+      <ul class="homework-brief__steps">
+        <li>Сделайте минимальный код, который устанавливает MCP-соединение.</li>
+        <li>Получите от MCP список доступных инструментов.</li>
+        <li>Проверьте, что соединение устанавливается.</li>
+        <li>Проверьте, что список инструментов корректно возвращается.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Код, который подключается к MCP и выводит список доступных инструментов.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day16-lab" aria-labelledby="day16-lab-title">
+    <div class="day16-lab__intro">
+      <p class="day16-kicker">Практика</p>
+      <h2 id="day16-lab-title">Соединение встало — что на той стороне</h2>
+      <p>Первые пятнадцать дней агент жил на одном слое промпта: всё, что он знал и умел, приходило текстом. MCP добавляет второй канал — инструменты. Сегодня без вызовов: встать в соединение и честно показать, что сервер предлагает — имена, описания и схемы входа. Клиент — официальный MCP SDK для Python; справа на странице каждое сообщение, которое он отправил и получил.</p>
+    </div>
+
+    <blockquote class="day16-curator">
+      <p>Здесь пока с MCP работать не нужно — просто запросить геттулз у любого общедоступного mcp.</p>
+      <cite>Алексей Гладков, 21.09 14:03</cite>
+    </blockquote>
+
+    <ol class="day16-rules">
+      <li class="day16-rule">
+        <span class="day16-rule__rank">01</span>
+        <h3>Транспорт</h3>
+        <p>Клиент сам запускает сервер процессом и говорит с ним по stdio — либо ходит по HTTP к уже поднятому. Свой сервер сегодня не нужен: берём общедоступный.</p>
+        <p class="day16-rule__formula">stdio · процесс · JSON-RPC</p>
+      </li>
+      <li class="day16-rule">
+        <span class="day16-rule__rank">02</span>
+        <h3>Рукопожатие</h3>
+        <p><code>initialize</code> — стороны называют версию протокола и свои возможности. SDK v2 сначала пробует новый <code>server/discover</code>, а на отказ откатывается к классике. Пока рукопожатие не прошло, спрашивать нечего.</p>
+        <p class="day16-rule__formula">discover? → initialize → initialized</p>
+      </li>
+      <li class="day16-rule">
+        <span class="day16-rule__rank">03</span>
+        <h3>tools/list</h3>
+        <p>Единственный запрос дня. Сервер отдаёт список: имя инструмента, описание и схему входа. Вызывать ничего не будем — это день 17.</p>
+        <p class="day16-rule__formula">запрос · список · без вызова</p>
+      </li>
+      <li class="day16-rule">
+        <span class="day16-rule__rank">04</span>
+        <h3>Цена схемы</h3>
+        <p>Схема каждого инструмента уходит в модель и занимает токены в каждом ходу. Счётчики у нас есть с дня 8 — посчитаем, во что обходится сам список.</p>
+        <p class="day16-rule__formula">схема → токены → каждый ход</p>
+      </li>
+    </ol>
+
+    <div class="day16-servers" role="radiogroup" aria-label="Сервер MCP">
+      {% for server in servers %}
+        <label class="day16-server">
+          <input type="radio" name="day16-server" value="{{ server.key }}"{% if loop.first %} checked{% endif %}>
+          <span class="day16-server__head">
+            <strong>{{ server.title }}</strong>
+            <span class="day16-badge">{{ server.transport }}</span>
+          </span>
+          <code class="day16-server__target">{{ server.target }}</code>
+          <small>{{ server.note }}</small>
+        </label>
+      {% endfor %}
+    </div>
+
+    <div class="day16-actions">
+      <button id="day16-connect" class="day16-connect" type="button" data-inspect-url="{{ url_for('day16.inspect') }}">[▶] Подключиться и запросить tools/list</button>
+      <span id="day16-status" class="day16-status" aria-live="polite"></span>
+    </div>
+
+    <p id="day16-error" class="day16-error" role="alert" hidden></p>
+
+    <div id="day16-result" class="day16-result" hidden>
+      <dl class="day16-summary">
+        <div><dt>соединение</dt><dd data-summary="connection">—</dd></div>
+        <div><dt>транспорт</dt><dd data-summary="transport">—</dd></div>
+        <div><dt>протокол</dt><dd data-summary="protocol">—</dd></div>
+        <div><dt>сервер</dt><dd data-summary="server">—</dd></div>
+        <div><dt>возможности</dt><dd data-summary="capabilities">—</dd></div>
+        <div><dt>инструментов</dt><dd data-summary="tools">—</dd></div>
+        <div><dt>обязательных параметров</dt><dd data-summary="required">—</dd></div>
+        <div><dt>≈ токенов на схемы</dt><dd data-summary="tokens">—</dd></div>
+        <div><dt>время</dt><dd data-summary="elapsed">—</dd></div>
+      </dl>
+
+      <details class="day16-instructions" data-instructions hidden>
+        <summary>инструкции сервера для модели</summary>
+        <pre data-instructions-text></pre>
+      </details>
+
+      <div class="day16-grid">
+        <section class="day16-panel" aria-labelledby="day16-tools-title">
+          <header class="day16-panel__head">
+            <h3 id="day16-tools-title">Инструменты</h3>
+            <span class="day16-panel__meta" data-tools-meta></span>
+          </header>
+          <ol class="day16-tools" data-tools></ol>
+        </section>
+
+        <section class="day16-panel" aria-labelledby="day16-wire-title">
+          <header class="day16-panel__head">
+            <h3 id="day16-wire-title">Провод</h3>
+            <span class="day16-panel__meta" data-wire-meta></span>
+          </header>
+          <p class="day16-fallback" data-fallback hidden>SDK сначала пробует новый протокол 2026-07-28 запросом <code>server/discover</code>. Сервер его не знает и отказывает — клиент откатывается на классическое рукопожатие <code>initialize</code>.</p>
+          <ol class="day16-wire" data-wire></ol>
+          <details class="day16-stderr" data-stderr hidden>
+            <summary>stderr процесса сервера</summary>
+            <pre data-stderr-text></pre>
+          </details>
+        </section>
+      </div>
+    </div>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/day16.js') }}"></script>
+{% endblock %}

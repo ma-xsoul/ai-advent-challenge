@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -2305,6 +2305,77 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(scenario["key"], "task-guarded")
         self.assertEqual([s["kind"] for s in scenario["steps"]].count("jump"), 2)
+
+    def test_day_sixteen_renders_the_mcp_connection_homework(self):
+        response = self.client.get("/days/16/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 16.", html)
+        self.assertIn("Подключение MCP", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Установите MCP SDK / клиент", html)
+        self.assertIn("устанавливает MCP-соединение", html)
+        self.assertIn("список доступных инструментов", html)
+        self.assertIn("соединение устанавливается", html)
+        self.assertIn("список инструментов корректно возвращается", html)
+        self.assertIn("Видео + код", html)
+        self.assertIn("геттулз у любого общедоступного mcp", html)
+        self.assertEqual(html.count('class="day16-rule"'), 4)
+        self.assertIn("tools/list", html)
+        self.assertIn('value="deepwiki" checked', html)
+        self.assertIn('value="everything"', html)
+        self.assertIn("https://mcp.deepwiki.com/mcp", html)
+        self.assertIn("npx -y @modelcontextprotocol/server-everything", html)
+        self.assertIn('data-inspect-url="/days/16/api/inspect"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day16.css", html)
+        self.assertIn("js/day16.js", html)
+        self.assertIn('href="/days/16/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def _day_sixteen_client(self, factory):
+        return create_app({"TESTING": True, "MCP_TRANSPORT_FACTORY": factory}).test_client()
+
+    def test_day_sixteen_connects_and_returns_tools_with_the_wire(self):
+        from tests.test_mcp import legacy_transport
+
+        client = self._day_sixteen_client(legacy_transport())
+        response = client.post("/days/16/api/inspect", json={"server": "deepwiki"})
+        data = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["server"]["key"], "deepwiki")
+        self.assertEqual(data["server"]["transport"], "http")
+        self.assertEqual(data["protocol_version"], "2025-11-25")
+        self.assertEqual([tool["name"] for tool in data["tools"]], ["search", "summarize", "save"])
+        self.assertEqual(data["required_params"], 2)
+        self.assertGreater(data["schema_tokens"], 0)
+        methods = [message["method"] for message in data["wire"] if message["direction"] == "out"]
+        self.assertEqual(methods[:3], ["server/discover", "initialize", "notifications/initialized"])
+        self.assertIn("tools/list", methods)
+
+    def test_day_sixteen_failed_connection_is_502_with_the_reason(self):
+        def refused(server, errlog):
+            raise ConnectionRefusedError("порт закрыт")
+
+        response = self._day_sixteen_client(refused).post("/days/16/api/inspect", json={"server": "everything"})
+        data = response.get_json()
+
+        self.assertEqual(response.status_code, 502)
+        self.assertFalse(data["ok"])
+        self.assertIn("порт закрыт", data["error"])
+        self.assertEqual(data["tools"], [])
+
+    def test_day_sixteen_rejects_unknown_server(self):
+        for payload in ({"server": "nope"}, {}, {"server": 1}, ["deepwiki"]):
+            with self.subTest(payload=payload):
+                response = self.client.post("/days/16/api/inspect", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.get_json(), {"error": "Выберите сервер из списка"})
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

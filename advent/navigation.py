@@ -131,6 +131,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=16,
+        title="Подключение MCP",
+        description="Соединение и список инструментов",
+        endpoint="day16.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 
