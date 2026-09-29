@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}День 17. Первый инструмент MCP · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day17.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 17</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>MCP server · Tool call · Result</span>
+    </div>
+    <h1>День 17.<br><span>Первый инструмент MCP</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание семнадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Реализуйте свой MCP-сервер вокруг любого API (например: Яндекс.Трекер, Git, CRM, mock API).</p>
+      <ul class="homework-brief__steps">
+        <li>Сделайте регистрацию инструмента.</li>
+        <li>Сделайте описание входных параметров.</li>
+        <li>Сделайте возврат результата.</li>
+        <li>Подключите инструмент к своему агенту и вызовите его из приложения.</li>
+        <li>Получите и используйте результат.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент делает вызов к MCP-инструменту и получает результат.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day17-lab" aria-labelledby="day17-lab-title">
+    <div class="day17-lab__intro">
+      <p class="day17-kicker">Практика</p>
+      <h2 id="day17-lab-title">Модель просит — агент вызывает</h2>
+      <p>В дне 16 мы только спросили чужой сервер, что он умеет. Теперь сервер свой, а инструмент реально вызывается. Но вызывает его не кнопка и не модель: модель видит схему и просит вызов, агент ходит в MCP и возвращает ей результат, а модель уже отвечает пользователю.</p>
+    </div>
+
+    <blockquote class="day17-curator">
+      <p>Ага, дёргаешь агента — он дёргает какие нужно MCP-вызовы.</p>
+      <cite>Алексей Гладков, 24.09 19:37 — на вопрос, должен ли агент сам понять, какой инструмент использовать</cite>
+    </blockquote>
+
+    <ol class="day17-rules">
+      <li class="day17-rule">
+        <span class="day17-rule__rank">01</span>
+        <h3>Свой сервер</h3>
+        <p>Та же библиотека <code>mcp</code>, что в дне 16, только серверная половина — <code>MCPServer</code>. Внутри — обёртка вокруг API, снаружи — обычный MCP.</p>
+        <p class="day17-rule__formula">API → MCPServer → stdio</p>
+      </li>
+      <li class="day17-rule">
+        <span class="day17-rule__rank">02</span>
+        <h3>Регистрация</h3>
+        <p>Функция на Python с декоратором <code>@server.tool()</code>. Имя, описание и схема параметров берутся из сигнатуры и docstring — руками JSON Schema не пишем.</p>
+        <p class="day17-rule__formula">def + аннотации → inputSchema</p>
+      </li>
+      <li class="day17-rule">
+        <span class="day17-rule__rank">03</span>
+        <h3>Цикл вызова</h3>
+        <p>Схемы уходят модели в поле <code>tools</code>. Модель отвечает не текстом, а просьбой вызвать инструмент. Агент вызывает его через MCP и кладёт результат обратно в диалог.</p>
+        <p class="day17-rule__formula">tools → tool_call → call_tool → result</p>
+      </li>
+      <li class="day17-rule">
+        <span class="day17-rule__rank">04</span>
+        <h3>Результат в деле</h3>
+        <p>Результат — не финал, а сырьё: модель читает его и строит ответ пользователю. На странице видно, что попросила модель, что вернул сервер и что из этого вышло.</p>
+        <p class="day17-rule__formula">result → ответ модели</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day17-store-error" role="alert">Файл диалога повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day17-controls">
+      <p class="day17-controls__note">Спросите про GitHub — модель сама решит, какой инструмент вызвать и с какими аргументами. Спросите не про GitHub — ответит без вызова. Кругов «модель → инструмент» за ход не больше {{ max_rounds }}.</p>
+      <div class="day17-actions">
+        {% if scenario %}
+          <button id="day17-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day17.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стереть историю дня 17">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench day17-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day17-server-hint">MCP: {{ server.title }} · {{ server.transport }}</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day17-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Спросите, например: «Найди три самых звёздных репозитория про MCP на Python».</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day17.chat_stream') }}"
+          data-state-url="{{ url_for('day17.state') }}"
+          data-reset-url="{{ url_for('day17.reset') }}"
+          data-tools-url="{{ url_for('day17.tools') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: какие репозитории karpathy обновлялись последними?"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">MCP-сервер</p>
+          <h3 id="agent-debug-title">{{ server.title }}</h3>
+          <p class="day17-server">
+            <span class="day17-badge">{{ server.transport }}</span>
+            <code>python -m advent.mcp.servers.github</code>
+          </p>
+          <p class="day17-server-note">{{ server.note }}</p>
+
+          <p class="agent-kicker day17-debug-kicker">Инструменты · tools/list</p>
+          <p class="day17-tools-meta" data-tools-meta>запрашиваю список…</p>
+          <ol class="day17-tools" data-tools></ol>
+
+          <p class="agent-kicker day17-debug-kicker">Сводка</p>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>ходов</dt><dd data-summary="turns">0</dd></div>
+            <div><dt>запросов к модели</dt><dd data-summary="llm_calls">0</dd></div>
+            <div><dt>вызовов инструментов</dt><dd data-summary="tool_calls">0</dd></div>
+            <div><dt>из них с ошибкой</dt><dd data-summary="tool_errors">0</dd></div>
+            <div><dt>токенов на вход</dt><dd data-summary="prompt_tokens">0</dd></div>
+            <div><dt>≈ из них схемы</dt><dd data-summary="schema_tokens_sent">0</dd></div>
+            <div><dt>токенов ответа</dt><dd data-summary="completion_tokens">0</dd></div>
+            <div><dt>сообщений в истории</dt><dd data-summary="messages">0</dd></div>
+          </dl>
+
+          <p class="agent-kicker day17-debug-kicker">Журнал вызовов</p>
+          <ol class="day17-journal" data-journal>
+            <li class="day17-journal__empty">Вызовов ещё не было.</li>
+          </ol>
+
+          <p class="day17-file" data-file></p>
+        </div>
+      </aside>
+    </div>
+
+    {% if state %}
+      <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+    {% endif %}
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day17.js') }}"></script>
+{% endblock %}

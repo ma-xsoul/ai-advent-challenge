@@ -361,7 +361,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -2376,6 +2376,129 @@ class AdventAppTestCase(unittest.TestCase):
                 response = self.client.post("/days/16/api/inspect", json=payload)
                 self.assertEqual(response.status_code, 400)
                 self.assertEqual(response.get_json(), {"error": "Выберите сервер из списка"})
+
+    def test_day_seventeen_renders_the_first_mcp_tool_homework(self):
+        response = self.client.get("/days/17/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 17.", html)
+        self.assertIn("Первый инструмент MCP", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("свой MCP-сервер вокруг любого API", html)
+        self.assertIn("Яндекс.Трекер, Git, CRM, mock API", html)
+        self.assertIn("регистрацию инструмента", html)
+        self.assertIn("описание входных параметров", html)
+        self.assertIn("возврат результата", html)
+        self.assertIn("вызовите его из приложения", html)
+        self.assertIn("Получите и используйте результат", html)
+        self.assertIn("Агент делает вызов к MCP-инструменту и получает результат", html)
+        self.assertIn("он дёргает какие нужно MCP-вызовы", html)
+        self.assertEqual(html.count('class="day17-rule"'), 4)
+        self.assertIn("GitHub · наш сервер", html)
+        self.assertIn("python -m advent.mcp.servers.github", html)
+        self.assertIn('data-chat-url="/days/17/api/chat/stream"', html)
+        self.assertIn('data-tools-url="/days/17/api/tools"', html)
+        self.assertIn("Сценарий «GitHub через MCP»", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/agent-chat.css", html)
+        self.assertIn("css/day17.css", html)
+        self.assertIn("js/day17.js", html)
+        self.assertIn('href="/days/17/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def _day_seventeen_client(self, store_dir, model=None, api=None):
+        from tests.test_mcp import ScriptedModel, github_transport
+
+        app = create_app(
+            {
+                "TESTING": True,
+                "AGENT_STORE_DIR": store_dir,
+                "AGENT_TRANSPORT": model or ScriptedModel(),
+                "MCP_TRANSPORT_FACTORY": github_transport(api),
+            }
+        )
+        client = app.test_client()
+        client.set_cookie("agent_session", "s17")
+        return client
+
+    def _chat17(self, client, text):
+        response = client.post("/days/17/api/chat/stream", json={"message": text})
+        return response, [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+    def test_day_seventeen_lists_the_tools_of_its_own_server(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            data = self._day_seventeen_client(store_dir).get("/days/17/api/tools").get_json()
+
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["server"]["key"], "github")
+        self.assertEqual(
+            [tool["name"] for tool in data["tools"]],
+            ["search_repositories", "get_repository", "list_user_repositories"],
+        )
+
+    def test_day_seventeen_turn_streams_the_call_and_is_saved(self):
+        import os
+        import tempfile
+
+        from tests.test_mcp import FakeGitHub, ScriptedModel, call_reply, text_reply
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            api = FakeGitHub()
+            model = ScriptedModel(
+                call_reply("search_repositories", {"query": "mcp language:python", "limit": 2}),
+                text_reply("Нашёл два репозитория."),
+            )
+            client = self._day_seventeen_client(store_dir, model, api)
+            response, events = self._chat17(client, "Найди два репозитория про MCP")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.mimetype, "application/x-ndjson")
+            self.assertEqual([e["type"] for e in events], ["connected", "model", "tool_call", "tool_result", "answer", "done"])
+            self.assertEqual(events[2]["arguments"], {"query": "mcp language:python", "limit": 2})
+            self.assertEqual(api.requests[0][1]["q"], "mcp language:python")
+            state = events[-1]["state"]
+            self.assertEqual(state["summary"]["tool_calls"], 1)
+            self.assertEqual(state["summary"]["llm_calls"], 2)
+            self.assertTrue(state["file"]["exists"])
+            self.assertIn("s17-d17.json", os.listdir(store_dir))
+            self.assertNotIn("for_model", state["calls"][0])
+
+            restored = client.get("/days/17/api/state").get_json()
+            self.assertEqual([m["role"] for m in restored["messages"]], ["user", "assistant", "tool", "assistant"])
+            page = client.get("/days/17/").get_data(as_text=True)
+            self.assertIn('id="agent-initial"', page)
+
+            cleared = client.post("/days/17/api/reset").get_json()
+            self.assertEqual(cleared["messages"], [])
+            self.assertNotIn("s17-d17.json", os.listdir(store_dir))
+
+    def test_day_seventeen_reports_a_failed_turn(self):
+        import tempfile
+
+        from tests.test_mcp import ScriptedModel
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client = self._day_seventeen_client(store_dir, ScriptedModel(error_at=1))
+            _, events = self._chat17(client, "Что угодно")
+
+            self.assertEqual(events[-1], {"type": "error", "error": "DeepSeek недоступен"})
+            self.assertEqual(client.get("/days/17/api/state").get_json()["messages"], [])
+
+    def test_day_seventeen_rejects_an_empty_message_and_serves_the_scenario(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client = self._day_seventeen_client(store_dir)
+            self.assertEqual(client.post("/days/17/api/chat/stream", json={"message": " "}).status_code, 400)
+
+        scenario = self.client.get("/days/17/api/scenario").get_json()
+        self.assertEqual(scenario["key"], "mcp-github")
+        self.assertEqual(len(scenario["messages"]), 4)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

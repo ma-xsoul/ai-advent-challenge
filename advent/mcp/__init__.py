@@ -1,6 +1,9 @@
-"""MCP: клиент, который подключается к серверу инструментов (день 16)."""
+"""MCP: клиент на официальном SDK (день 16) и свои серверы (день 17+)."""
 
 from .client import (
+    GITHUB_SERVER,
+    OWN_SERVERS,
+    SERVERS,
     Inspection,
     McpServer,
     ToolInfo,
@@ -8,12 +11,13 @@ from .client import (
     WireMessage,
     get_server,
     inspect_server,
-    SERVERS,
 )
 
 __all__ = [
+    "GITHUB_SERVER",
     "Inspection",
     "McpServer",
+    "OWN_SERVERS",
     "SERVERS",
     "ToolInfo",
     "ToolParam",

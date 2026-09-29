@@ -139,6 +139,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=17,
+        title="Первый инструмент MCP",
+        description="Свой сервер и вызов из агента",
+        endpoint="day17.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

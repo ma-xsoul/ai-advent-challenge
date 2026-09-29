@@ -15,13 +15,16 @@ tools/list» и журнал всего, что ушло и пришло по п
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
+import sys
 import tempfile
 import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
 import anyio
@@ -53,16 +56,21 @@ TRANSPORTS = ("http", "stdio")
 
 @dataclass(frozen=True)
 class McpServer:
-    """Общедоступный MCP-сервер из реестра лаборатории."""
+    """MCP-сервер из реестра лаборатории: чужой общедоступный или свой."""
 
     key: str
     title: str
     transport: str
     target: str
     note: str
+    # Только для stdio: рабочая папка процесса и какие переменные окружения
+    # ему передать. SDK по умолчанию пускает в процесс лишь безопасный
+    # минимум (PATH, HOME…), поэтому ключи пробрасываются явно, по имени.
+    cwd: str | None = None
+    env: tuple[str, ...] = ()
 
-    def as_dict(self) -> dict[str, str]:
-        return asdict(self)
+    def as_dict(self) -> dict[str, Any]:
+        return {"key": self.key, "title": self.title, "transport": self.transport, "target": self.target, "note": self.note}
 
 
 SERVERS = (
@@ -83,8 +91,25 @@ SERVERS = (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Свои серверы (день 17+): тот же Python, что у приложения, запускает модуль
+# сервера процессом. Рабочая папка — корень проекта, иначе -m не найдёт пакет.
+GITHUB_SERVER = McpServer(
+    key="github",
+    title="GitHub · наш сервер",
+    transport="stdio",
+    target=f"{shlex.quote(sys.executable)} -m advent.mcp.servers.github",
+    note="Свой MCP-сервер вокруг публичного GitHub API: поиск, карточка репозитория, репозитории пользователя.",
+    cwd=str(PROJECT_ROOT),
+    env=("GITHUB_TOKEN",),
+)
+
+OWN_SERVERS = (GITHUB_SERVER,)
+
+
 def get_server(key: str) -> McpServer | None:
-    return next((server for server in SERVERS if server.key == key), None)
+    return next((server for server in (*SERVERS, *OWN_SERVERS) if server.key == key), None)
 
 
 @dataclass(frozen=True)
@@ -192,7 +217,9 @@ def open_transport(server: McpServer, errlog: Any) -> AbstractAsyncContextManage
         executable = shutil.which(command)
         if executable is None:
             raise FileNotFoundError(f"«{command}» не найден в PATH — для stdio-сервера нужен Node.js")
-        return stdio_client(StdioServerParameters(command=executable, args=args), errlog=errlog)
+        env = {name: os.environ[name] for name in server.env if os.environ.get(name)}
+        parameters = StdioServerParameters(command=executable, args=args, cwd=server.cwd, env=env or None)
+        return stdio_client(parameters, errlog=errlog)
     raise ValueError(f"Неизвестный транспорт: {server.transport}")
 
 
