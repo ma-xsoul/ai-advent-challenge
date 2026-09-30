@@ -2,6 +2,7 @@
 
 from .client import (
     GITHUB_SERVER,
+    GITMCP_SERVER,
     OWN_SERVERS,
     RATES_SERVER,
     SERVERS,
@@ -18,6 +19,7 @@ from .client import (
 
 __all__ = [
     "GITHUB_SERVER",
+    "GITMCP_SERVER",
     "Inspection",
     "McpServer",
     "OWN_SERVERS",

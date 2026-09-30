@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1922,6 +1922,7 @@ class AdventAppTestCase(unittest.TestCase):
             # Без этого сброс дотянулся бы до настоящих data/day18 и data/day19.
             client.application.config["DAY18_DIR"] = day18_dir
             client.application.config["DAY19_REPORTS_DIR"] = day18_dir
+            client.application.config["DAY20_REPORTS_DIR"] = day18_dir
             self._chat11(client, "в1")
             client.post("/days/12/api/lane", json={"lane": "a", "profile": "reviewer"})
             self.assertGreater(len(os.listdir(store_dir)), 3)
@@ -1950,6 +1951,7 @@ class AdventAppTestCase(unittest.TestCase):
             client = self._day_eighteen_client(directory, model=model, crontab=crontab)
             client.application.config["AGENT_STORE_DIR"] = directory
             client.application.config["DAY19_REPORTS_DIR"] = directory
+            client.application.config["DAY20_REPORTS_DIR"] = directory
             client.post("/days/18/api/collect")
             client.post("/days/18/api/summary", json={"minutes": 10})
             (pathlib.Path(directory) / "cron.log").write_text("старый тик\n", encoding="utf-8")
@@ -2659,6 +2661,7 @@ class AdventAppTestCase(unittest.TestCase):
                 "AGENT_STORE_DIR": store_dir,
                 "DAY18_DIR": store_dir,
                 "DAY19_REPORTS_DIR": str(reports),
+                "DAY20_REPORTS_DIR": str(pathlib.Path(store_dir) / "reports20"),
                 "AGENT_TRANSPORT": model or ScriptedModel(),
                 "MCP_TRANSPORT_FACTORY": github_transport(api, reports),
             }
@@ -2755,6 +2758,124 @@ class AdventAppTestCase(unittest.TestCase):
 
         scenario = self.client.get("/days/19/api/scenario").get_json()
         self.assertEqual(scenario["key"], "mcp-chain")
+        self.assertEqual(len(scenario["messages"]), 2)
+
+    def _day_twenty_client(self, store_dir, model=None, down=()):
+        from tests.test_mcp import ScriptedModel, orchestra_transport
+
+        app = create_app(
+            {
+                "TESTING": True,
+                "AGENT_STORE_DIR": store_dir,
+                "DAY18_DIR": store_dir,
+                "DAY19_REPORTS_DIR": str(pathlib.Path(store_dir) / "reports19"),
+                # Оркестр пишет отчёты GitHub-сервера сюда же: reports — внутри store_dir.
+                "DAY20_REPORTS_DIR": str(pathlib.Path(store_dir) / "reports"),
+                "AGENT_TRANSPORT": model or ScriptedModel(),
+                "MCP_TRANSPORT_FACTORY": orchestra_transport(store_dir, down=down),
+            }
+        )
+        client = app.test_client()
+        client.set_cookie("agent_session", "s20")
+        return client
+
+    def test_day_twenty_renders_the_orchestration_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            response = self._day_twenty_client(store_dir).get("/days/20/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 20.", html)
+        self.assertIn("Оркестрация MCP", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Зарегистрируйте несколько MCP-серверов", html)
+        self.assertIn("агент выбирал нужный инструмент", html)
+        self.assertIn("корректно маршрутизировал запросы", html)
+        self.assertIn("выполнял длинный флоу взаимодействия", html)
+        self.assertIn("инструменты с разных серверов", html)
+        self.assertIn("корректность выбора и порядка вызовов", html)
+        self.assertIn("Длинный флоу взаимодействия с несколькими MCP-серверами и инструментами", html)
+        self.assertIn("из нескольких MCP и нескольких tool scheme", html)
+        self.assertEqual(html.count('class="day20-rule"'), 4)
+        self.assertEqual(html.count('class="day20-server"'), 3)
+        self.assertIn('data-server="gitmcp"', html)
+        self.assertIn('data-server="github"', html)
+        self.assertIn('data-server="rates"', html)
+        self.assertIn("Маршрут последнего хода", html)
+        self.assertIn("Сценарий «GitHub → GitMCP → отчёт»", html)
+        self.assertIn('data-servers-url="/days/20/api/servers"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/agent-chat.css", html)
+        self.assertIn("css/day20.css", html)
+        self.assertIn("js/day20.js", html)
+        self.assertIn('href="/days/20/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_lists_every_server_with_prefixed_tools(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            data = self._day_twenty_client(store_dir, down=("gitmcp",)).get("/days/20/api/servers").get_json()
+
+        cards = {card["key"]: card for card in data["servers"]}
+        self.assertEqual(list(cards), ["gitmcp", "github", "rates"])
+        self.assertFalse(cards["gitmcp"]["ok"])
+        self.assertIn("github__compare_repositories", [tool["name"] for tool in cards["github"]["tools"]])
+        self.assertIn("rates__collect_rate", [tool["name"] for tool in cards["rates"]["tools"]])
+        self.assertEqual(data["schema_tokens"], cards["github"]["schema_tokens"] + cards["rates"]["schema_tokens"])
+
+    def test_day_twenty_long_flow_is_routed_and_checked(self):
+        import tempfile
+
+        from tests.test_mcp import ScriptedModel, call_reply, text_reply
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            names = ["modelcontextprotocol/python-sdk", "other/mcp"]
+            model = ScriptedModel(
+                call_reply("github__search_repositories", {"query": "mcp", "limit": 2}, "c1"),
+                call_reply("github__compare_repositories", {"full_names": names}, "c2"),
+                call_reply("gitmcp__search_generic_documentation", {"owner": "modelcontextprotocol", "repo": "python-sdk", "query": "architecture"}, "c3"),
+                call_reply("github__save_report", {"title": "Отчёт", "markdown": "# Отчёт"}, "c4"),
+                text_reply("Готово."),
+                call_reply("rates__rate_summary", {"minutes": 60}, "c5"),
+                text_reply("Курс почти не менялся."),
+            )
+            client = self._day_twenty_client(store_dir, model)
+            question = "Найди 2 звёздных MCP-репозитория, сравни, по документации лидера из GitMCP разберись в архитектуре и сохрани отчёт."
+            response = client.post("/days/20/api/chat/stream", json={"message": question})
+            events = [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+            self.assertEqual(
+                [(e["server"], e["name"]) for e in events if e["type"] == "tool_call"],
+                [
+                    ("github", "github__search_repositories"),
+                    ("github", "github__compare_repositories"),
+                    ("gitmcp", "gitmcp__search_generic_documentation"),
+                    ("github", "github__save_report"),
+                ],
+            )
+            flow = events[-1]["state"]["flow"]
+            self.assertTrue(flow["ok"], flow["checks"])
+            self.assertEqual(flow["question"], question)
+            self.assertEqual(len(events[-1]["state"]["reports"]), 1)
+            self.assertEqual(len(list((pathlib.Path(store_dir) / "reports").glob("*.md"))), 1)
+
+            response = client.post("/days/20/api/chat/stream", json={"message": "А какой сейчас курс доллара?"})
+            rates_events = [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+            flow = rates_events[-1]["state"]["flow"]
+            self.assertEqual(flow["turn"], 2)
+            self.assertEqual([step["server"] for step in flow["steps"]], ["rates"])
+            self.assertTrue(flow["ok"], flow["checks"])
+
+            wiped = client.post("/api/reset-all").get_json()
+            self.assertEqual(wiped["day20_reports"], 1)
+
+        scenario = self.client.get("/days/20/api/scenario").get_json()
+        self.assertEqual(scenario["key"], "mcp-orchestra")
         self.assertEqual(len(scenario["messages"]), 2)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):

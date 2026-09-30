@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}День 20. Оркестрация MCP · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day20.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 20</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Servers · Routing · Long flow</span>
+    </div>
+    <h1>День 20.<br><span>Оркестрация MCP</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Зарегистрируйте несколько MCP-серверов.</p>
+      <ul class="homework-brief__steps">
+        <li>Сделайте так, чтобы агент выбирал нужный инструмент.</li>
+        <li>Чтобы корректно маршрутизировал запросы.</li>
+        <li>Чтобы выполнял длинный флоу взаимодействия.</li>
+        <li>Проверьте сценарий, в котором используются инструменты с разных серверов.</li>
+        <li>Проверьте корректность выбора и порядка вызовов.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Длинный флоу взаимодействия с несколькими MCP-серверами и инструментами.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day20-lab" aria-labelledby="day20-lab-title">
+    <div class="day20-lab__intro">
+      <p class="day20-kicker">Практика</p>
+      <h2 id="day20-lab-title">Один агент — несколько серверов</h2>
+      <p>До сих пор агент говорил с одним MCP-сервером за раз. Теперь за ним стоят сразу несколько: у каждого свой транспорт и свой набор инструментов. Агент сам решает, какой инструмент нужен, отправляет вызов на тот сервер, где он живёт, и ведёт задачу дальше — результат одного сервера становится запросом к другому.</p>
+    </div>
+
+    <blockquote class="day20-curator">
+      <p>А в 20 дне — из нескольких MCP и нескольких tool scheme.</p>
+      <p>Если у тебя за время работы 2–3 таких вот MCP с кучей тулов, это будет тянуться и тянуться.</p>
+      <cite>Алексей Гладков, 23–25.09 — чем день 20 отличается от 19 и чем платят за несколько серверов</cite>
+    </blockquote>
+
+    <ol class="day20-rules">
+      <li class="day20-rule">
+        <span class="day20-rule__rank">01</span>
+        <h3>Реестр серверов</h3>
+        <p>Несколько MCP-серверов за одним агентом: чужой в интернете и свои, по HTTP и по stdio. У каждого своя tool scheme — агент видит их все сразу.</p>
+        <p class="day20-rule__formula">GitMCP · GitHub · курс</p>
+      </li>
+      <li class="day20-rule">
+        <span class="day20-rule__rank">02</span>
+        <h3>Маршрутизация</h3>
+        <p>Модель называет только инструмент. На какой сервер отправить вызов, решает агент — по реестру «инструмент → сервер». Совпали имена у двух серверов — это надо развести заранее.</p>
+        <p class="day20-rule__formula">имя тула → сервер</p>
+      </li>
+      <li class="day20-rule">
+        <span class="day20-rule__rank">03</span>
+        <h3>Длинный флоу</h3>
+        <p>Задача, которую один сервер не закрывает: что-то нашли на одном, по найденному спросили другой, итог сохранили третьим. Данные переходят между серверами.</p>
+        <p class="day20-rule__formula">сервер A → сервер B → итог</p>
+      </li>
+      <li class="day20-rule">
+        <span class="day20-rule__rank">04</span>
+        <h3>Выбор и цена</h3>
+        <p>Проверяем, что каждый вызов ушёл на правильный сервер и в правильном порядке. И считаем цену: схемы всех серверов едут в каждый запрос к модели.</p>
+        <p class="day20-rule__formula">Σ схем × запросы</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day20-store-error" role="alert">Файл диалога повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day20-controls">
+      <p class="day20-controls__note">За агентом {{ servers|length }} сервера. Модель называет инструмент с префиксом сервера — агент по префиксу отправляет вызов туда. После хода код сверяет маршрут: на свой ли сервер ушёл каждый вызов, выбраны ли нужные серверы, перешли ли данные с сервера на сервер. Кругов за ход не больше {{ max_rounds }}.</p>
+      <div class="day20-actions">
+        {% if scenario %}
+          <button id="day20-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day20.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стереть историю дня 20; отчёты на диске останутся">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench day20-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day20-server-hint">MCP: {% for item in servers %}{{ item.key }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day20-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Попросите то, что один сервер не закроет: «Найди 3 самых звёздных MCP-репозитория на Python, сравни их, по документации лидера из GitMCP разберись, как устроена его архитектура, и сохрани отчёт».</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day20.chat_stream') }}"
+          data-state-url="{{ url_for('day20.state') }}"
+          data-reset-url="{{ url_for('day20.reset') }}"
+          data-servers-url="{{ url_for('day20.servers') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: какой сейчас курс доллара? — или длинная задача на несколько серверов"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">MCP-серверы</p>
+          <h3 id="agent-debug-title">{{ servers|length }} сервера · один агент</h3>
+          <p class="day20-servers-meta" data-servers-meta>подключаюсь к серверам…</p>
+          <ol class="day20-servers" data-servers>
+            {% for item in servers %}
+              <li class="day20-server" data-server="{{ item.key }}">
+                <div class="day20-server__head">
+                  <span class="day20-tag day20-tag--{{ item.key }}">{{ item.key }}</span>
+                  <strong>{{ item.title }}</strong>
+                  <span class="day20-badge">{{ item.transport }}</span>
+                </div>
+                <p class="day20-server__meta" data-server-meta>…</p>
+              </li>
+            {% endfor %}
+          </ol>
+
+          <p class="agent-kicker day20-debug-kicker">Маршрут последнего хода</p>
+          <p class="day20-route-meta" data-route-meta></p>
+          <ol class="day20-route" data-route>
+            <li class="day20-route__empty">Маршрута ещё не было.</li>
+          </ol>
+          <ul class="day20-checks" data-checks></ul>
+
+          <p class="agent-kicker day20-debug-kicker">Отчёты на диске</p>
+          <ol class="day20-reports" data-reports>
+            <li class="day20-reports__empty">Отчётов ещё нет.</li>
+          </ol>
+
+          <p class="agent-kicker day20-debug-kicker">Сводка</p>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>ходов</dt><dd data-summary="turns">0</dd></div>
+            <div><dt>запросов к модели</dt><dd data-summary="llm_calls">0</dd></div>
+            <div><dt>вызовов инструментов</dt><dd data-summary="tool_calls">0</dd></div>
+            <div><dt>из них с ошибкой</dt><dd data-summary="tool_errors">0</dd></div>
+            <div><dt>токенов на вход</dt><dd data-summary="prompt_tokens">0</dd></div>
+            <div><dt>≈ из них схемы</dt><dd data-summary="schema_tokens_sent">0</dd></div>
+            <div><dt>токенов ответа</dt><dd data-summary="completion_tokens">0</dd></div>
+          </dl>
+
+          <p class="day20-file" data-file></p>
+        </div>
+      </aside>
+    </div>
+
+    <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day20.js') }}"></script>
+{% endblock %}

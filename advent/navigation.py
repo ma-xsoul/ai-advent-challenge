@@ -163,6 +163,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=20,
+        title="Оркестрация MCP",
+        description="Несколько серверов, один агент",
+        endpoint="day20.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

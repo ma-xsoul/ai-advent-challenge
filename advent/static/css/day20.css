@@ -1,0 +1,689 @@
+/* День 20: оркестрация MCP — несколько серверов, один агент. */
+
+.day20-lab {
+  margin-top: 36px;
+}
+
+.day20-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day20-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day20-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day20-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day20-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day20-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day20-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day20-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day20-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day20-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day20-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day20-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day20-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day20-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day20-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day20-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day20-rule__formula::before {
+  content: "> ";
+}
+
+.day20-curator p + p {
+  margin-top: 6px;
+}
+
+.day20-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: серверы, маршрут и сверка ───────────────────────────── */
+
+.day20-rules {
+  margin-bottom: 14px;
+}
+
+.day20-store-error {
+  margin: 0 0 14px;
+  border: 1px solid rgba(232, 112, 95, 0.4);
+  background: var(--error-soft);
+  padding: 11px 14px;
+  color: var(--error);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.day20-store-error::before {
+  content: "! ";
+}
+
+.day20-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-soft);
+  padding: 10px 14px;
+}
+
+.day20-controls__note {
+  margin: 0;
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.day20-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day20-server-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day20-log {
+  min-height: 260px;
+}
+
+/* Отметки в ленте: сессия MCP открыта, модель что-то сказала перед вызовом. */
+.day20-marker {
+  margin: 0;
+  border: 1px dashed var(--line-strong);
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.day20-marker::before {
+  color: var(--accent);
+  content: "≡ ";
+}
+
+.day20-marker--model {
+  border-style: solid;
+  border-color: var(--line);
+  color: var(--muted-bright);
+  font-style: italic;
+}
+
+.day20-marker--model::before {
+  content: "… ";
+}
+
+/* Карточка вызова: запрос модели сверху, ответ сервера снизу. */
+.day20-call {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 9px 12px;
+}
+
+.day20-call.is-error {
+  border-color: var(--error);
+  background: var(--error-soft);
+}
+
+.day20-call__head,
+.day20-call__result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+.day20-call__arrow {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.day20-call__result .day20-call__arrow {
+  color: var(--info);
+}
+
+.day20-call__name {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day20-lab .day20-call__args {
+  border-color: var(--line-strong);
+  color: var(--muted-bright);
+  overflow-wrap: anywhere;
+}
+
+.day20-call__status {
+  color: var(--muted-bright);
+}
+
+.day20-call.is-pending .day20-call__status {
+  color: var(--muted);
+}
+
+.day20-call.is-error .day20-call__status {
+  color: var(--error);
+}
+
+/* Раскрывашки: результат вызова, схема инструмента. */
+.day20-fold {
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.day20-fold summary {
+  padding: 5px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day20-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day20-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day20-fold[open] summary::before {
+  content: "[−] ";
+}
+
+.day20-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day20-fold pre {
+  max-height: 280px;
+  margin: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  padding: 8px 10px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Панель: сервер, инструменты, журнал. */
+.day20-debug-kicker {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.day20-server {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.day20-badge {
+  border: 1px solid var(--line-strong);
+  padding: 0 6px;
+  color: var(--info);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.day20-server-note,
+.day20-tools-meta {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.day20-tools-meta.is-error {
+  color: var(--error);
+}
+
+.day20-tools,
+.day20-route,
+.day20-checks,
+.day20-reports {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.day20-tool {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 9px 11px;
+}
+
+.day20-tool__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.day20-tool__head strong {
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.day20-tool__title {
+  color: var(--muted-bright);
+  font-size: 11.5px;
+}
+
+.day20-tool__description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.day20-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day20-param {
+  display: inline-flex;
+  gap: 5px;
+  border: 1px solid var(--line-strong);
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.day20-param__name {
+  color: var(--text);
+}
+
+.day20-param__type {
+  color: var(--info);
+}
+
+.day20-param.is-required {
+  border-color: var(--accent);
+}
+
+.day20-param.is-required .day20-param__name {
+  color: var(--accent);
+}
+
+.day20-file {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+/* Маршрут: вызовы по порядку, у каждого плашка сервера. */
+.day20-route__empty,
+.day20-reports__empty {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day20-route__step {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 8px 10px;
+}
+
+.day20-route__step.is-error {
+  border-color: var(--error);
+  background: var(--error-soft);
+}
+
+.day20-route__step + .day20-route__step {
+  margin-top: 14px;
+}
+
+.day20-route__step + .day20-route__step::before {
+  position: absolute;
+  top: -15px;
+  left: 14px;
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1;
+  content: "↓";
+}
+
+.day20-route__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.day20-route__head strong {
+  color: var(--text-bright);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.day20-route__round {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day20-lab .day20-route__args {
+  display: block;
+  max-height: 70px;
+  overflow: hidden;
+  border-color: var(--line-strong);
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.day20-route__note {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 11px;
+}
+
+/* Сверка кода: ✓ зелёным, ✗ красным. */
+.day20-checks {
+  margin-top: -4px;
+}
+
+.day20-check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+}
+
+.day20-check__mark {
+  flex: none;
+  width: 1.2em;
+  font-weight: 700;
+  text-align: center;
+}
+
+.day20-check.is-ok .day20-check__mark {
+  color: var(--ok);
+}
+
+.day20-check.is-error .day20-check__mark {
+  color: var(--error);
+}
+
+.day20-check__text {
+  display: grid;
+  gap: 1px;
+}
+
+.day20-check__text strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day20-check__text small {
+  color: var(--muted);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.day20-check.is-error .day20-check__text small {
+  color: var(--error);
+}
+
+/* Отчёты на диске. */
+.day20-report {
+  display: grid;
+  gap: 4px;
+  border-left: 2px solid var(--ok);
+  padding: 2px 0 2px 9px;
+}
+
+.day20-report__name {
+  color: var(--text-bright);
+  font-size: 11.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.day20-report small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+/* Плашка сервера — у каждого свой цвет, чтобы маршрут читался глазами. */
+.day20-tag {
+  flex: none;
+  border: 1px solid currentColor;
+  padding: 0 5px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day20-tag--github {
+  color: var(--accent);
+}
+
+.day20-tag--gitmcp {
+  color: var(--info);
+}
+
+.day20-tag--rates {
+  color: var(--ok);
+}
+
+.day20-tag--none {
+  color: var(--error);
+}
+
+/* Карточки серверов реестра. */
+.day20-servers-meta,
+.day20-route-meta {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.day20-servers {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.day20-server {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 8px 10px;
+}
+
+.day20-server.is-error {
+  border-color: var(--error);
+}
+
+.day20-server__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.day20-server__head strong {
+  color: var(--text-bright);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.day20-server__meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day20-server.is-error .day20-server__meta {
+  color: var(--error);
+}
+
+.day20-server__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day20-server__tools li {
+  border: 1px solid var(--line-strong);
+  padding: 0 5px;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+}
+
+.day20-route__ms {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day20-call__head .day20-tag {
+  align-self: center;
+}
+
+@media (max-width: 1100px) {
+  .day20-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day20-rules {
+    grid-template-columns: 1fr;
+  }
+}

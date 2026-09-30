@@ -18,8 +18,8 @@ Annotated[..., Field(description=...)] превращается в описан�
 в inputSchema, ge/le/pattern — в ограничения, которые SDK проверит сам
 ещё до вызова функции.
 
-Запуск: python -m advent.mcp.servers.github — сервер говорит по stdio,
-агент дня 17 поднимает его процессом. Ключ не нужен: без GITHUB_TOKEN
+Запуск: python -m advent.mcp.servers.github [--reports-dir ПАПКА] — сервер
+говорит по stdio, агент поднимает его процессом. Ключ не нужен: без GITHUB_TOKEN
 GitHub даёт 60 запросов в час, с ним — 5000.
 """
 
@@ -186,8 +186,9 @@ def build_server(
             "Инструменты читают публичный GitHub. Цифры о репозиториях бери только из результата "
             "инструмента, не по памяти. Нужен один репозиторий — get_repository, несколько по теме — "
             "search_repositories, всё у одного автора — list_user_repositories. Сравнить несколько — "
-            "compare_repositories, сохранить итог в файл — save_report. Данные между инструментами "
-            "передавай дословно: имена — как в full_name, таблицу — как вернул compare_repositories."
+            "compare_repositories (он сам догружает карточки — get_repository перед ним не нужен), "
+            "сохранить итог в файл — save_report. Данные между инструментами передавай дословно: "
+            "имена — как в full_name, таблицу — как вернул compare_repositories."
         ),
     )
 
@@ -264,8 +265,14 @@ def build_server(
     return server
 
 
-def main() -> None:
-    build_server(GitHubApi(os.getenv("GITHUB_TOKEN") or None)).run()
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="python -m advent.mcp.servers.github")
+    # День 20 держит отчёты отдельно от дня 19 — папку передаёт флагом.
+    parser.add_argument("--reports-dir", default=None)
+    args = parser.parse_args(argv)
+    build_server(GitHubApi(os.getenv("GITHUB_TOKEN") or None), reports_dir=args.reports_dir).run()
 
 
 if __name__ == "__main__":

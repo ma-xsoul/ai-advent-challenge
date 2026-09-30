@@ -960,5 +960,257 @@ class CronTestCase(unittest.TestCase):
         self.assertEqual(len(crontab.text.splitlines()), 1)
 
 
+# ── День 20: несколько серверов, маршрутизация, проверка флоу ─────────
+
+
+def fake_gitmcp():
+    """Вместо настоящего GitMCP — сервер в памяти с теми же инструментами."""
+    server = MCPServer("GitMCP", version="test")
+
+    @server.tool()
+    def fetch_generic_documentation(owner: str, repo: str) -> str:
+        """Fetch documentation for any GitHub repository by providing owner and project name."""
+        return f"# {owner}/{repo}\n\nАрхитектура: фронтенд, бэкенд, хранилище."
+
+    @server.tool()
+    def search_generic_documentation(owner: str, repo: str, query: str) -> str:
+        """Semantically search in documentation for any GitHub repository."""
+        return f"## {query}\n\n{owner}/{repo}: слой API и слой данных."
+
+    return server
+
+
+def orchestra_transport(directory, api=None, down=()):
+    """Три сервера в памяти, как в реестре дня 20; ключи из down «не отвечают»."""
+    from advent.mcp.servers.github import build_server as build_github
+    from advent.mcp.servers.rates import RatesStore, build_server as build_rates
+
+    servers = {
+        "github": build_github(api or FakeGitHub(), reports_dir=pathlib.Path(directory) / "reports"),
+        "rates": build_rates(RatesStore(pathlib.Path(directory) / "rates.sqlite3"), FakeRates(), now=Clock()),
+        "gitmcp": fake_gitmcp(),
+    }
+
+    def factory(spec, errlog):
+        if spec.key in down:
+            raise ConnectionRefusedError(f"{spec.key} недоступен")
+        return InMemoryTransport(servers[spec.key])
+
+    return factory
+
+
+def orchestra_servers():
+    from advent.mcp import GITHUB_SERVER, GITMCP_SERVER, RATES_SERVER
+
+    return [GITMCP_SERVER, GITHUB_SERVER, RATES_SERVER]
+
+
+LONG_QUESTION = "Найди 2 звёздных MCP-репозитория, сравни, по документации лидера из GitMCP разберись в архитектуре и сохрани отчёт."
+
+
+class OrchestrationTestCase(unittest.TestCase):
+    def _turn(self, directory, model, question=LONG_QUESTION, down=(), max_rounds=12):
+        from advent.agent import AgentConfig
+        from advent.mcp.agent import ToolDialog, run_turn
+
+        dialog = ToolDialog()
+        events = run_turn(
+            dialog,
+            question,
+            config=AgentConfig(name="t", system_prompt="т"),
+            transport=model,
+            servers=orchestra_servers(),
+            factory=orchestra_transport(directory, down=down),
+            max_rounds=max_rounds,
+        )
+        return dialog, events
+
+    def _long_flow_model(self):
+        names = ["modelcontextprotocol/python-sdk", "other/mcp"]
+        return ScriptedModel(
+            call_reply("github__search_repositories", {"query": "mcp", "limit": 2}, "c1"),
+            call_reply("github__compare_repositories", {"full_names": names}, "c2"),
+            call_reply("gitmcp__fetch_generic_documentation", {"owner": "modelcontextprotocol", "repo": "python-sdk"}, "c3"),
+            call_reply("github__save_report", {"title": "Отчёт", "markdown": "# Отчёт\n\nАрхитектура: фронтенд."}, "c4"),
+            text_reply("Готово."),
+        )
+
+    def test_tools_of_every_server_are_prefixed_and_calls_are_routed(self):
+        import tempfile
+
+        from advent.mcp.orchestration import check_flow
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = self._long_flow_model()
+            dialog, events = self._turn(directory, model)
+
+            names = [spec["function"]["name"] for spec in model.payloads[0]["tools"]]
+            self.assertIn("github__search_repositories", names)
+            self.assertIn("gitmcp__fetch_generic_documentation", names)
+            self.assertIn("rates__rate_summary", names)
+            self.assertEqual(len(names), 5 + 2 + 3)
+            system = model.payloads[0]["messages"][0]["content"]
+            self.assertIn("«сервер__инструмент»", system)
+            self.assertIn("Инструкции MCP-сервера «GitHub · наш сервер»", system)
+
+            connected = events[0]
+            self.assertEqual([card["key"] for card in connected["servers"]], ["gitmcp", "github", "rates"])
+            self.assertTrue(all(card["ok"] for card in connected["servers"]))
+
+            self.assertEqual([(call["server"], call["tool"]) for call in dialog.calls], [
+                ("github", "search_repositories"),
+                ("github", "compare_repositories"),
+                ("gitmcp", "fetch_generic_documentation"),
+                ("github", "save_report"),
+            ])
+            self.assertIn("# modelcontextprotocol/python-sdk", dialog.calls[2]["for_model"])
+            self.assertEqual(len(list((pathlib.Path(directory) / "reports").glob("*.md"))), 1)
+
+            flow = check_flow(dialog.calls, dialog.turns[-1]["servers"], LONG_QUESTION)
+            self.assertTrue(flow["ok"], flow["checks"])
+            self.assertEqual(len(flow["checks"]), 4)
+            self.assertEqual(flow["path"], ["GitHub · наш сервер", "GitMCP", "GitHub · наш сервер"])
+            self.assertEqual(flow["idle"], ["Курс доллара · наш сервер"])
+
+    def test_a_dead_server_does_not_stop_the_turn(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = ScriptedModel(call_reply("rates__rate_summary", {"minutes": 60}), text_reply("Курс не менялся."))
+            dialog, events = self._turn(directory, model, "Какой курс доллара?", down=("gitmcp",))
+
+            cards = {card["key"]: card for card in events[0]["servers"]}
+            self.assertFalse(cards["gitmcp"]["ok"])
+            self.assertIn("gitmcp недоступен", cards["gitmcp"]["error"])
+            names = [spec["function"]["name"] for spec in model.payloads[0]["tools"]]
+            self.assertFalse(any(name.startswith("gitmcp__") for name in names))
+            self.assertEqual(events[-1]["type"], "done")
+            self.assertEqual(dialog.calls[0]["server"], "rates")
+
+    def test_all_servers_down_is_an_error(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            dialog, events = self._turn(directory, ScriptedModel(), down=("gitmcp", "github", "rates"))
+            self.assertEqual(events[-1]["type"], "error")
+            self.assertIn("Ни один MCP-сервер не ответил", events[-1]["error"])
+            self.assertEqual(dialog.messages, [])
+
+    def test_unknown_tool_is_refused_without_a_call(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = ScriptedModel(call_reply("search_repositories", {"query": "mcp"}), text_reply("Ой."))
+            dialog, _ = self._turn(directory, model)
+
+            call = dialog.calls[0]
+            self.assertIsNone(call["server"])
+            self.assertFalse(call["ok"])
+            self.assertIn("Нет такого инструмента: search_repositories", dialog.messages[2]["content"])
+            self.assertIn("github__search_repositories", dialog.messages[2]["content"])
+
+    def test_leaked_call_markup_is_cut_from_the_last_answer(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            leaked = "Сейчас сохраню отчёт.\n<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name=\"github__save_report\">"
+            replies = [call_reply("rates__rate_summary", {"minutes": 60}, "c1"), text_reply(leaked)]
+            _, events = self._turn(directory, ScriptedModel(*replies), "курс доллара", max_rounds=2)
+            answer = next(event for event in events if event["type"] == "answer")["content"]
+            self.assertEqual(answer, "Сейчас сохраню отчёт.")
+
+            only_markup = [call_reply("rates__rate_summary", {"minutes": 60}, "c1"), text_reply("<｜｜DSML｜｜ calls>")]
+            _, events = self._turn(directory, ScriptedModel(*only_markup), "курс доллара", max_rounds=2)
+            answer = next(event for event in events if event["type"] == "answer")["content"]
+            self.assertIn("круги кончились", answer)
+
+
+class FlowCheckTestCase(unittest.TestCase):
+    SERVERS = [
+        {"key": "gitmcp", "title": "GitMCP", "ok": True},
+        {"key": "github", "title": "GitHub", "ok": True},
+        {"key": "rates", "title": "Курс", "ok": True},
+    ]
+
+    def _call(self, server, tool, round_number, arguments=None, result=None, ok=True):
+        return {
+            "server": server,
+            "tool": tool,
+            "name": f"{server}__{tool}",
+            "round": round_number,
+            "ok": ok,
+            "arguments": arguments or {},
+            "for_model": json.dumps(result, ensure_ascii=False) if result is not None else "текст",
+        }
+
+    def test_expected_servers_come_from_the_words_of_the_request(self):
+        from advent.mcp.orchestration import expected_servers
+
+        keys = ["gitmcp", "github", "rates"]
+        self.assertEqual(expected_servers(LONG_QUESTION, keys), ["gitmcp", "github"])
+        self.assertEqual(expected_servers("А какой сейчас курс доллара?", keys), ["rates"])
+        self.assertEqual(expected_servers("Привет!", keys), [])
+
+    def test_extra_and_missing_servers_are_named(self):
+        from advent.mcp.orchestration import check_flow
+
+        search = self._call("github", "search_repositories", 1, result={"items": [{"full_name": "a/b"}]})
+        rates = self._call("rates", "collect_rate", 2)
+        flow = check_flow([search, rates], self.SERVERS, LONG_QUESTION)
+        choice = flow["checks"][1]
+        self.assertFalse(choice["ok"])
+        self.assertIn("лишние: Курс", choice["detail"])
+        self.assertIn("не спросили: GitMCP", choice["detail"])
+        self.assertEqual(len(flow["checks"]), 2)
+
+    def test_repository_for_gitmcp_must_come_from_github(self):
+        from advent.mcp.orchestration import check_flow
+
+        search = self._call("github", "search_repositories", 1, result={"items": [{"full_name": "a/b"}]})
+        invented = self._call("gitmcp", "fetch_generic_documentation", 2, {"owner": "x", "repo": "invented"})
+        flow = check_flow([search, invented], self.SERVERS, LONG_QUESTION)
+        self.assertFalse(flow["checks"][2]["ok"])
+        self.assertIn("x/invented", flow["checks"][2]["detail"])
+
+        too_early = self._call("gitmcp", "fetch_generic_documentation", 1, {"owner": "a", "repo": "b"})
+        flow = check_flow([too_early, search], self.SERVERS, LONG_QUESTION)
+        self.assertFalse(flow["checks"][2]["ok"])
+
+    def test_repository_is_read_from_owner_repo_name_or_url(self):
+        from advent.mcp.orchestration import _repo_names
+
+        self.assertEqual(_repo_names({"owner": "a", "repo": "b"}), ["a/b"])
+        self.assertEqual(_repo_names({"repoName": "a/b"}), ["a/b"])
+        self.assertEqual(_repo_names({"url": "https://raw.githubusercontent.com/a/b/main/README.md"}), ["a/b"])
+        self.assertEqual(_repo_names({"url": "https://example.com/x"}), [])
+        self.assertEqual(_repo_names({"library": "fastmcp"}), [])
+
+    def test_report_must_follow_the_gitmcp_answer(self):
+        from advent.mcp.orchestration import check_flow
+
+        search = self._call("github", "search_repositories", 1, result={"items": [{"full_name": "a/b"}]})
+        ask = self._call("gitmcp", "search_generic_documentation", 3, {"owner": "a", "repo": "b", "query": "architecture"})
+        early_save = self._call("github", "save_report", 3, result={"file": "r.md"})
+        flow = check_flow([search, ask, early_save], self.SERVERS, LONG_QUESTION)
+        self.assertFalse(flow["checks"][3]["ok"])
+
+        late_save = self._call("github", "save_report", 4, result={"file": "r.md"})
+        flow = check_flow([search, ask, late_save], self.SERVERS, LONG_QUESTION)
+        self.assertTrue(flow["ok"], flow["checks"])
+        self.assertIn("файл r.md", flow["checks"][3]["detail"])
+
+    def test_simple_turn_gets_only_the_checks_that_apply(self):
+        from advent.mcp.orchestration import check_flow
+
+        flow = check_flow([self._call("rates", "rate_summary", 1)], self.SERVERS, "Какой курс доллара?")
+        self.assertTrue(flow["ok"], flow["checks"])
+        self.assertEqual([check["title"] for check in flow["checks"]], ["Каждый вызов нашёл свой сервер", "Выбраны нужные серверы"])
+        self.assertEqual(flow["idle"], ["GitMCP", "GitHub"])
+
+        silent = check_flow([], self.SERVERS, "Привет!")
+        self.assertTrue(silent["ok"])
+        self.assertIn("модель ответила сама", silent["checks"][0]["detail"])
+
+
 if __name__ == "__main__":
     unittest.main()

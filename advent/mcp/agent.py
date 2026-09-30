@@ -19,6 +19,12 @@
 SDK асинхронный, Flask — нет. Ход целиком живёт в одном anyio.run в
 отдельном потоке, события уходят наружу через очередь — так страница
 видит вызовы по мере того, как они происходят.
+
+День 20 — несколько серверов за одним агентом. Агент подключается ко
+всем, и модель видит инструменты с префиксом сервера: github__search_…,
+deepwiki__ask_…. Модель называет только инструмент, а на какой сервер
+отправить вызов, решает агент — по префиксу, через таблицу маршрутов.
+Префикс заодно разводит одинаковые имена у разных серверов.
 """
 
 from __future__ import annotations
@@ -35,6 +41,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from collections.abc import Sequence
+from contextlib import AsyncExitStack
 
 import anyio
 from mcp import Client
@@ -53,6 +62,22 @@ MAX_ROUNDS = 4
 # Сколько текста результата получает модель и сколько видит страница.
 RESULT_CHARS = 6000
 PREVIEW_CHARS = 1500
+
+# «сервер__инструмент» — так модель видит инструменты нескольких серверов.
+ROUTE_SEPARATOR = "__"
+
+# Инструкции серверов уходят модели в системный промпт; у чужих они
+# бывают на несколько тысяч символов — берём начало.
+INSTRUCTIONS_CHARS = 1200
+
+
+@dataclass(frozen=True)
+class Route:
+    """Куда отправить вызов: какой сервер, через какое соединение, под каким именем."""
+
+    server: McpServer
+    client: Client
+    tool: str
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
@@ -137,11 +162,11 @@ class ToolDialogStore:
         return self._directory / f"{session_id}-{self._name}.json"
 
 
-def tool_spec(tool: ToolInfo) -> dict[str, Any]:
+def tool_spec(tool: ToolInfo, name: str | None = None) -> dict[str, Any]:
     """Инструмент MCP в том виде, в каком его ждёт модель: функция в поле tools."""
     return {
         "type": "function",
-        "function": {"name": tool.name, "description": tool.description, "parameters": tool.schema},
+        "function": {"name": name or tool.name, "description": tool.description, "parameters": tool.schema},
     }
 
 
@@ -151,7 +176,8 @@ def stream_turn(
     *,
     config: AgentConfig,
     transport: Transport,
-    server: McpServer,
+    server: McpServer | None = None,
+    servers: Sequence[McpServer] | None = None,
     factory: TransportFactory | None = None,
     on_done: Callable[[], None] | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
@@ -161,7 +187,14 @@ def stream_turn(
     Ход в отдельном потоке, события — по мере появления. on_done зовётся в
     том же потоке после хода, даже если страница уже закрыла соединение:
     так ход, дошедший до конца, не теряется.
+
+    server — один сервер, имена инструментов как есть (дни 17 и 19);
+    servers — несколько, имена с префиксом сервера (день 20).
     """
+    if (server is None) == (servers is None):
+        raise ValueError("Нужен либо server, либо servers")
+    namespaced = servers is not None
+    targets = list(servers) if servers is not None else [server]
     events: queue.Queue[dict[str, Any] | None] = queue.Queue()
 
     def worker() -> None:
@@ -177,7 +210,17 @@ def stream_turn(
 
         try:
             anyio.run(
-                _run_turn, dialog, question, config, transport, server, factory or open_transport, emit, timeout, max_rounds
+                _run_turn,
+                dialog,
+                question,
+                config,
+                transport,
+                targets,
+                namespaced,
+                factory or open_transport,
+                emit,
+                timeout,
+                max_rounds,
             )
             if on_done is not None:
                 on_done()
@@ -203,7 +246,8 @@ async def _run_turn(
     question: str,
     config: AgentConfig,
     transport: Transport,
-    server: McpServer,
+    servers: list[McpServer],
+    namespaced: bool,
     factory: TransportFactory,
     emit: Emit,
     timeout: float,
@@ -215,26 +259,67 @@ async def _run_turn(
     stats = {"turn": turn_number, "llm_calls": 0, "tool_calls": 0, "tool_errors": 0, "prompt_tokens": 0, "completion_tokens": 0}
 
     try:
-        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as errlog:
-            with anyio.fail_after(timeout * 3):
-                async with Client(factory(server, errlog), client_info=CLIENT_INFO, read_timeout_seconds=timeout) as client:
-                    tools, _ = await _list_tools(client)
-                    specs = [tool_spec(tool) for tool in tools]
-                    schema_tokens = estimate_tokens(json.dumps(specs, ensure_ascii=False))
-                    emit(
+        with anyio.fail_after(timeout * 3):
+            async with AsyncExitStack() as stack:
+                routes: dict[str, Route] = {}
+                specs: list[dict[str, Any]] = []
+                connected: list[dict[str, Any]] = []
+                instructions: list[tuple[McpServer, str]] = []
+
+                for server in servers:
+                    connected_at = time.perf_counter()
+                    errlog = stack.enter_context(tempfile.TemporaryFile(mode="w+", encoding="utf-8"))
+                    try:
+                        client = await stack.enter_async_context(
+                            Client(factory(server, errlog), client_info=CLIENT_INFO, read_timeout_seconds=timeout)
+                        )
+                        tools, _ = await _list_tools(client)
+                    except Exception as error:  # noqa: BLE001 — один недоступный сервер не валит ход
+                        if not namespaced:
+                            raise
+                        connected.append(
+                            {**_server_card(server), "ok": False, "error": _describe(error, timeout), "ms": _ms(connected_at)}
+                        )
+                        continue
+
+                    prefix = f"{server.key}{ROUTE_SEPARATOR}" if namespaced else ""
+                    own = [tool_spec(tool, prefix + tool.name) for tool in tools]
+                    for tool in tools:
+                        routes[prefix + tool.name] = Route(server, client, tool.name)
+                    specs.extend(own)
+                    if client.instructions:
+                        instructions.append((server, client.instructions))
+                    connected.append(
                         {
-                            "type": "connected",
-                            "server": server.title,
+                            **_server_card(server),
+                            "ok": True,
                             "protocol": client.protocol_version,
-                            "tools": [tool.name for tool in tools],
-                            "schema_tokens": schema_tokens,
-                            "ms": _ms(started),
+                            "tools": [prefix + tool.name for tool in tools],
+                            "schema_tokens": estimate_tokens(json.dumps(own, ensure_ascii=False)),
+                            "ms": _ms(connected_at),
                         }
                     )
 
-                    dialog.messages.append({"role": "user", "content": question})
-                    system = _system_text(config, server, client.instructions)
-                    await _loop(dialog, config, transport, client, specs, system, stats, emit, turn_number, max_rounds)
+                if not routes:
+                    raise RuntimeError("Ни один MCP-сервер не ответил: " + "; ".join(card.get("error", "") for card in connected))
+
+                schema_tokens = estimate_tokens(json.dumps(specs, ensure_ascii=False))
+                alive = [card for card in connected if card["ok"]]
+                emit(
+                    {
+                        "type": "connected",
+                        "server": " + ".join(card["title"] for card in alive),
+                        "protocol": ", ".join(dict.fromkeys(card["protocol"] for card in alive)),
+                        "tools": list(routes),
+                        "schema_tokens": schema_tokens,
+                        "ms": _ms(started),
+                        "servers": connected,
+                    }
+                )
+
+                dialog.messages.append({"role": "user", "content": question})
+                system = _system_text(config, instructions, namespaced)
+                await _loop(dialog, config, transport, routes, specs, system, stats, emit, turn_number, max_rounds)
     except BaseException:
         # Недоделанный ход не оставляет в истории хвостов: вызов без ответа
         # модель на следующем ходу не поймёт.
@@ -243,17 +328,22 @@ async def _run_turn(
 
     stats["schema_tokens"] = schema_tokens
     stats["schema_tokens_sent"] = schema_tokens * stats["llm_calls"]
+    stats["servers"] = connected
     stats["ms"] = _ms(started)
     stats["messages"] = len(dialog.messages)
     dialog.turns.append(stats)
     emit({"type": "done", "stats": stats})
 
 
+def _server_card(server: McpServer) -> dict[str, Any]:
+    return {"key": server.key, "title": server.title, "transport": server.transport}
+
+
 async def _loop(
     dialog: ToolDialog,
     config: AgentConfig,
     transport: Transport,
-    client: Client,
+    routes: dict[str, Route],
     specs: list[dict[str, Any]],
     system: str,
     stats: dict[str, Any],
@@ -274,7 +364,10 @@ async def _loop(
         content = message.get("content") if isinstance(message.get("content"), str) else ""
 
         if not calls or last:
-            answer = content.strip() or f"Не уложился в {max_rounds} кругов вызовов инструментов — сформулируйте вопрос уже."
+            answer = _without_leaked_calls(content).strip() or (
+                f"Не уложился в {max_rounds} кругов вызовов инструментов: модель хотела вызвать ещё, "
+                "но круги кончились. Сформулируйте вопрос уже или разбейте его на части."
+            )
             dialog.messages.append({"role": "assistant", "content": answer})
             emit({"type": "answer", "content": answer, "round": round_number, "finish_reason": finish_reason, "usage": usage})
             return
@@ -291,16 +384,19 @@ async def _loop(
         )
 
         for call in calls:
-            record = await _execute(client, call, round_number, turn_number, emit)
+            record = await _execute(routes, call, round_number, turn_number, emit)
             stats["tool_calls"] += 1
             stats["tool_errors"] += 0 if record["ok"] else 1
             dialog.calls.append(record)
             dialog.messages.append({"role": "tool", "tool_call_id": call["id"], "content": record["for_model"]})
 
 
-async def _execute(client: Client, call: dict[str, Any], round_number: int, turn_number: int, emit: Emit) -> dict[str, Any]:
-    """Один tools/call. Любая неудача — не исключение, а текст ошибки для модели."""
+async def _execute(
+    routes: dict[str, Route], call: dict[str, Any], round_number: int, turn_number: int, emit: Emit
+) -> dict[str, Any]:
+    """Один tools/call — на тот сервер, которому принадлежит инструмент. Любая неудача — текст ошибки для модели."""
     name = call["function"]["name"]
+    route = routes.get(name)
     raw_arguments = call["function"].get("arguments") or "{}"
     started = time.perf_counter()
 
@@ -312,11 +408,23 @@ async def _execute(client: Client, call: dict[str, Any], round_number: int, turn
         arguments = None
         ok, text = False, f"Аргументы не разобраны как JSON: {error}"
 
-    emit({"type": "tool_call", "id": call["id"], "name": name, "arguments": arguments if arguments is not None else raw_arguments})
+    server_key = route.server.key if route else None
+    emit(
+        {
+            "type": "tool_call",
+            "id": call["id"],
+            "name": name,
+            "server": server_key,
+            "arguments": arguments if arguments is not None else raw_arguments,
+        }
+    )
 
-    if arguments is not None:
+    if arguments is not None and route is None:
+        # Модель выдумала инструмент или перепутала префикс — маршрута нет.
+        ok, text = False, f"Нет такого инструмента: {name}. Доступны: {', '.join(routes)}"
+    elif arguments is not None:
         try:
-            result = await client.call_tool(name, arguments)
+            result = await route.client.call_tool(route.tool, arguments)
             ok = not bool(getattr(result, "is_error", False))
             text = _result_text(result)
         except MCPError as error:
@@ -328,6 +436,8 @@ async def _execute(client: Client, call: dict[str, Any], round_number: int, turn
         "turn": turn_number,
         "round": round_number,
         "name": name,
+        "server": server_key,
+        "tool": route.tool if route else name,
         "arguments": arguments if arguments is not None else raw_arguments,
         "ok": ok,
         "chars": len(text),
@@ -338,6 +448,17 @@ async def _execute(client: Client, call: dict[str, Any], round_number: int, turn
     }
     emit({"type": "tool_result", **{key: value for key, value in record.items() if key != "for_model"}})
     return record
+
+
+# Когда инструменты запрещены (последний круг), DeepSeek иногда всё равно
+# «вызывает» их — прямо в тексте ответа, своей служебной разметкой. Такой
+# хвост пользователю не показываем.
+_LEAKED_CALL_MARKERS = ("<｜｜DSML｜｜", "<｜DSML｜", "<|DSML|")
+
+
+def _without_leaked_calls(content: str) -> str:
+    cut = min((content.find(marker) for marker in _LEAKED_CALL_MARKERS if marker in content), default=-1)
+    return content if cut < 0 else content[:cut]
 
 
 def _result_text(result: Any) -> str:
@@ -399,11 +520,17 @@ def _parse(response: dict[str, Any]) -> tuple[dict[str, Any], str, dict[str, Any
     return message, choices[0].get("finish_reason") or "не указан", usage
 
 
-def _system_text(config: AgentConfig, server: McpServer, instructions: str | None) -> str:
+def _system_text(config: AgentConfig, instructions: list[tuple[McpServer, str]], namespaced: bool) -> str:
     parts = [config.system_prompt or ""]
-    if instructions:
-        # Инструкции сервера MCP написаны для модели — отдаём их ей как есть.
-        parts.append(f"Инструкции MCP-сервера «{server.title}»: {instructions}")
+    if namespaced:
+        parts.append(
+            "Инструменты названы «сервер__инструмент»: префикс — MCP-сервер, на котором инструмент живёт. "
+            "В инструкциях серверов ниже те же инструменты упомянуты без префикса."
+        )
+    for server, text in instructions:
+        # Инструкции сервера MCP написаны для модели — отдаём их ей, у длинных — начало.
+        cut = text if len(text) <= INSTRUCTIONS_CHARS else text[:INSTRUCTIONS_CHARS] + "…"
+        parts.append(f"Инструкции MCP-сервера «{server.title}»: {cut}")
     return "\n\n".join(part for part in parts if part)
 
 

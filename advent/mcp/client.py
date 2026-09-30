@@ -118,8 +118,23 @@ RATES_SERVER = McpServer(
 OWN_SERVERS = (GITHUB_SERVER, RATES_SERVER)
 
 
+# Для дня 20: публичный сервер документации любого GitHub-репозитория. Своей
+# нейросети у него нет — он отдаёт куски документации и кода, а разбирается
+# в них уже наша модель. Поэтому, в отличие от DeepWiki, его не режут
+# лимитом на каждый вопрос.
+GITMCP_SERVER = McpServer(
+    key="gitmcp",
+    title="GitMCP",
+    transport="http",
+    target="https://gitmcp.io/docs",
+    note="Публичный сервер документации и кода любого GitHub-репозитория по owner и repo. Без ключа.",
+)
+
+EXTRA_SERVERS = (GITMCP_SERVER,)
+
+
 def get_server(key: str) -> McpServer | None:
-    return next((server for server in (*SERVERS, *OWN_SERVERS) if server.key == key), None)
+    return next((server for server in (*SERVERS, *OWN_SERVERS, *EXTRA_SERVERS) if server.key == key), None)
 
 
 @dataclass(frozen=True)
