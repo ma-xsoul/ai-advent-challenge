@@ -9,7 +9,7 @@
 3. модель ответила текстом — ход окончен. Попросила tool_calls — агент
    вызывает каждый инструмент через MCP (tools/call), кладёт результат
    в историю сообщением role=tool и снова идёт к модели;
-4. кругов не больше MAX_ROUNDS: на последнем инструменты запрещены
+4. кругов не больше max_rounds (по умолчанию MAX_ROUNDS): на последнем инструменты запрещены
    (tool_choice=none), и модель отвечает тем, что уже собрала.
 
 Модель по MCP не ходит: она видит схемы и просит вызов, а вызывает агент.
@@ -155,6 +155,7 @@ def stream_turn(
     factory: TransportFactory | None = None,
     on_done: Callable[[], None] | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    max_rounds: int = MAX_ROUNDS,
 ) -> Iterator[dict[str, Any]]:
     """
     Ход в отдельном потоке, события — по мере появления. on_done зовётся в
@@ -175,7 +176,9 @@ def stream_turn(
                 events.put(event)
 
         try:
-            anyio.run(_run_turn, dialog, question, config, transport, server, factory or open_transport, emit, timeout)
+            anyio.run(
+                _run_turn, dialog, question, config, transport, server, factory or open_transport, emit, timeout, max_rounds
+            )
             if on_done is not None:
                 on_done()
             for event in finished:
@@ -204,6 +207,7 @@ async def _run_turn(
     factory: TransportFactory,
     emit: Emit,
     timeout: float,
+    max_rounds: int = MAX_ROUNDS,
 ) -> None:
     started = time.perf_counter()
     checkpoint = len(dialog.messages)
@@ -230,7 +234,7 @@ async def _run_turn(
 
                     dialog.messages.append({"role": "user", "content": question})
                     system = _system_text(config, server, client.instructions)
-                    await _loop(dialog, config, transport, client, specs, system, stats, emit, turn_number)
+                    await _loop(dialog, config, transport, client, specs, system, stats, emit, turn_number, max_rounds)
     except BaseException:
         # Недоделанный ход не оставляет в истории хвостов: вызов без ответа
         # модель на следующем ходу не поймёт.
@@ -255,9 +259,10 @@ async def _loop(
     stats: dict[str, Any],
     emit: Emit,
     turn_number: int,
+    max_rounds: int = MAX_ROUNDS,
 ) -> None:
-    for round_number in range(1, MAX_ROUNDS + 1):
-        last = round_number == MAX_ROUNDS
+    for round_number in range(1, max_rounds + 1):
+        last = round_number == max_rounds
         payload = _payload(config, system, dialog.messages, specs, tool_choice="none" if last else "auto")
         response = await anyio.to_thread.run_sync(transport.send, payload)
         message, finish_reason, usage = _parse(response)
@@ -269,7 +274,7 @@ async def _loop(
         content = message.get("content") if isinstance(message.get("content"), str) else ""
 
         if not calls or last:
-            answer = content.strip() or f"Не уложился в {MAX_ROUNDS} круга вызовов инструментов — сформулируйте вопрос уже."
+            answer = content.strip() or f"Не уложился в {max_rounds} кругов вызовов инструментов — сформулируйте вопрос уже."
             dialog.messages.append({"role": "assistant", "content": answer})
             emit({"type": "answer", "content": answer, "round": round_number, "finish_reason": finish_reason, "usage": usage})
             return

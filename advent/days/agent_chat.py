@@ -204,7 +204,7 @@ def reset_everything() -> dict[str, Any]:
     диалоги, слои памяти, профили, задачи, деревья веток — и выкинуть
     агентов из памяти обоих реестров. То, что раньше делалось руками
     через rm -rf data/agents перед записью видео. Плюс данные дня 18:
-    входящие, журнал тиков, снимки курса и лог cron.
+    входящие, журнал тиков, снимки курса и лог cron, — и отчёты дня 19.
     """
     directory = Path(current_app.config["AGENT_STORE_DIR"])
     files = 0
@@ -226,7 +226,15 @@ def reset_everything() -> dict[str, Any]:
         if reg is not None:
             agents += reg.clear()
 
+    from ..mcp.servers.github import DEFAULT_REPORTS
     from ..scheduler import DATA_DIR, reset as reset_day18
 
     day18 = reset_day18(current_app.config.get("DAY18_DIR") or DATA_DIR)
-    return {"files": files, "agents": agents, "day18": day18}
+    reports = 0
+    for path in Path(current_app.config.get("DAY19_REPORTS_DIR") or DEFAULT_REPORTS).glob("*.md"):
+        try:
+            path.unlink()
+            reports += 1
+        except OSError:
+            pass
+    return {"files": files, "agents": agents, "day18": day18, "day19_reports": reports}

@@ -9,7 +9,7 @@
   if (!button) return;
 
   button.addEventListener("click", async () => {
-    if (!window.confirm("Удалить все диалоги, слои памяти, профили, задачи и данные дня 18?")) return;
+    if (!window.confirm("Удалить все диалоги, слои памяти, профили, задачи, данные дня 18 и отчёты дня 19?")) return;
     button.disabled = true;
     if (status) status.textContent = "чищу…";
     try {
@@ -18,7 +18,13 @@
       if (!response.ok) throw new Error(data?.error || "Не удалось сбросить");
       const day18 = data.day18 || {};
       const cleared = (day18.summaries || 0) + (day18.ticks || 0) + (day18.snapshots || 0);
-      if (status) status.textContent = `удалено файлов: ${data.files ?? 0}${cleared ? ` · записей дня 18: ${cleared}` : ""}`;
+      const reports = data.day19_reports || 0;
+      if (status) {
+        status.textContent =
+          `удалено файлов: ${data.files ?? 0}` +
+          (cleared ? ` · записей дня 18: ${cleared}` : "") +
+          (reports ? ` · отчётов дня 19: ${reports}` : "");
+      }
       window.setTimeout(() => window.location.reload(), 350);
     } catch (error) {
       if (status) status.textContent = error.message || "Не удалось сбросить";

@@ -100,9 +100,9 @@ GITHUB_SERVER = McpServer(
     title="GitHub · наш сервер",
     transport="stdio",
     target=f"{shlex.quote(sys.executable)} -m advent.mcp.servers.github",
-    note="Свой MCP-сервер вокруг публичного GitHub API: поиск, карточка репозитория, репозитории пользователя.",
+    note="Свой MCP-сервер вокруг публичного GitHub API: поиск, карточка, репозитории автора, сравнение и отчёт в файл.",
     cwd=str(PROJECT_ROOT),
-    env=("GITHUB_TOKEN",),
+    env=("GITHUB_TOKEN", "ADVENT_REPORTS_DIR"),
 )
 
 RATES_SERVER = McpServer(

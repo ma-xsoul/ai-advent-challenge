@@ -265,13 +265,16 @@ class FakeGitHub:
             return {"total_count": 159000, "items": [REPO, {**REPO, "full_name": "other/mcp"}]}
         if path.startswith("/users/"):
             return [REPO]
-        return REPO
+        return {**REPO, "full_name": path.removeprefix("/repos/")}
 
 
-def github_transport(api=None):
+def github_transport(api=None, reports_dir=None):
+    """Сервер GitHub в памяти. Отчёты — только во временную папку, не в настоящую data/day19."""
+    import tempfile
+
     from advent.mcp.servers.github import build_server
 
-    server = build_server(api or FakeGitHub())
+    server = build_server(api or FakeGitHub(), reports_dir=reports_dir or tempfile.mkdtemp())
     return lambda spec, errlog: InMemoryTransport(server)
 
 
@@ -333,7 +336,10 @@ class GitHubServerTestCase(unittest.TestCase):
         self.assertTrue(result.ok, result.error)
         self.assertEqual(result.server_name, "advent-github")
         tools = {tool.name: tool for tool in result.tools}
-        self.assertEqual(set(tools), {"search_repositories", "get_repository", "list_user_repositories"})
+        self.assertEqual(
+            set(tools),
+            {"search_repositories", "get_repository", "list_user_repositories", "compare_repositories", "save_report"},
+        )
 
         search = {param.name: param for param in tools["search_repositories"].params}
         self.assertTrue(search["query"].required)
@@ -392,7 +398,7 @@ class ToolLoopTestCase(unittest.TestCase):
         self.assertIn('"stars": 24410', dialog.messages[2]["content"])
 
         first, second = model.payloads
-        self.assertEqual(len(first["tools"]), 3)
+        self.assertEqual(len(first["tools"]), 5)
         self.assertEqual(first["tool_choice"], "auto")
         self.assertEqual(first["thinking"], {"type": "disabled"})
         self.assertIn("Инструкции MCP-сервера", first["messages"][0]["content"])
@@ -499,6 +505,194 @@ class ToolLoopTestCase(unittest.TestCase):
             self.assertTrue(store.delete("s1"))
             with self.assertRaises(DialogError):
                 store.load("../etc")
+
+
+# ── День 19: сравнение, отчёт и сверка цепочки ───────────────────────
+
+
+def search_call(names, round_number=1, query="mcp"):
+    items = [{"full_name": name} for name in names]
+    text = json.dumps({"query": query, "total": 100, "items": items}, ensure_ascii=False)
+    return {"name": "search_repositories", "ok": True, "round": round_number, "arguments": {"query": query}, "for_model": text}
+
+
+def compare_call(names, table, round_number=2):
+    text = json.dumps({"compared": len(names), "leaders": {"stars": names[0]}, "table": table}, ensure_ascii=False)
+    return {"name": "compare_repositories", "ok": True, "round": round_number, "arguments": {"full_names": names}, "for_model": text}
+
+
+def save_call(file, markdown, round_number=3):
+    text = json.dumps({"file": file, "bytes": len(markdown.encode())}, ensure_ascii=False)
+    return {"name": "save_report", "ok": True, "round": round_number, "arguments": {"title": "т", "markdown": markdown}, "for_model": text}
+
+
+TABLE = "| # | Репозиторий | ★ |\n|---|---|---|\n| 1 | a/a | 10 |\n| 2 | b/b | 5 |"
+
+
+class ComposeToolsTestCase(unittest.TestCase):
+    def test_compare_ranks_and_builds_the_table(self):
+        from datetime import datetime
+
+        from advent.mcp.servers.github import compare, repo_card
+
+        cards = [
+            repo_card({**REPO, "full_name": "a/small", "stargazers_count": 5, "pushed_at": "2026-09-29T00:00:00Z", "open_issues_count": 900}),
+            repo_card({**REPO, "full_name": "b/big", "stargazers_count": 500, "pushed_at": "2026-09-01T00:00:00Z"}),
+        ]
+        result = compare(cards, datetime(2026, 9, 30, 12, 0))
+
+        self.assertEqual([row["full_name"] for row in result["repositories"]], ["b/big", "a/small"])
+        self.assertEqual(result["repositories"][0]["rank"], 1)
+        self.assertEqual(result["repositories"][1]["days_since_push"], 1)
+        self.assertEqual(result["leaders"], {"stars": "b/big", "freshest_push": "a/small", "most_open_issues": "a/small"})
+        lines = result["table"].splitlines()
+        self.assertEqual(len(lines), 4)
+        self.assertIn("[b/big](", lines[2])
+
+    def test_report_filename_cannot_escape_the_folder(self):
+        from datetime import datetime
+
+        from advent.mcp.servers.github import report_filename
+
+        name = report_filename("../../etc/passwd: Топ", datetime(2026, 9, 30, 12, 0, 0))
+        self.assertEqual(name, "2026-09-30-120000-etc-passwd-топ.md")
+        self.assertNotIn("/", name)
+        self.assertEqual(report_filename("!!!", datetime(2026, 9, 30)), "2026-09-30-000000-report.md")
+
+    def test_compare_and_save_through_mcp(self):
+        import tempfile
+
+        from advent.mcp import GITHUB_SERVER, call_server_tool
+
+        with tempfile.TemporaryDirectory() as directory:
+            api = FakeGitHub()
+            factory = github_transport(api, directory)
+
+            compared = call_server_tool(GITHUB_SERVER, "compare_repositories", {"full_names": ["a/one", "b/two", "a/one"]}, transport_factory=factory)
+            self.assertTrue(compared.ok, compared.error)
+            self.assertEqual(compared.data["compared"], 2)
+            self.assertEqual(api.requests, [("/repos/a/one", None), ("/repos/b/two", None)])
+
+            saved = call_server_tool(GITHUB_SERVER, "save_report", {"title": "Отчёт", "markdown": "# Отчёт\n" + compared.data["table"]}, transport_factory=factory)
+            self.assertTrue(saved.ok, saved.error)
+            path = pathlib.Path(directory) / saved.data["file"]
+            self.assertEqual(path.read_text(encoding="utf-8"), "# Отчёт\n" + compared.data["table"])
+
+            for bad in ({"full_names": ["only/one"]}, {"full_names": ["no-slash", "a/b"]}, {"full_names": ["../x/y", "a/b"]}):
+                with self.subTest(arguments=bad):
+                    self.assertFalse(call_server_tool(GITHUB_SERVER, "compare_repositories", bad, transport_factory=factory).ok)
+            too_long = {"title": "т", "markdown": "x" * 20001}
+            self.assertFalse(call_server_tool(GITHUB_SERVER, "save_report", too_long, transport_factory=factory).ok)
+
+
+class ChainCheckTestCase(unittest.TestCase):
+    def _saved(self, directory, markdown, name="r.md"):
+        (pathlib.Path(directory) / name).write_text(markdown, encoding="utf-8")
+        return name
+
+    def test_clean_chain_passes_every_check(self):
+        import tempfile
+
+        from advent.mcp.chain import check_chain
+
+        with tempfile.TemporaryDirectory() as directory:
+            report = "# Итог\n\n" + TABLE + "\n\nВывод."
+            calls = [search_call(["a/a", "b/b", "c/c"]), compare_call(["a/a", "b/b"], TABLE), save_call(self._saved(directory, report), report)]
+            result = check_chain(calls, directory)
+
+        self.assertTrue(result["ok"], result["checks"])
+        self.assertTrue(result["complete"])
+        self.assertEqual([step["name"] for step in result["steps"]], ["search_repositories", "compare_repositories", "save_report"])
+        self.assertIn("2 из 3 найденных", result["checks"][1]["detail"])
+
+    def test_each_break_in_the_chain_is_caught(self):
+        import tempfile
+
+        from advent.mcp.chain import check_chain
+
+        with tempfile.TemporaryDirectory() as directory:
+            report = "# Итог\n\n" + TABLE
+            invented = check_chain([search_call(["a/a"]), compare_call(["a/a", "x/invented"], TABLE)], directory)
+            self.assertFalse(invented["checks"][1]["ok"])
+            self.assertIn("x/invented", invented["checks"][1]["detail"])
+            self.assertFalse(invented["checks"][0]["ok"])
+
+            retold = "# Итог\n\nЛидер — a/a, у него 10 звёзд."
+            paraphrased = check_chain(
+                [search_call(["a/a", "b/b"]), compare_call(["a/a", "b/b"], TABLE), save_call(self._saved(directory, retold), retold)],
+                directory,
+            )
+            self.assertFalse(paraphrased["checks"][2]["ok"])
+            self.assertIn("пересказала", paraphrased["checks"][2]["detail"])
+
+            self._saved(directory, "другой текст", "changed.md")
+            changed = check_chain(
+                [search_call(["a/a", "b/b"]), compare_call(["a/a", "b/b"], TABLE), save_call("changed.md", report)],
+                directory,
+            )
+            self.assertFalse(changed["checks"][3]["ok"])
+
+            parallel = check_chain(
+                [search_call(["a/a", "b/b"], 1), compare_call(["a/a", "b/b"], TABLE, 1), save_call(self._saved(directory, report), report, 2)],
+                directory,
+            )
+            self.assertFalse(parallel["checks"][0]["ok"])
+            self.assertIn("не по очереди", parallel["checks"][0]["detail"])
+
+    def test_refined_search_is_the_one_that_counts(self):
+        import tempfile
+
+        from advent.mcp.chain import check_chain
+
+        with tempfile.TemporaryDirectory() as directory:
+            report = TABLE
+            calls = [
+                search_call(["old/one", "old/two"], 1, "mcp"),
+                search_call(["a/a", "b/b"], 2, "topic:mcp"),
+                compare_call(["a/a", "b/b"], TABLE, 3),
+                save_call(self._saved(directory, report), report, 4),
+            ]
+            result = check_chain(calls, directory)
+            self.assertTrue(result["ok"], result["checks"])
+            self.assertIn("2 → 3 → 4", result["checks"][0]["detail"])
+
+    def test_agent_builds_the_whole_chain_itself(self):
+        import tempfile
+
+        from advent.agent import AgentConfig
+        from advent.mcp import GITHUB_SERVER
+        from advent.mcp.agent import ToolDialog, run_turn
+        from advent.mcp.chain import check_chain
+        from advent.mcp.servers.github import compare, repo_card
+
+        with tempfile.TemporaryDirectory() as directory:
+            names = ["modelcontextprotocol/python-sdk", "other/mcp"]
+            from datetime import datetime, timezone
+
+            table = compare([repo_card({**REPO, "full_name": name}) for name in names], datetime.now(timezone.utc))["table"]
+            model = ScriptedModel(
+                call_reply("search_repositories", {"query": "mcp", "limit": 2}, "c1"),
+                call_reply("compare_repositories", {"full_names": names}, "c2"),
+                call_reply("save_report", {"title": "MCP", "markdown": "# MCP\n\n" + table}, "c3"),
+                text_reply("Готово, отчёт сохранён."),
+            )
+            dialog = ToolDialog()
+            events = run_turn(
+                dialog,
+                "Найди, сравни, сохрани",
+                config=AgentConfig(name="t", system_prompt="т"),
+                transport=model,
+                server=GITHUB_SERVER,
+                factory=github_transport(FakeGitHub(), directory),
+                max_rounds=6,
+            )
+
+            self.assertEqual(events[-1]["stats"]["tool_calls"], 3)
+            self.assertEqual(events[-1]["stats"]["llm_calls"], 4)
+            self.assertEqual([payload["tool_choice"] for payload in model.payloads], ["auto"] * 4)
+            result = check_chain(dialog.calls, directory)
+            self.assertTrue(result["ok"], result["checks"])
+            self.assertEqual(len(list(pathlib.Path(directory).glob("*.md"))), 1)
 
 
 # ── День 18: сервер курса, планировщик, crontab ──────────────────────

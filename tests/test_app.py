@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1919,8 +1919,9 @@ class AdventAppTestCase(unittest.TestCase):
             client, _ = self._day_eleven_client(
                 store_dir, routed=['{"chat": {}, "task": {}, "user": {"name": "Максим"}}'], replies=["а1", "а2"]
             )
-            # Без этого сброс дотянулся бы до настоящей data/day18.
+            # Без этого сброс дотянулся бы до настоящих data/day18 и data/day19.
             client.application.config["DAY18_DIR"] = day18_dir
+            client.application.config["DAY19_REPORTS_DIR"] = day18_dir
             self._chat11(client, "в1")
             client.post("/days/12/api/lane", json={"lane": "a", "profile": "reviewer"})
             self.assertGreater(len(os.listdir(store_dir)), 3)
@@ -1948,6 +1949,7 @@ class AdventAppTestCase(unittest.TestCase):
             model = ScriptedModel(call_reply("rate_summary", {"minutes": 10}), text_reply("сводка"))
             client = self._day_eighteen_client(directory, model=model, crontab=crontab)
             client.application.config["AGENT_STORE_DIR"] = directory
+            client.application.config["DAY19_REPORTS_DIR"] = directory
             client.post("/days/18/api/collect")
             client.post("/days/18/api/summary", json={"minutes": 10})
             (pathlib.Path(directory) / "cron.log").write_text("старый тик\n", encoding="utf-8")
@@ -2466,7 +2468,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(data["server"]["key"], "github")
         self.assertEqual(
             [tool["name"] for tool in data["tools"]],
-            ["search_repositories", "get_repository", "list_user_repositories"],
+            ["search_repositories", "get_repository", "list_user_repositories", "compare_repositories", "save_report"],
         )
 
     def test_day_seventeen_turn_streams_the_call_and_is_saved(self):
@@ -2646,6 +2648,114 @@ class AdventAppTestCase(unittest.TestCase):
             for minutes in (0, 2000, "10", True):
                 with self.subTest(minutes=minutes):
                     self.assertEqual(client.post("/days/18/api/summary", json={"minutes": minutes}).status_code, 400)
+
+    def _day_nineteen_client(self, store_dir, model=None, api=None):
+        from tests.test_mcp import ScriptedModel, github_transport
+
+        reports = pathlib.Path(store_dir) / "reports"
+        app = create_app(
+            {
+                "TESTING": True,
+                "AGENT_STORE_DIR": store_dir,
+                "DAY18_DIR": store_dir,
+                "DAY19_REPORTS_DIR": str(reports),
+                "AGENT_TRANSPORT": model or ScriptedModel(),
+                "MCP_TRANSPORT_FACTORY": github_transport(api, reports),
+            }
+        )
+        client = app.test_client()
+        client.set_cookie("agent_session", "s19")
+        return client, reports
+
+    def test_day_nineteen_renders_the_composition_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            client, _ = self._day_nineteen_client(store_dir)
+            response = client.get("/days/19/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 19.", html)
+        self.assertIn("Композиция MCP-инструментов", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("несколько MCP-инструментов, например: search, summarize, saveToFile", html)
+        self.assertIn("первый инструмент получает данные", html)
+        self.assertIn("Второй — обрабатывает", html)
+        self.assertIn("Третий — сохраняет результат", html)
+        self.assertIn("автоматическое выполнение цепочки", html)
+        self.assertIn("корректность передачи данных между инструментами", html)
+        self.assertIn("Автоматический пайплайн из нескольких MCP-инструментов", html)
+        self.assertIn("цепочку из tools scheme", html)
+        self.assertIn("Можно любую цепочку тулов", html)
+        self.assertEqual(html.count('class="day19-rule"'), 4)
+        self.assertIn("Цепочка последнего хода", html)
+        self.assertIn("Отчёты на диске", html)
+        self.assertIn("Сценарий «Найти → сравнить → сохранить»", html)
+        self.assertIn('data-chat-url="/days/19/api/chat/stream"', html)
+        self.assertIn('id="agent-initial"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/agent-chat.css", html)
+        self.assertIn("css/day19.css", html)
+        self.assertIn("js/day19.js", html)
+        self.assertIn('href="/days/19/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_nineteen_turn_builds_the_chain_and_checks_it(self):
+        import tempfile
+        from datetime import datetime, timezone
+
+        from advent.mcp.servers.github import compare, repo_card
+        from tests.test_mcp import REPO, FakeGitHub, ScriptedModel, call_reply, text_reply
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            names = ["modelcontextprotocol/python-sdk", "other/mcp"]
+            table = compare([repo_card({**REPO, "full_name": name}) for name in names], datetime.now(timezone.utc))["table"]
+            model = ScriptedModel(
+                call_reply("search_repositories", {"query": "mcp language:python", "limit": 2}, "c1"),
+                call_reply("compare_repositories", {"full_names": names}, "c2"),
+                call_reply("save_report", {"title": "Топ MCP", "markdown": "# Топ MCP\n\n" + table}, "c3"),
+                text_reply("Отчёт сохранён."),
+            )
+            client, reports = self._day_nineteen_client(store_dir, model, FakeGitHub())
+            response = client.post("/days/19/api/chat/stream", json={"message": "Найди, сравни, сохрани"})
+            events = [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+            self.assertEqual([e["name"] for e in events if e["type"] == "tool_call"], ["search_repositories", "compare_repositories", "save_report"])
+            state = events[-1]["state"]
+            self.assertTrue(state["chain"]["ok"], state["chain"]["checks"])
+            self.assertEqual(state["chain"]["turn"], 1)
+            self.assertEqual(len(state["reports"]), 1)
+            self.assertIn(table.splitlines()[2], state["reports"][0]["content"])
+            self.assertEqual(state["summary"]["llm_calls"], 4)
+
+            page = client.get("/days/19/").get_data(as_text=True)
+            self.assertIn("save_report", page)
+
+            client.application.config["DAY18_DIR"] = store_dir
+            wiped = client.post("/api/reset-all").get_json()
+            self.assertEqual(wiped["day19_reports"], 1)
+            self.assertEqual(list(reports.glob("*.md")), [])
+
+    def test_day_nineteen_allows_a_longer_chain_than_day_seventeen(self):
+        import tempfile
+
+        from tests.test_mcp import ScriptedModel, call_reply
+
+        with tempfile.TemporaryDirectory() as store_dir:
+            replies = [call_reply("get_repository", {"owner": "a", "repo": "b"}, f"c{i}") for i in range(6)]
+            model = ScriptedModel(*replies)
+            client, _ = self._day_nineteen_client(store_dir, model)
+            client.post("/days/19/api/chat/stream", json={"message": "по кругу"}).get_data()
+
+            self.assertEqual(len(model.payloads), 6)
+            self.assertEqual(model.payloads[-1]["tool_choice"], "none")
+
+        scenario = self.client.get("/days/19/api/scenario").get_json()
+        self.assertEqual(scenario["key"], "mcp-chain")
+        self.assertEqual(len(scenario["messages"]), 2)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

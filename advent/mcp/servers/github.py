@@ -1,10 +1,16 @@
 """
-MCP-сервер вокруг публичного GitHub API — день 17.
+MCP-сервер вокруг публичного GitHub API — дни 17 и 19.
 
-Три инструмента, все на чтение: поиск репозиториев, карточка репозитория
-и репозитории пользователя. Сервер отдаёт не сырой ответ GitHub — там
-десятки полей и ссылок, — а короткую выжимку: её потом читает модель,
-и каждый лишний ключ стоит токенов.
+День 17 — три инструмента на чтение: поиск репозиториев, карточка
+репозитория и репозитории пользователя. Сервер отдаёт не сырой ответ
+GitHub — там десятки полей и ссылок, — а короткую выжимку: её потом
+читает модель, и каждый лишний ключ стоит токенов.
+
+День 19 — ещё два, чтобы из инструментов сервера складывалась цепочка
+«получить → обработать → сохранить»: compare_repositories берёт имена
+(обычно — из результата поиска), догружает карточки и считает сравнение
+с готовой таблицей; save_report кладёт отчёт в файл. Порядок вызовов
+сервер не навязывает — его выбирает модель.
 
 Регистрация — декоратор @server.tool(). Имя инструмента берётся из имени
 функции, описание — из docstring, схема параметров — из аннотаций:
@@ -20,7 +26,9 @@ GitHub даёт 60 запросов в час, с ним — 5000.
 from __future__ import annotations
 
 import os
-from datetime import datetime
+import re
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import requests
@@ -40,6 +48,19 @@ NAME_PATTERN = r"^[A-Za-z0-9_.-]{1,100}$"
 Owner = Annotated[str, Field(pattern=NAME_PATTERN, description="Владелец: логин пользователя или организации, например «modelcontextprotocol»")]
 Repo = Annotated[str, Field(pattern=NAME_PATTERN, description="Имя репозитория без владельца, например «python-sdk»")]
 Limit = Annotated[int, Field(ge=1, le=10, description="Сколько репозиториев вернуть, от 1 до 10")]
+
+FULL_NAME_PATTERN = r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$"
+FullNames = Annotated[
+    list[Annotated[str, Field(pattern=FULL_NAME_PATTERN)]],
+    Field(
+        min_length=2,
+        max_length=8,
+        description="Полные имена репозиториев «владелец/имя», от 2 до 8 — например, full_name из результата search_repositories",
+    ),
+]
+
+DEFAULT_REPORTS = Path(__file__).resolve().parents[3] / "data" / "day19" / "reports"
+MAX_REPORT_CHARS = 20_000
 
 
 class GitHubError(ToolError):
@@ -112,14 +133,61 @@ def repo_card(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_server(api: GitHubApi) -> MCPServer:
+def compare(cards: list[dict[str, Any]], today: datetime) -> dict[str, Any]:
+    """Сравнение карточек: место по звёздам, свежесть пуша, лидеры и таблица. Чистая функция."""
+    ranked = sorted(cards, key=lambda card: card["stars"], reverse=True)
+    rows = []
+    for rank, card in enumerate(ranked, start=1):
+        pushed = card.get("pushed")
+        days = (today.date() - datetime.fromisoformat(pushed).date()).days if pushed else None
+        rows.append({"rank": rank, **card, "days_since_push": days})
+
+    fresh = min((row for row in rows if row["days_since_push"] is not None), key=lambda row: row["days_since_push"], default=None)
+    header = "| # | Репозиторий | ★ | Форки | Issues | Язык | Лицензия | Последний пуш |"
+    divider = "|---|---|---|---|---|---|---|---|"
+    lines = [
+        f"| {row['rank']} | [{row['full_name']}]({row['url']}) | {row['stars']} | {row['forks']} | {row['open_issues']} "
+        f"| {row['language'] or '—'} | {row['license'] or '—'} | {row['pushed'] or '—'} |"
+        for row in rows
+    ]
+    return {
+        "compared": len(rows),
+        "repositories": [
+            {key: row[key] for key in ("rank", "full_name", "stars", "forks", "open_issues", "language", "license", "pushed", "days_since_push", "archived")}
+            for row in rows
+        ],
+        "leaders": {
+            "stars": rows[0]["full_name"] if rows else None,
+            "freshest_push": fresh["full_name"] if fresh else None,
+            "most_open_issues": max(rows, key=lambda row: row["open_issues"])["full_name"] if rows else None,
+        },
+        "table": "\n".join([header, divider, *lines]),
+    }
+
+
+def report_filename(title: str, now: datetime) -> str:
+    """Имя файла отчёта из заголовка: дата и слаг. Никаких «/» и «..» — только буквы, цифры и дефисы."""
+    slug = re.sub(r"[^0-9a-zA-Zа-яА-ЯёЁ]+", "-", title.lower()).strip("-")[:60].strip("-") or "report"
+    return f"{now.strftime('%Y-%m-%d-%H%M%S')}-{slug}.md"
+
+
+def build_server(
+    api: GitHubApi,
+    *,
+    reports_dir: str | Path | None = None,
+    now: Any = None,
+) -> MCPServer:
+    reports = Path(reports_dir or os.getenv("ADVENT_REPORTS_DIR") or DEFAULT_REPORTS)
+    clock = now or (lambda: datetime.now(timezone.utc).astimezone())
     server = MCPServer(
         "advent-github",
-        version="17",
+        version="19",
         instructions=(
             "Инструменты читают публичный GitHub. Цифры о репозиториях бери только из результата "
             "инструмента, не по памяти. Нужен один репозиторий — get_repository, несколько по теме — "
-            "search_repositories, всё у одного автора — list_user_repositories."
+            "search_repositories, всё у одного автора — list_user_repositories. Сравнить несколько — "
+            "compare_repositories, сохранить итог в файл — save_report. Данные между инструментами "
+            "передавай дословно: имена — как в full_name, таблицу — как вернул compare_repositories."
         ),
     )
 
@@ -164,6 +232,34 @@ def build_server(api: GitHubApi) -> MCPServer:
         """Публичные репозитории пользователя или организации GitHub — карточки в выбранном порядке."""
         data = api.get(f"/users/{user}/repos", {"per_page": limit, "sort": sort, "type": "owner"})
         return {"user": user, "items": [repo_card(item) for item in (data or [])[:limit]]}
+
+    @server.tool(title="Сравнение репозиториев")
+    def compare_repositories(full_names: FullNames) -> dict[str, Any]:
+        """Сравнить несколько репозиториев: догрузить их карточки, расставить по звёздам, найти лидеров (звёзды, свежесть пуша, открытые issues) и собрать markdown-таблицу для отчёта."""
+        unique = list(dict.fromkeys(full_names))
+        cards = [repo_card(api.get(f"/repos/{name}")) for name in unique]
+        return compare(cards, clock())
+
+    @server.tool(title="Сохранить отчёт")
+    def save_report(
+        title: Annotated[str, Field(min_length=1, max_length=120, description="Заголовок отчёта — из него же имя файла")],
+        markdown: Annotated[
+            str,
+            Field(min_length=1, max_length=MAX_REPORT_CHARS, description="Текст отчёта в markdown — сохраняется в файл как есть"),
+        ],
+    ) -> dict[str, Any]:
+        """Сохранить готовый отчёт в markdown-файл на диске. Возвращает имя файла и размер — по ним отчёт можно найти и проверить."""
+        moment = clock()
+        reports.mkdir(parents=True, exist_ok=True)
+        path = reports / report_filename(title, moment)
+        path.write_text(markdown, encoding="utf-8")
+        return {
+            "file": path.name,
+            "folder": str(reports),
+            "bytes": path.stat().st_size,
+            "lines": markdown.count("\n") + 1,
+            "saved_at": moment.strftime("%H:%M:%S"),
+        }
 
     return server
 

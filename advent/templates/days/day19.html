@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}День 19. Композиция MCP-инструментов · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day19.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 19</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Pipeline · Chain · Handoff</span>
+    </div>
+    <h1>День 19.<br><span>Композиция MCP-инструментов</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание девятнадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Создайте несколько MCP-инструментов, например: search, summarize, saveToFile.</p>
+      <ul class="homework-brief__steps">
+        <li>Реализуйте пайплайн: первый инструмент получает данные.</li>
+        <li>Второй — обрабатывает.</li>
+        <li>Третий — сохраняет результат.</li>
+        <li>Проверьте автоматическое выполнение цепочки.</li>
+        <li>Проверьте корректность передачи данных между инструментами.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Автоматический пайплайн из нескольких MCP-инструментов.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day19-lab" aria-labelledby="day19-lab-title">
+    <div class="day19-lab__intro">
+      <p class="day19-kicker">Практика</p>
+      <h2 id="day19-lab-title">Одна просьба — несколько вызовов подряд</h2>
+      <p>В дне 17 на один вопрос обычно хватало одного инструмента. Теперь задача такая, что одним не обойтись: сначала достать данные, потом их обработать, потом сохранить. Порядок вызовов в коде не прописан — модель сама видит результат первого инструмента и из него формулирует вызов второго.</p>
+    </div>
+
+    <blockquote class="day19-curator">
+      <p>В 19 дне задача была сделать цепочку из tools scheme.</p>
+      <p>Не обязательно, это пример. Можно любую цепочку тулов.</p>
+      <cite>Алексей Гладков, 25.09 — что цепочка живёт внутри одного MCP-сервера и что search → summarize → save лишь пример</cite>
+    </blockquote>
+
+    <ol class="day19-rules">
+      <li class="day19-rule">
+        <span class="day19-rule__rank">01</span>
+        <h3>Один сервер — много тулов</h3>
+        <p>Цепочка собирается из инструментов одного MCP-сервера: одна схема, внутри несколько тулов, каждый делает свою часть. Несколько серверов — это уже день 20.</p>
+        <p class="day19-rule__formula">search · summarize · save</p>
+      </li>
+      <li class="day19-rule">
+        <span class="day19-rule__rank">02</span>
+        <h3>Цепочку строит агент</h3>
+        <p>Нет кода «вызови A, потом B». Модель получает результат A и по нему сама формулирует вызов B — Гладков на вопрос, так ли это, ответил «Ага».</p>
+        <p class="day19-rule__formula">A → результат → вызов B</p>
+      </li>
+      <li class="day19-rule">
+        <span class="day19-rule__rank">03</span>
+        <h3>Передача данных</h3>
+        <p>Выход одного инструмента становится входом следующего. Проверяем именно это: что дошло до второго и третьего шага без потерь и без выдумки.</p>
+        <p class="day19-rule__formula">выход A = вход B</p>
+      </li>
+      <li class="day19-rule">
+        <span class="day19-rule__rank">04</span>
+        <h3>Итог на диске</h3>
+        <p>Последний инструмент сохраняет результат в файл. Файл можно открыть и сверить с тем, что вернули первые два шага.</p>
+        <p class="day19-rule__formula">→ save → файл</p>
+      </li>
+    </ol>
+
+    {% if store_error %}
+      <p class="day19-store-error" role="alert">Файл диалога повреждён: {{ store_error }}. Нажмите «Новый диалог», чтобы начать заново.</p>
+    {% endif %}
+
+    <div class="day19-controls">
+      <p class="day19-controls__note">Попросите то, что одним инструментом не сделать: найти, сравнить и сохранить. Порядок вызовов модель выбирает сама, после хода код сверяет, дошли ли данные по цепочке. Кругов «модель → инструмент» за ход не больше {{ max_rounds }}.</p>
+      <div class="day19-actions">
+        {% if scenario %}
+          <button id="day19-scenario" class="agent-chat__scenario" type="button" title="{{ scenario.description }}" data-scenario-url="{{ url_for('day19.scenario') }}">[▶] Сценарий «{{ scenario.title }}»</button>
+        {% endif %}
+        <button id="agent-reset" class="agent-chat__reset" type="button" title="Стереть историю дня 19; отчёты на диске останутся">[x] Новый диалог</button>
+      </div>
+    </div>
+
+    <div class="agent-workbench day19-workbench">
+      <section class="agent-chat" aria-labelledby="agent-chat-title">
+        <header class="agent-chat__head">
+          <h3 id="agent-chat-title">Диалог</h3>
+          <div class="agent-chat__tools">
+            <span class="day19-server-hint">MCP: {{ server.title }} · {{ server.transport }}</span>
+          </div>
+        </header>
+
+        <div id="agent-log" class="agent-log day19-log" aria-live="polite">
+          <p class="agent-log__empty" data-log-empty>Стек пуст. Попросите, например: «Найди 5 самых звёздных репозиториев про MCP на Python, сравни их и сохрани отчёт в файл».</p>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="{{ url_for('day19.chat_stream') }}"
+          data-state-url="{{ url_for('day19.state') }}"
+          data-reset-url="{{ url_for('day19.reset') }}"
+          data-tools-url="{{ url_for('day19.tools') }}"
+        >
+          <label for="agent-message">Сообщение агенту</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Например: найди 4 репозитория про RAG на Go, сравни и сохрани отчёт"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" aria-live="polite"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Спросить агента <span aria-hidden="true">→</span></button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="agent-debug" aria-labelledby="agent-debug-title">
+        <div class="agent-debug__body">
+          <p class="agent-kicker">MCP-сервер</p>
+          <h3 id="agent-debug-title">{{ server.title }}</h3>
+          <p class="day19-server">
+            <span class="day19-badge">{{ server.transport }}</span>
+            <code>python -m advent.mcp.servers.github</code>
+          </p>
+          <p class="day19-server-note">{{ server.note }}</p>
+
+          <p class="agent-kicker day19-debug-kicker">Цепочка последнего хода</p>
+          <ol class="day19-chain" data-chain>
+            <li class="day19-chain__empty">Цепочки ещё не было.</li>
+          </ol>
+          <ul class="day19-checks" data-checks></ul>
+
+          <p class="agent-kicker day19-debug-kicker">Отчёты на диске</p>
+          <ol class="day19-reports" data-reports>
+            <li class="day19-reports__empty">Отчётов ещё нет.</li>
+          </ol>
+
+          <p class="agent-kicker day19-debug-kicker">Сводка</p>
+          <dl class="agent-debug__group agent-debug__group--live">
+            <div><dt>ходов</dt><dd data-summary="turns">0</dd></div>
+            <div><dt>запросов к модели</dt><dd data-summary="llm_calls">0</dd></div>
+            <div><dt>вызовов инструментов</dt><dd data-summary="tool_calls">0</dd></div>
+            <div><dt>из них с ошибкой</dt><dd data-summary="tool_errors">0</dd></div>
+            <div><dt>токенов на вход</dt><dd data-summary="prompt_tokens">0</dd></div>
+            <div><dt>≈ из них схемы</dt><dd data-summary="schema_tokens_sent">0</dd></div>
+            <div><dt>токенов ответа</dt><dd data-summary="completion_tokens">0</dd></div>
+          </dl>
+
+          <details class="day19-tools-fold">
+            <summary>Инструменты сервера · tools/list</summary>
+            <p class="day19-tools-meta" data-tools-meta>запрашиваю список…</p>
+            <ol class="day19-tools" data-tools></ol>
+          </details>
+
+          <p class="day19-file" data-file></p>
+        </div>
+      </aside>
+    </div>
+
+    <script id="agent-initial" type="application/json">{{ state | tojson }}</script>
+
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day19.js') }}"></script>
+{% endblock %}

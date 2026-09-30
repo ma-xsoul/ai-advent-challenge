@@ -155,6 +155,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=19,
+        title="Композиция MCP",
+        description="Цепочка инструментов строит агент",
+        endpoint="day19.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 
