@@ -105,7 +105,17 @@ GITHUB_SERVER = McpServer(
     env=("GITHUB_TOKEN",),
 )
 
-OWN_SERVERS = (GITHUB_SERVER,)
+RATES_SERVER = McpServer(
+    key="rates",
+    title="Курс доллара · наш сервер",
+    transport="stdio",
+    target=f"{shlex.quote(sys.executable)} -m advent.mcp.servers.rates",
+    note="Свой MCP-сервер: снимает курс доллара к рублю, копит снимки в SQLite и отдаёт итог за период.",
+    cwd=str(PROJECT_ROOT),
+    env=("ADVENT_RATES_DB",),
+)
+
+OWN_SERVERS = (GITHUB_SERVER, RATES_SERVER)
 
 
 def get_server(key: str) -> McpServer | None:
@@ -206,6 +216,59 @@ def inspect_server(
 ) -> Inspection:
     """Подключиться, пройти рукопожатие, забрать tools/list. Не бросает: ошибка — в Inspection."""
     return anyio.run(_inspect, server, transport_factory or open_transport, timeout)
+
+
+@dataclass(frozen=True)
+class ToolResult:
+    """Один вызов инструмента без модели: что вернул сервер и сколько это заняло."""
+
+    ok: bool
+    text: str
+    data: Any
+    ms: int
+    error: str | None = None
+
+
+def call_server_tool(
+    server: McpServer,
+    name: str,
+    arguments: dict[str, Any] | None = None,
+    *,
+    transport_factory: TransportFactory | None = None,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+) -> ToolResult:
+    """
+    Подключиться и вызвать один инструмент — без модели. Так cron дня 18
+    снимает курс: решать тут нечего, а платить за запрос к модели каждые
+    две минуты незачем. Не бросает: сбой — в ToolResult.
+    """
+    return anyio.run(_call_tool, server, name, arguments or {}, transport_factory or open_transport, timeout)
+
+
+async def _call_tool(
+    server: McpServer, name: str, arguments: dict[str, Any], factory: TransportFactory, timeout: float
+) -> ToolResult:
+    started = time.perf_counter()
+    try:
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as errlog:
+            with anyio.fail_after(timeout):
+                async with Client(factory(server, errlog), client_info=CLIENT_INFO, read_timeout_seconds=timeout) as client:
+                    result = await client.call_tool(name, arguments)
+    except BaseException as caught:  # noqa: BLE001 — anyio заворачивает всё в группы
+        if isinstance(caught, (KeyboardInterrupt, SystemExit)):
+            raise
+        error = _describe(caught, timeout)
+        return ToolResult(ok=False, text=error, data=None, ms=_elapsed(started), error=error)
+
+    texts = [block.text for block in (result.content or []) if getattr(block, "type", None) == "text"]
+    text = "\n".join(texts)
+    data = getattr(result, "structured_content", None)
+    ok = not bool(getattr(result, "is_error", False))
+    return ToolResult(ok=ok, text=text, data=data, ms=_elapsed(started), error=None if ok else text)
+
+
+def _elapsed(started: float) -> int:
+    return round((time.perf_counter() - started) * 1000)
 
 
 def open_transport(server: McpServer, errlog: Any) -> AbstractAsyncContextManager[Any]:

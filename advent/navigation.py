@@ -147,6 +147,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=18,
+        title="Планировщик",
+        description="Агент сам присылает сводку",
+        endpoint="day18.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

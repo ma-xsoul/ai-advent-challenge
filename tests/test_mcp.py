@@ -1,5 +1,6 @@
 import json
 import logging
+import pathlib
 import unittest
 from contextlib import asynccontextmanager
 
@@ -498,6 +499,271 @@ class ToolLoopTestCase(unittest.TestCase):
             self.assertTrue(store.delete("s1"))
             with self.assertRaises(DialogError):
                 store.load("../etc")
+
+
+# ── День 18: сервер курса, планировщик, crontab ──────────────────────
+
+
+class FakeRates:
+    """Вместо Yahoo и ЦБ: курсы по очереди, счётчик обращений, сбои по заказу."""
+
+    def __init__(self, prices=(84.10, 84.20, 84.05), official=84.43, market_error=None, official_error=None):
+        self.prices = list(prices)
+        self.official_value = official
+        self.market_calls = 0
+        self.official_calls = 0
+        self.market_error = market_error
+        self.official_error = official_error
+
+    def market(self):
+        self.market_calls += 1
+        if self.market_error:
+            raise self.market_error
+        price = self.prices[min(self.market_calls - 1, len(self.prices) - 1)]
+        return price, 1790757000 + self.market_calls * 60
+
+    def official(self):
+        self.official_calls += 1
+        if self.official_error:
+            raise self.official_error
+        return "2026-09-30", self.official_value
+
+
+class Clock:
+    """Ручные часы: тесты двигают время сами."""
+
+    def __init__(self, start=1790757000.0):
+        self.value = start
+
+    def __call__(self):
+        return self.value
+
+    def advance(self, minutes):
+        self.value += minutes * 60
+
+
+def rates_transport(directory, source=None, clock=None):
+    from advent.mcp.servers.rates import RatesStore, build_server
+
+    store = RatesStore(pathlib.Path(directory) / "rates.sqlite3")
+    server = build_server(store, source or FakeRates(), now=clock or Clock())
+    return lambda spec, errlog: InMemoryTransport(server)
+
+
+class RatesServerTestCase(unittest.TestCase):
+    def test_aggregate_reads_the_period(self):
+        from advent.mcp.servers.rates import aggregate
+
+        points = [{"ts": 1790757000 + i * 120, "price": price} for i, price in enumerate((84.10, 84.30, 84.00, 84.20))]
+        result = aggregate(points, 10, {"date": "2026-09-30", "value": 84.50})
+
+        self.assertEqual((result["points"], result["first"], result["last"]), (4, 84.10, 84.20))
+        self.assertAlmostEqual(result["change"], 0.10)
+        self.assertEqual(result["min"]["price"], 84.00)
+        self.assertEqual(result["max"]["price"], 84.30)
+        self.assertAlmostEqual(result["last_vs_official"], -0.30)
+        self.assertEqual(aggregate([], 10, None)["points"], 0)
+        self.assertIn("не срабатывало", aggregate([], 10, None)["note"])
+
+    def test_thin_keeps_the_ends(self):
+        from advent.mcp.servers.rates import thin
+
+        points = [{"ts": i, "price": i} for i in range(100)]
+        thinned = thin(points, 5)
+        self.assertEqual(len(thinned), 5)
+        self.assertEqual((thinned[0]["ts"], thinned[-1]["ts"]), (0, 99))
+        self.assertEqual(thin(points[:3], 5), points[:3])
+
+    def test_collect_saves_snapshots_and_caches_the_official_rate(self):
+        import tempfile
+
+        from advent.mcp import RATES_SERVER, call_server_tool
+
+        with tempfile.TemporaryDirectory() as directory:
+            source, clock = FakeRates(), Clock()
+            factory = rates_transport(directory, source, clock)
+
+            first = call_server_tool(RATES_SERVER, "collect_rate", transport_factory=factory)
+            clock.advance(2)
+            second = call_server_tool(RATES_SERVER, "collect_rate", transport_factory=factory)
+
+            self.assertTrue(first.ok, first.error)
+            self.assertEqual(first.data["saved"]["price"], 84.10)
+            self.assertEqual(second.data["snapshots_total"], 2)
+            self.assertEqual(second.data["official"]["value"], 84.43)
+            self.assertEqual(source.official_calls, 1)
+
+            summary = call_server_tool(RATES_SERVER, "rate_summary", {"minutes": 10}, transport_factory=factory)
+            self.assertEqual(summary.data["points"], 2)
+            self.assertAlmostEqual(summary.data["change"], 0.10)
+
+            history = call_server_tool(RATES_SERVER, "rate_history", {"minutes": 10, "limit": 2}, transport_factory=factory)
+            self.assertEqual([point["price"] for point in history.data["points"]], [84.10, 84.20])
+
+    def test_market_failure_is_a_tool_error_and_official_failure_is_not(self):
+        import tempfile
+
+        from advent.mcp import RATES_SERVER, call_server_tool
+        from advent.mcp.servers.rates import RateError
+
+        with tempfile.TemporaryDirectory() as directory:
+            down = FakeRates(market_error=RateError("Нет связи с источником курса"))
+            result = call_server_tool(RATES_SERVER, "collect_rate", transport_factory=rates_transport(directory, down))
+            self.assertFalse(result.ok)
+            self.assertIn("Нет связи с источником курса", result.error)
+
+            cbr_down = FakeRates(official_error=RateError("ЦБ молчит"))
+            result = call_server_tool(RATES_SERVER, "collect_rate", transport_factory=rates_transport(directory, cbr_down))
+            self.assertTrue(result.ok)
+            self.assertIsNone(result.data["official"])
+
+    def test_summary_arguments_are_bounded(self):
+        import tempfile
+
+        from advent.mcp import RATES_SERVER, call_server_tool
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = call_server_tool(RATES_SERVER, "rate_summary", {"minutes": 0}, transport_factory=rates_transport(directory))
+            self.assertFalse(result.ok)
+
+
+class SchedulerTestCase(unittest.TestCase):
+    def _inbox(self, directory):
+        from advent.scheduler import Paths
+        from advent.scheduler.inbox import Inbox
+
+        return Inbox(Paths.under(directory).inbox)
+
+    def test_first_tick_only_collects_and_a_later_one_sends_a_summary(self):
+        import tempfile
+
+        from advent.scheduler import tick
+
+        with tempfile.TemporaryDirectory() as directory:
+            clock = Clock()
+            factory = rates_transport(directory, FakeRates(), clock)
+            inbox = self._inbox(directory)
+            model = ScriptedModel(call_reply("rate_summary", {"minutes": 10}), text_reply("Доллар вырос на 0,10 ₽."))
+
+            first = tick(inbox, summary_every=10, factory=factory, transport=model, now=clock)
+            self.assertTrue(first["tick"]["ok"])
+            self.assertEqual(first["tick"]["price"], 84.10)
+            self.assertIsNone(first["summary"])
+            self.assertEqual(model.payloads, [])
+
+            clock.advance(2)
+            self.assertIsNone(tick(inbox, summary_every=10, factory=factory, transport=model, now=clock)["summary"])
+
+            clock.advance(8)
+            third = tick(inbox, summary_every=10, factory=factory, transport=model, now=clock)
+            summary = third["summary"]
+            self.assertTrue(summary["ok"])
+            self.assertEqual(summary["text"], "Доллар вырос на 0,10 ₽.")
+            self.assertEqual(summary["trigger"], "cron")
+            self.assertEqual(summary["calls"][0]["name"], "rate_summary")
+            self.assertIn('"points": 3', summary["calls"][0]["preview"])
+            self.assertEqual(summary["stats"]["llm_calls"], 2)
+            self.assertIn("за последние 10 минут", model.payloads[0]["messages"][1]["content"])
+            self.assertIn("без советов", model.payloads[0]["messages"][0]["content"].lower())
+
+            self.assertEqual(inbox.ticks(1)[0]["summary_id"], summary["id"])
+            self.assertEqual(len(inbox.summaries()), 1)
+
+            clock.advance(2)
+            self.assertIsNone(tick(inbox, summary_every=10, factory=factory, transport=model, now=clock)["summary"])
+
+    def test_failed_summary_still_lands_in_the_inbox(self):
+        import tempfile
+
+        from advent.scheduler import summarize
+
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = self._inbox(directory)
+            item = summarize(inbox, minutes=10, trigger="manual", factory=rates_transport(directory), transport=ScriptedModel(error_at=1))
+
+            self.assertFalse(item["ok"])
+            self.assertIn("DeepSeek недоступен", item["text"])
+            self.assertEqual(inbox.summaries()[0]["id"], item["id"])
+
+    def test_failed_collect_is_a_red_tick(self):
+        import tempfile
+
+        from advent.mcp.servers.rates import RateError
+        from advent.scheduler import collect
+
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = self._inbox(directory)
+            down = FakeRates(market_error=RateError("Источник курса ответил 429"))
+            record = collect(inbox, trigger="cron", factory=rates_transport(directory, down))
+
+            self.assertFalse(record["ok"])
+            self.assertIn("429", record["error"])
+            self.assertIsNone(record["price"])
+
+    def test_clearing_the_inbox_keeps_ticks(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            inbox = self._inbox(directory)
+            inbox.add_tick(ts=1, trigger="cron", ok=True, price=84.0, error=None, ms=5)
+            inbox.add_summary(ts=2, trigger="cron", minutes=10, ok=True, text="т", stats={}, calls=[])
+
+            self.assertEqual(inbox.clear_summaries(), 1)
+            self.assertEqual(inbox.summaries(), [])
+            self.assertEqual(len(inbox.ticks()), 1)
+
+
+class FakeCrontab:
+    """Вместо настоящего crontab — строка в памяти."""
+
+    def __init__(self, text=None):
+        self.text = text
+
+    def __call__(self, command, input=None, capture_output=True, text=True):
+        import subprocess
+
+        if command == ["crontab", "-l"]:
+            if self.text is None:
+                return subprocess.CompletedProcess(command, 1, "", "crontab: no crontab for tester\n")
+            return subprocess.CompletedProcess(command, 0, self.text, "")
+        if command == ["crontab", "-"]:
+            self.text = input
+            return subprocess.CompletedProcess(command, 0, "", "")
+        raise AssertionError(command)
+
+
+class CronTestCase(unittest.TestCase):
+    def test_install_replaces_our_line_and_keeps_others(self):
+        from advent.scheduler import cron
+
+        crontab = FakeCrontab("0 9 * * * backup.sh\n")
+        log = pathlib.Path("/tmp/cron.log")
+
+        line = cron.install(2, 10, log, crontab)
+        self.assertTrue(line.startswith("*/2 * * * * cd "))
+        self.assertIn("-m advent.scheduler tick --summary-every 10", line)
+        self.assertTrue(line.endswith(cron.MARKER))
+
+        cron.install(5, 30, log, crontab)
+        lines = crontab.text.splitlines()
+        self.assertEqual(lines[0], "0 9 * * * backup.sh")
+        self.assertEqual(sum(line.endswith(cron.MARKER) for line in lines), 1)
+
+        state = cron.status(crontab)
+        self.assertEqual((state["installed"], state["every"], state["summary_every"]), (True, 5, 30))
+
+        self.assertTrue(cron.uninstall(crontab))
+        self.assertEqual(crontab.text, "0 9 * * * backup.sh\n")
+        self.assertFalse(cron.uninstall(crontab))
+
+    def test_empty_crontab_is_not_an_error(self):
+        from advent.scheduler import cron
+
+        crontab = FakeCrontab(None)
+        self.assertEqual(cron.status(crontab)["installed"], False)
+        self.assertIsNone(cron.status(crontab)["error"])
+        cron.install(2, 10, pathlib.Path("/tmp/cron.log"), crontab)
+        self.assertEqual(len(crontab.text.splitlines()), 1)
 
 
 if __name__ == "__main__":

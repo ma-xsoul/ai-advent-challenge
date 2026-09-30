@@ -9,14 +9,16 @@
   if (!button) return;
 
   button.addEventListener("click", async () => {
-    if (!window.confirm("Удалить все диалоги, слои памяти, профили и задачи?")) return;
+    if (!window.confirm("Удалить все диалоги, слои памяти, профили, задачи и данные дня 18?")) return;
     button.disabled = true;
     if (status) status.textContent = "чищу…";
     try {
       const response = await fetch(button.dataset.resetAllUrl, { method: "POST" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error || "Не удалось сбросить");
-      if (status) status.textContent = `удалено файлов: ${data.files ?? 0}`;
+      const day18 = data.day18 || {};
+      const cleared = (day18.summaries || 0) + (day18.ticks || 0) + (day18.snapshots || 0);
+      if (status) status.textContent = `удалено файлов: ${data.files ?? 0}${cleared ? ` · записей дня 18: ${cleared}` : ""}`;
       window.setTimeout(() => window.location.reload(), 350);
     } catch (error) {
       if (status) status.textContent = error.message || "Не удалось сбросить";

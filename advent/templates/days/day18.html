@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}День 18. Планировщик и фоновые задачи · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day18.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 18</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Cron · Storage · Summary</span>
+    </div>
+    <h1>День 18.<br><span>Планировщик и фоновые задачи</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание восемнадцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Сделайте MCP-инструмент с отложенным или периодическим выполнением.</p>
+      <ul class="homework-brief__steps">
+        <li>Пример: reminder, периодический сбор данных, регулярный summary.</li>
+        <li>Инструмент должен сохранять данные (JSON / SQLite).</li>
+        <li>Инструмент должен выполняться по расписанию.</li>
+        <li>Инструмент должен возвращать агрегированный результат.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент, который работает 24/7 и периодически выдаёт сводку.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day18-lab" aria-labelledby="day18-lab-title">
+    <div class="day18-lab__intro">
+      <p class="day18-kicker">Практика</p>
+      <h2 id="day18-lab-title">Сводка приходит сама</h2>
+      <p>В дне 17 агент работал, пока его спрашивают: нет вопроса — нет хода. Теперь наоборот: агента будит расписание, он сам идёт в MCP, копит данные и в назначенное время присылает сводку. Спрашивать ничего не нужно — сводку не запрашивают, её получают.</p>
+    </div>
+
+    <blockquote class="day18-curator">
+      <p>Смысл задания в том, чтобы сделать агента, который тебе присылает сводку раз в какое-то время.</p>
+      <p>Крон дёргает агента с MCP, и он всё собирает. У агента нет такого понятия, как heartbeat.</p>
+      <cite>Алексей Гладков, 24–25.09 — на вопросы, хватит ли хранилища и ручных запросов</cite>
+    </blockquote>
+
+    <ol class="day18-rules">
+      <li class="day18-rule">
+        <span class="day18-rule__rank">01</span>
+        <h3>Расписание снаружи</h3>
+        <p>Будильник — не агент, а cron (на маке — launchd). Просьба «напомни через час» агенту слетит: между ходами он не живёт и времени не видит.</p>
+        <p class="day18-rule__formula">cron → агент → MCP</p>
+      </li>
+      <li class="day18-rule">
+        <span class="day18-rule__rank">02</span>
+        <h3>Инструмент с памятью</h3>
+        <p>MCP-инструмент на каждом тике снимает данные и складывает их в SQLite или JSON. Снимки копятся между запусками — агенту помнить ничего не нужно.</p>
+        <p class="day18-rule__formula">тик → снимок → SQLite</p>
+      </li>
+      <li class="day18-rule">
+        <span class="day18-rule__rank">03</span>
+        <h3>Агрегат</h3>
+        <p>Инструмент возвращает не сырые снимки, а итог за период: что изменилось, на сколько, что нового. Модель пишет сводку из итога, а не из сотни строк.</p>
+        <p class="day18-rule__formula">снимки → дельта → итог</p>
+      </li>
+      <li class="day18-rule">
+        <span class="day18-rule__rank">04</span>
+        <h3>Доставка</h3>
+        <p>Сводка приходит в назначенный час сама — её не запрашивают. «24/7» здесь значит: агент выполнится по расписанию, даже если страницу никто не открывал.</p>
+        <p class="day18-rule__formula">18:00 → сводка пришла</p>
+      </li>
+    </ol>
+
+    <section class="day18-schedule" aria-labelledby="day18-schedule-title" data-schedule>
+      <header class="day18-schedule__head">
+        <h3 id="day18-schedule-title">Расписание · crontab</h3>
+        <span class="day18-schedule__state" data-cron-state>—</span>
+      </header>
+      <code class="day18-schedule__line" data-cron-line></code>
+      <dl class="day18-schedule__facts">
+        <div><dt>последний тик</dt><dd data-fact="last_tick">—</dd></div>
+        <div><dt>следующая сводка</dt><dd data-fact="next_summary">—</dd></div>
+        <div><dt>снимков в базе</dt><dd data-fact="snapshots">—</dd></div>
+        <div><dt>MCP-сервер</dt><dd>{{ server.title }} · {{ server.transport }}</dd></div>
+      </dl>
+      <div class="day18-schedule__commands">
+        <p>Включить расписание — в терминале проекта:</p>
+        <code data-cron-install></code>
+        <p>Выключить:</p>
+        <code data-cron-uninstall></code>
+      </div>
+    </section>
+
+    <div class="day18-controls">
+      <div class="day18-actions">
+        <button id="day18-collect" class="day18-btn" type="button" title="Первый шаг тика: MCP-инструмент collect_rate, без модели">[▶] Снять курс сейчас</button>
+        <button id="day18-summary" class="day18-btn day18-btn--go" type="button" title="Второй шаг тика: агент с моделью пишет сводку">[✎] Сводка сейчас</button>
+        <button id="day18-clear" class="day18-btn" type="button" title="Стереть сводки из входящих; снимки курса останутся">[x] Очистить входящие</button>
+      </div>
+      <span id="day18-status" class="day18-status" aria-live="polite"></span>
+    </div>
+
+    <div class="day18-grid">
+      <section class="day18-panel" aria-labelledby="day18-inbox-title">
+        <header class="day18-panel__head">
+          <h3 id="day18-inbox-title">Входящие</h3>
+          <span class="day18-panel__meta" data-inbox-meta></span>
+        </header>
+        <ol class="day18-inbox" data-inbox>
+          <li class="day18-inbox__empty">Сводок пока нет. Они придут сами по расписанию — или нажмите «Сводка сейчас».</li>
+        </ol>
+      </section>
+
+      <div class="day18-side">
+        <section class="day18-panel" aria-labelledby="day18-chart-title">
+          <header class="day18-panel__head">
+            <h3 id="day18-chart-title">USD/RUB · последний час</h3>
+            <span class="day18-panel__meta" data-chart-meta></span>
+          </header>
+          <div class="day18-chart" data-chart></div>
+        </section>
+
+        <section class="day18-panel" aria-labelledby="day18-ticks-title">
+          <header class="day18-panel__head">
+            <h3 id="day18-ticks-title">Журнал тиков</h3>
+            <span class="day18-panel__meta">последние 10</span>
+          </header>
+          <ol class="day18-ticks" data-ticks></ol>
+        </section>
+      </div>
+    </div>
+
+    <form
+      id="day18-urls"
+      hidden
+      data-state-url="{{ url_for('day18.state') }}"
+      data-collect-url="{{ url_for('day18.collect_now') }}"
+      data-summary-url="{{ url_for('day18.summary_now') }}"
+      data-clear-url="{{ url_for('day18.clear_inbox') }}"
+    ></form>
+    <script id="day18-initial" type="application/json">{{ state | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day18.js') }}"></script>
+{% endblock %}

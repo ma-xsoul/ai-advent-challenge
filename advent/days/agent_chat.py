@@ -198,12 +198,13 @@ def store_error_response(error: StoreError):
     return jsonify({"error": str(error)}), 500
 
 
-def reset_everything() -> dict[str, int]:
+def reset_everything() -> dict[str, Any]:
     """
     Кнопка «сбросить всё» в боковой панели: снести все файлы сессий —
     диалоги, слои памяти, профили, задачи, деревья веток — и выкинуть
     агентов из памяти обоих реестров. То, что раньше делалось руками
-    через rm -rf data/agents перед записью видео.
+    через rm -rf data/agents перед записью видео. Плюс данные дня 18:
+    входящие, журнал тиков, снимки курса и лог cron.
     """
     directory = Path(current_app.config["AGENT_STORE_DIR"])
     files = 0
@@ -224,4 +225,8 @@ def reset_everything() -> dict[str, int]:
         reg = current_app.extensions.get(name)
         if reg is not None:
             agents += reg.clear()
-    return {"files": files, "agents": agents}
+
+    from ..scheduler import DATA_DIR, reset as reset_day18
+
+    day18 = reset_day18(current_app.config.get("DAY18_DIR") or DATA_DIR)
+    return {"files": files, "agents": agents, "day18": day18}

@@ -1,4 +1,5 @@
 import json
+import pathlib
 import unittest
 from unittest.mock import patch
 
@@ -361,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -1914,10 +1915,12 @@ class AdventAppTestCase(unittest.TestCase):
         import os
         import tempfile
 
-        with tempfile.TemporaryDirectory() as store_dir:
+        with tempfile.TemporaryDirectory() as store_dir, tempfile.TemporaryDirectory() as day18_dir:
             client, _ = self._day_eleven_client(
                 store_dir, routed=['{"chat": {}, "task": {}, "user": {"name": "Максим"}}'], replies=["а1", "а2"]
             )
+            # Без этого сброс дотянулся бы до настоящей data/day18.
+            client.application.config["DAY18_DIR"] = day18_dir
             self._chat11(client, "в1")
             client.post("/days/12/api/lane", json={"lane": "a", "profile": "reviewer"})
             self.assertGreater(len(os.listdir(store_dir)), 3)
@@ -1932,6 +1935,31 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(state["messages"], [])
             self.assertEqual([layer["items"] for layer in state["memory"]["layers"]], [[], [], []])
             self.assertEqual(client.get("/days/12/api/state").get_json()["lanes"]["a"]["profile"], "maksim")
+
+    def test_reset_all_also_wipes_day_eighteen_but_not_crontab(self):
+        import tempfile
+
+        from advent.scheduler import cron
+        from tests.test_mcp import FakeCrontab, ScriptedModel, call_reply, text_reply
+
+        with tempfile.TemporaryDirectory() as directory:
+            crontab = FakeCrontab()
+            cron.install(1, 1, pathlib.Path(directory) / "cron.log", crontab)
+            model = ScriptedModel(call_reply("rate_summary", {"minutes": 10}), text_reply("сводка"))
+            client = self._day_eighteen_client(directory, model=model, crontab=crontab)
+            client.application.config["AGENT_STORE_DIR"] = directory
+            client.post("/days/18/api/collect")
+            client.post("/days/18/api/summary", json={"minutes": 10})
+            (pathlib.Path(directory) / "cron.log").write_text("старый тик\n", encoding="utf-8")
+
+            data = client.post("/api/reset-all").get_json()
+
+            self.assertEqual(data["day18"], {"summaries": 1, "ticks": 1, "snapshots": 1})
+            state = client.get("/days/18/api/state").get_json()
+            self.assertEqual((state["summaries"], state["ticks"], state["snapshots_total"]), ([], [], 0))
+            self.assertIsNone(state["chart"]["official"])
+            self.assertEqual((pathlib.Path(directory) / "cron.log").read_text(encoding="utf-8"), "")
+            self.assertTrue(state["cron"]["installed"])
 
     def test_every_page_has_the_reset_all_button(self):
         html = self.client.get("/days/13/").get_data(as_text=True)
@@ -2499,6 +2527,125 @@ class AdventAppTestCase(unittest.TestCase):
         scenario = self.client.get("/days/17/api/scenario").get_json()
         self.assertEqual(scenario["key"], "mcp-github")
         self.assertEqual(len(scenario["messages"]), 4)
+
+    def _day_eighteen_client(self, directory, model=None, crontab=None, source=None):
+        import time
+
+        from tests.test_mcp import FakeCrontab, ScriptedModel, rates_transport
+
+        app = create_app(
+            {
+                "TESTING": True,
+                "DAY18_DIR": directory,
+                "AGENT_TRANSPORT": model or ScriptedModel(),
+                # Настоящие часы: график страницы берёт «последний час» от настоящего времени.
+                "MCP_TRANSPORT_FACTORY": rates_transport(directory, source, clock=time.time),
+                "CRONTAB_RUNNER": crontab or FakeCrontab(None),
+            }
+        )
+        return app.test_client()
+
+    def test_day_eighteen_renders_the_scheduler_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_eighteen_client(directory).get("/days/18/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 18.", html)
+        self.assertIn("Планировщик и фоновые задачи", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("MCP-инструмент с отложенным или периодическим выполнением", html)
+        self.assertIn("reminder, периодический сбор данных, регулярный summary", html)
+        self.assertIn("сохранять данные (JSON / SQLite)", html)
+        self.assertIn("выполняться по расписанию", html)
+        self.assertIn("возвращать агрегированный результат", html)
+        self.assertIn("Агент, который работает 24/7 и периодически выдаёт сводку", html)
+        self.assertIn("присылает сводку раз в какое-то время", html)
+        self.assertIn("Крон дёргает агента с MCP", html)
+        self.assertEqual(html.count('class="day18-rule"'), 4)
+        self.assertIn("Расписание · crontab", html)
+        self.assertIn("Входящие", html)
+        self.assertIn('data-collect-url="/days/18/api/collect"', html)
+        self.assertIn('data-summary-url="/days/18/api/summary"', html)
+        self.assertIn('id="day18-initial"', html)
+        self.assertIn("Курс доллара · наш сервер", html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day18.css", html)
+        self.assertIn("js/day18.js", html)
+        self.assertIn('href="/days/18/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_eighteen_state_reads_crontab_without_touching_it(self):
+        import tempfile
+
+        from advent.scheduler import cron
+        from tests.test_mcp import FakeCrontab
+
+        with tempfile.TemporaryDirectory() as directory:
+            crontab = FakeCrontab("0 9 * * * backup.sh\n")
+            state = self._day_eighteen_client(directory, crontab=crontab).get("/days/18/api/state").get_json()
+            self.assertFalse(state["cron"]["installed"])
+            self.assertIn("advent.scheduler install", state["cron"]["install"])
+            self.assertIsNone(state["next_summary_ts"])
+            self.assertEqual(crontab.text, "0 9 * * * backup.sh\n")
+
+            cron.install(2, 10, pathlib.Path(directory) / "cron.log", crontab)
+            state = self._day_eighteen_client(directory, crontab=crontab).get("/days/18/api/state").get_json()
+            self.assertTrue(state["cron"]["installed"])
+            self.assertEqual((state["cron"]["every"], state["summary_every"]), (2, 10))
+
+    def test_day_eighteen_manual_collect_and_summary_fill_the_inbox(self):
+        import tempfile
+
+        from tests.test_mcp import ScriptedModel, call_reply, text_reply
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = ScriptedModel(call_reply("rate_summary", {"minutes": 10}), text_reply("Курс почти не менялся."))
+            client = self._day_eighteen_client(directory, model=model)
+
+            collected = client.post("/days/18/api/collect").get_json()
+            self.assertTrue(collected["tick"]["ok"])
+            self.assertEqual(collected["tick"]["trigger"], "manual")
+            self.assertEqual(collected["state"]["snapshots_total"], 1)
+            self.assertEqual(len(collected["state"]["chart"]["points"]), 1)
+            self.assertEqual(collected["state"]["chart"]["official"]["value"], 84.43)
+
+            response = client.post("/days/18/api/summary", json={"minutes": 10})
+            data = response.get_json()
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(data["summary"]["text"], "Курс почти не менялся.")
+            self.assertEqual(data["state"]["summaries"][0]["calls"][0]["name"], "rate_summary")
+
+            cleared = client.post("/days/18/api/inbox/clear").get_json()
+            self.assertEqual(cleared["removed"], 1)
+            self.assertEqual(cleared["state"]["summaries"], [])
+            self.assertEqual(len(cleared["state"]["ticks"]), 1)
+
+    def test_day_eighteen_reports_failures(self):
+        import tempfile
+
+        from advent.mcp.servers.rates import RateError
+        from tests.test_mcp import FakeRates, ScriptedModel
+
+        with tempfile.TemporaryDirectory() as directory:
+            down = FakeRates(market_error=RateError("Источник курса ответил 429"))
+            client = self._day_eighteen_client(directory, model=ScriptedModel(error_at=1), source=down)
+
+            response = client.post("/days/18/api/collect")
+            self.assertEqual(response.status_code, 502)
+            self.assertIn("429", response.get_json()["tick"]["error"])
+
+            response = client.post("/days/18/api/summary", json={"minutes": 10})
+            self.assertEqual(response.status_code, 502)
+            self.assertFalse(response.get_json()["summary"]["ok"])
+
+            for minutes in (0, 2000, "10", True):
+                with self.subTest(minutes=minutes):
+                    self.assertEqual(client.post("/days/18/api/summary", json={"minutes": minutes}).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})
