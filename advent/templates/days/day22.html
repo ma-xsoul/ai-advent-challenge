@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}День 22. Первый RAG-запрос · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day22.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 22</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Retrieve · Augment · Generate</span>
+    </div>
+    <h1>День 22.<br><span>Первый RAG-запрос</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать второго дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Реализуйте функцию: вопрос → поиск релевантных чанков → объединение с вопросом → запрос к LLM.</p>
+      <ul class="homework-brief__steps">
+        <li>Сравните ответ модели без RAG и ответ модели с RAG.</li>
+        <li>Усиление: составьте мини-набор из 10 контрольных вопросов по вашей базе.</li>
+        <li>Усиление: для каждого вопроса зафиксируйте ожидание (что должно быть в ответе) и какие источники должны быть использованы (если применимо).</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Агент с двумя режимами (с RAG / без RAG) + 10 контрольных вопросов и сравнение качества.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day22-lab" aria-labelledby="day22-lab-title">
+    <div class="day22-lab__intro">
+      <p class="day22-kicker">Практика</p>
+      <h2 id="day22-lab-title">Сначала найти, потом ответить</h2>
+      <p>Вчера построили индекс по нашему проекту. Сегодня он начинает работать: по вопросу находятся ближайшие куски, они вместе с вопросом уходят модели — и та отвечает по нашим документам, а не по памяти. Тот же вопрос уходит и без кусков, чтобы разница была видна рядом.</p>
+    </div>
+
+    <blockquote class="day22-curator">
+      <p>Так сделать запрос с рагом и сделать без него.</p>
+      <p>А, ну это типа задача со звёздочкой.</p>
+      <cite>Алексей Гладков, 29.09 — что показать на видео и что значит блок «Усиление»</cite>
+    </blockquote>
+
+    <ol class="day22-rules">
+      <li class="day22-rule">
+        <span class="day22-rule__rank">01</span>
+        <h3>Поиск</h3>
+        <p>Вопрос превращается в вектор той же моделью, что и база, и индекс дня 21 отдаёт несколько ближайших кусков — с файлом, разделом и строками.</p>
+        <p class="day22-rule__formula">вопрос → top-K кусков</p>
+      </li>
+      <li class="day22-rule">
+        <span class="day22-rule__rank">02</span>
+        <h3>Промпт</h3>
+        <p>Найденные куски склеиваются с вопросом в один запрос: «отвечай по этим фрагментам и назови, откуда взял». Если в них ответа нет — так и сказать.</p>
+        <p class="day22-rule__formula">куски + вопрос → LLM</p>
+      </li>
+      <li class="day22-rule">
+        <span class="day22-rule__rank">03</span>
+        <h3>Два режима</h3>
+        <p>Одна модель, один вопрос, два запроса: без базы — только по памяти модели, с базой — по найденным кускам. Ответы стоят рядом.</p>
+        <p class="day22-rule__formula">без RAG · с RAG</p>
+      </li>
+      <li class="day22-rule">
+        <span class="day22-rule__rank">04</span>
+        <h3>Контрольные вопросы</h3>
+        <p>Десять вопросов по проекту, у каждого — что должно быть в ответе и из каких файлов. Прогон показывает, какой режим попал, а какой нет.</p>
+        <p class="day22-rule__formula">ожидание + источники → сверка</p>
+      </li>
+    </ol>
+
+    <section class="day22-panel" aria-labelledby="day22-base-title">
+      <header class="day22-panel__head">
+        <h3 id="day22-base-title">База · индекс дня 21</h3>
+        <span class="day22-panel__meta">
+          {% if state.ready %}{{ state.documents }} файлов · {{ state.chunks }} кусков {{ strategy }} · {{ state.model }}{% else %}не готова{% endif %}
+        </span>
+      </header>
+      {% if state.ready %}
+        <dl class="day22-facts">
+          <div><dt>поиск</dt><dd>top-{{ top_k }} · нарезка {{ strategy }}</dd></div>
+          <div><dt>векторы</dt><dd>{{ state.model }}</dd></div>
+          <div><dt>ответы</dt><dd>{{ model }} · t = 0.2</dd></div>
+          <div><dt>индекс собран</dt><dd>{{ (state.built_at or "")[:16]|replace("T", " ") }}</dd></div>
+        </dl>
+      {% else %}
+        <p class="day22-warning">{{ state.reason }} <a href="{{ url_for('day21.index') }}">Открыть день 21 →</a></p>
+      {% endif %}
+    </section>
+
+    <section class="day22-panel" aria-labelledby="day22-ask-title">
+      <header class="day22-panel__head">
+        <h3 id="day22-ask-title">Вопрос · два ответа рядом</h3>
+        <span class="day22-panel__meta">один системный промпт, одна модель — разница только в кусках</span>
+      </header>
+      <div class="day22-picks" data-picks>
+        {% for probe in probes %}
+          <button type="button" class="day22-pick" data-question="{{ probe.question }}"><span>{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}</button>
+        {% endfor %}
+      </div>
+      <form id="day22-ask" class="day22-ask" data-ask-url="{{ url_for('day22.ask_question') }}">
+        <label class="sr-only" for="day22-question">Вопрос</label>
+        <input id="day22-question" name="question" type="search" maxlength="500" required placeholder="Спросите что-нибудь о проекте или выберите контрольный вопрос" {% if not state.ready %}disabled{% endif %}>
+        <button class="day22-btn day22-btn--go" type="submit" {% if not state.ready %}disabled{% endif %}>Спросить</button>
+      </form>
+      <p id="day22-error" class="day22-error" role="alert" hidden></p>
+
+      <div class="day22-run" data-run hidden>
+        <div class="day22-expect" data-expect hidden>
+          <p class="day22-label">Ожидание</p>
+          <p data-expect-text></p>
+          <p class="day22-expect__sources">источники: <span data-expect-sources></span></p>
+        </div>
+
+        <details class="day22-fold day22-retrieved">
+          <summary>Найдено в базе · <span data-retrieved-meta></span></summary>
+          <ol class="day22-hits" data-hits></ol>
+        </details>
+        <details class="day22-fold">
+          <summary>Что ушло модели · <span data-prompt-meta></span></summary>
+          <div class="day22-prompts">
+            {% for mode in modes %}
+              <div>
+                <p class="day22-label">{{ mode.title }}</p>
+                <pre class="day22-prompt" data-prompt="{{ mode.key }}"></pre>
+              </div>
+            {% endfor %}
+          </div>
+        </details>
+
+        <div class="day22-answers">
+          {% for mode in modes %}
+            <article class="day22-answer day22-answer--{{ mode.key }}" data-answer="{{ mode.key }}">
+              <header class="day22-answer__head">
+                <h4>{{ mode.title }}</h4>
+                <span class="day22-answer__meta" data-answer-meta>ждёт</span>
+              </header>
+              <div class="day22-answer__body markdown-body" data-answer-body></div>
+              <div class="day22-answer__cited" data-answer-cited hidden></div>
+              <ul class="day22-checks" data-answer-checks hidden></ul>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="day22-panel" aria-labelledby="day22-compare-title">
+      <header class="day22-panel__head">
+        <h3 id="day22-compare-title">Контрольные вопросы · ожидание и сверка</h3>
+        <button id="day22-compare" class="day22-btn" type="button" data-compare-url="{{ url_for('day22.compare') }}" {% if not state.ready %}disabled{% endif %}>[▶] Прогнать 10 вопросов</button>
+      </header>
+      <p class="day22-compare__note">Ответ засчитан ✓, если в нём прозвучали хотя бы две трети фактов. «Источник» — ответ с RAG сослался на кусок из нужного файла. <span id="day22-compare-status" aria-live="polite"></span></p>
+      <div class="day22-table-wrap">
+        <table class="day22-table" data-compare-table>
+          <thead>
+            <tr>
+              <th scope="col">Вопрос</th>
+              <th scope="col">Ожидание · источники</th>
+              {% for mode in modes %}<th scope="col">{{ mode.title }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for probe in probes %}
+              <tr data-probe-row="{{ probe.index }}">
+                <td><span class="day22-num">{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}</td>
+                <td>
+                  <ul class="day22-expected">
+                    {% for fact in probe.facts %}<li>{{ fact }}</li>{% endfor %}
+                  </ul>
+                  <p class="day22-sources">{% for source in probe.sources %}<code>{{ source }}</code>{% endfor %}</p>
+                </td>
+                {% for mode in modes %}<td class="day22-verdict" data-verdict="{{ mode.key }}">—</td>{% endfor %}
+              </tr>
+              <tr class="day22-detail" data-probe-detail="{{ probe.index }}" hidden>
+                <td colspan="{{ 2 + modes|length }}">
+                  <div class="day22-answers">
+                    {% for mode in modes %}
+                      <div>
+                        <p class="day22-label">{{ mode.title }}</p>
+                        <div class="markdown-body" data-detail-answer="{{ mode.key }}"></div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot data-compare-summary hidden>
+            {% for key, label in [("passed", "ответов по ожиданию"), ("facts", "фактов прозвучало"), ("sources", "сослался на нужный файл"), ("avg_ms", "среднее время ответа"), ("tokens", "токенов на 10 вопросов")] %}
+              <tr data-summary-row="{{ key }}">
+                <th scope="row" colspan="2">{{ label }}</th>
+                {% for mode in modes %}<td data-summary-cell="{{ mode.key }}">—</td>{% endfor %}
+              </tr>
+            {% endfor %}
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day22.js') }}"></script>
+{% endblock %}

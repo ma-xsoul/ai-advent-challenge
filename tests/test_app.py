@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -2983,6 +2983,118 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(client.get("/days/21/api/search?q=").status_code, 400)
             self.assertEqual(client.get("/days/21/api/search?q=x&k=abc").status_code, 400)
             self.assertEqual(client.get("/days/21/api/search?q=" + "x" * 501).status_code, 400)
+
+    def _day_twenty_two_client(self, directory, transport=None):
+        from advent.rag import HashingEmbedder
+
+        app = create_app(
+            {
+                "TESTING": True,
+                "DAY21_INDEX_PATH": str(pathlib.Path(directory) / "index.sqlite3"),
+                "RAG_EMBEDDER": HashingEmbedder(),
+                "AGENT_TRANSPORT": transport,
+            }
+        )
+        return app.test_client()
+
+    def test_day_twenty_two_renders_the_first_rag_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_twenty_two_client(directory).get("/days/22/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 22.", html)
+        self.assertIn("Первый RAG-запрос", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("вопрос → поиск релевантных чанков → объединение с вопросом → запрос к LLM", html)
+        self.assertIn("ответ модели без RAG и ответ модели с RAG", html)
+        self.assertIn("мини-набор из 10 контрольных вопросов", html)
+        self.assertIn("какие источники должны быть использованы", html)
+        self.assertIn("Агент с двумя режимами (с RAG / без RAG) + 10 контрольных вопросов и сравнение качества", html)
+        self.assertIn("Так сделать запрос с рагом и сделать без него", html)
+        self.assertIn("задача со звёздочкой", html)
+        self.assertEqual(html.count('class="day22-rule"'), 4)
+        self.assertIn("Индекс ещё не собран", html)
+        self.assertIn('href="/days/21/"', html)
+        self.assertEqual(html.count("data-probe-row="), 10)
+        self.assertEqual(html.count('class="day22-pick"'), 10)
+        self.assertIn("три слоя: chat, task, user", html)
+        self.assertIn("<code>advent/agent/memory.py</code>", html)
+        self.assertIn('data-ask-url="/days/22/api/ask"', html)
+        self.assertIn('data-compare-url="/days/22/api/compare"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day22.css", html)
+        self.assertIn("js/markdown.js", html)
+        self.assertIn("js/day22.js", html)
+        self.assertIn('href="/days/22/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_two_answers_with_and_without_rag(self):
+        import tempfile
+
+        from advent.rag import HashingEmbedder, PROBES, RagIndex, collect
+
+        class Transport:
+            """С кусками отвечает фактами и ссылкой, без них — «не знаю»."""
+
+            def _text(self, payload):
+                if "Фрагменты:" in payload["messages"][-1]["content"]:
+                    return "Слои chat, task и user [1]; chat до «Нового диалога», user — пока не удалят руками [1]."
+                return "Не знаю."
+
+            def stream(self, payload):
+                yield {"choices": [{"delta": {"content": self._text(payload)}}]}
+                yield {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+
+            def send(self, payload):
+                return {"choices": [{"message": {"content": self._text(payload)}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+
+        def events(response):
+            return [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._day_twenty_two_client(directory, Transport())
+            self.assertEqual(client.post("/days/22/api/ask", json={"question": "Слои?"}).status_code, 409)
+            self.assertEqual(client.post("/days/22/api/compare").status_code, 409)
+
+            RagIndex(pathlib.Path(directory) / "index.sqlite3").build(collect(), HashingEmbedder())
+            html = client.get("/days/22/").get_data(as_text=True)
+            self.assertIn("кусков structure · hashing:256", html)
+
+            memory = PROBES[3].question
+            stream = client.post("/days/22/api/ask", json={"question": memory, "k": 3})
+            self.assertEqual(stream.mimetype, "application/x-ndjson")
+            got = events(stream)
+            self.assertEqual([event["type"] for event in got][:2], ["probe", "retrieved"])
+            self.assertEqual(got[0]["index"], 4)
+            self.assertEqual(len(got[1]["hits"]), 3)
+            self.assertNotIn("Фрагменты:", got[1]["prompt"]["plain"])
+            self.assertIn("Фрагменты:", got[1]["prompt"]["rag"])
+            answers = {event["mode"]: event for event in got if event["type"] == "answer"}
+            self.assertTrue(answers["rag"]["grade"]["passed"])
+            self.assertFalse(answers["plain"]["grade"]["passed"])
+            self.assertEqual(got[-1]["type"], "done")
+
+            free = events(client.post("/days/22/api/ask", json={"question": "Что угодно"}))
+            self.assertNotIn("probe", [event["type"] for event in free])
+            self.assertNotIn("grade", next(event for event in free if event["type"] == "answer"))
+
+            compare = events(client.post("/days/22/api/compare"))
+            summary = compare[-1]
+            self.assertEqual(summary["type"], "compare_summary")
+            self.assertEqual(summary["total"], 10)
+            self.assertEqual(sum(event["type"] == "answer" for event in compare), 20)
+            self.assertEqual(summary["summary"]["plain"]["passed"], 0)
+            self.assertEqual(len(client.get("/days/22/api/probes").get_json()), 10)
+
+            self.assertEqual(client.post("/days/22/api/ask", json={"question": " "}).status_code, 400)
+            self.assertEqual(client.post("/days/22/api/ask", json=["x"]).status_code, 400)
+            self.assertEqual(client.post("/days/22/api/ask", json={"question": "x", "k": "abc"}).status_code, 400)
+            self.assertEqual(client.post("/days/22/api/ask", json={"question": "x" * 501}).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

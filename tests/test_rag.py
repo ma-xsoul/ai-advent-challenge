@@ -10,7 +10,8 @@ from advent.rag import HashingEmbedder, IndexNotReady, OllamaEmbedder, RagIndex,
 from advent.rag.chunking import FIXED_OVERLAP, FIXED_SIZE, STRUCTURE_MAX, _label, stats
 from advent.rag.corpus import Document, page_text
 from advent.rag.embeddings import EmbeddingError
-from advent.rag.probes import Probe, evaluate
+from advent.rag.answer import MODES, ask, augment, citations, find_probe, grade, iter_compare, messages
+from advent.rag.probes import PROBES, Fact, Probe, evaluate
 
 
 # Тела подлиннее: короткие соседние куски структурная нарезка склеивает в один.
@@ -229,6 +230,147 @@ class IndexTestCase(unittest.TestCase):
             self.assertEqual(result["summary"]["structure"]["mrr"], 1.0)
             self.assertEqual(result["questions"][0]["structure"]["rank"], 1)
             self.assertEqual(result["questions"][1]["fixed"]["top"]["source"], "advent/rates.py")
+
+
+class RagAnswerTransport:
+    """Отвечает по-разному с кусками и без: с ними — фактами и ссылкой [1]."""
+
+    def __init__(self):
+        self.payloads = []
+
+    def _answer(self, payload):
+        self.payloads.append(payload)
+        question = payload["messages"][-1]["content"]
+        if "Фрагменты:" in question:
+            return "Три слоя: chat, task и user [1]. Chat живёт до «Нового диалога» [1]."
+        return "Обычно у агентов есть краткосрочная и долговременная память."
+
+    def send(self, payload):
+        return {"choices": [{"message": {"content": self._answer(payload)}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+
+    def stream(self, payload):
+        text = self._answer(payload)
+        for start in range(0, len(text), 7):
+            yield {"choices": [{"delta": {"content": text[start : start + 7]}}]}
+        yield {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+
+
+MEMORY_PROBE = Probe(
+    "Какие слои памяти есть у агента и сколько живёт каждый?",
+    ("README.md",),
+    "Три слоя: chat, task, user.",
+    (
+        Fact("три слоя: chat, task, user", ("chat & task & user",)),
+        Fact("chat живёт до «Нового диалога»", ("новому диалогу", "нового диалога")),
+        Fact("user живёт, пока не удалят руками", ("руками",)),
+    ),
+)
+
+
+class RagAnswerTestCase(unittest.TestCase):
+    def _index(self, directory):
+        index = RagIndex(Path(directory) / "index.sqlite3")
+        index.build(documents(), HashingEmbedder())
+        return index
+
+    def test_control_questions_carry_expectations_and_facts(self):
+        self.assertEqual(len(PROBES), 10)
+        for probe in PROBES:
+            with self.subTest(question=probe.question):
+                self.assertTrue(probe.expected)
+                self.assertGreaterEqual(len(probe.facts), 3)
+                self.assertTrue(probe.sources)
+                self.assertEqual(probe.as_dict()["facts"], [fact.label for fact in probe.facts])
+        self.assertIs(find_probe("  " + PROBES[2].question.upper() + " "), PROBES[2])
+        self.assertIsNone(find_probe("что-то своё"))
+
+    def test_fact_variants_any_and_all_parts(self):
+        fact = Fact("слои", ("chat & task & user", "три слоя"))
+        self.assertTrue(fact.found_in("Слои `chat`, task, USER"))
+        self.assertTrue(fact.found_in("Есть три слоя"))
+        self.assertFalse(fact.found_in("chat и task"))
+        self.assertTrue(Fact("ё", ("всё",)).found_in("Все равно"))
+
+    def test_prompt_differs_only_by_fragments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            hits = self._index(directory).search("слои памяти", HashingEmbedder(), "structure", k=2)
+        plain, rag = messages("Вопрос?", None), messages("Вопрос?", hits)
+
+        self.assertEqual(plain[0], rag[0])
+        self.assertEqual(plain[1]["content"], "Вопрос?")
+        self.assertTrue(rag[1]["content"].endswith("Вопрос: Вопрос?"))
+        self.assertIn(f"[1] {hits[0].source} · {hits[0].section}", augment("Вопрос?", hits))
+        self.assertIn(hits[1].text, rag[1]["content"])
+
+    def test_citations_map_numbers_to_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            hits = self._index(directory).search("слои памяти", HashingEmbedder(), "structure", k=2)
+        cited = citations("Факт [2]. Ещё [1, 2]; чужое [7] и [x].", hits)
+
+        self.assertEqual([item["n"] for item in cited], [1, 2])
+        self.assertEqual(cited[0]["source"], hits[0].source)
+
+    def test_grade_counts_facts_and_sources(self):
+        good = grade(MEMORY_PROBE, "chat, task, user; chat до нового диалога [1]", [{"n": 1, "source": "README.md", "section": ""}])
+        self.assertEqual((good["found"], good["total"], good["need"]), (2, 3, 2))
+        self.assertTrue(good["passed"])
+        self.assertTrue(good["sources_ok"])
+
+        bad = grade(MEMORY_PROBE, "краткосрочная и долговременная", None)
+        self.assertFalse(bad["passed"])
+        self.assertIsNone(bad["sources_ok"])
+
+    def test_ask_runs_both_modes_and_streams(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index = self._index(directory)
+            transport = RagAnswerTransport()
+            events = []
+            outcome = ask(MEMORY_PROBE.question, index=index, embedder=HashingEmbedder(), transport=transport, emit=events.append, k=2, probe=MEMORY_PROBE)
+
+        types = [event["type"] for event in events]
+        self.assertEqual(types[0], "retrieved")
+        self.assertIn("delta", types)
+        answers = {event["mode"]: event for event in events if event["type"] == "answer"}
+        self.assertEqual(set(answers), set(MODES))
+        self.assertEqual(answers["rag"]["cited"][0]["n"], 1)
+        self.assertTrue(answers["rag"]["grade"]["passed"])
+        self.assertFalse(answers["plain"]["grade"]["passed"])
+        self.assertIsNone(answers["plain"]["cited"])
+        self.assertEqual(answers["rag"]["prompt_tokens"], 10)
+        self.assertEqual(len(events[0]["hits"]), 2)
+        self.assertTrue(all(payload["stream"] and payload["thinking"] == {"type": "disabled"} for payload in transport.payloads))
+        self.assertEqual(len(outcome["results"]), 2)
+
+    def test_ask_reports_a_failed_mode_without_dropping_the_other(self):
+        class HalfBroken(RagAnswerTransport):
+            def send(self, payload):
+                if "Фрагменты:" not in payload["messages"][-1]["content"]:
+                    from advent.agent.transport import TransportError
+
+                    raise TransportError("лимит")
+                return super().send(payload)
+
+        with tempfile.TemporaryDirectory() as directory:
+            events = []
+            ask("вопрос", index=self._index(directory), embedder=HashingEmbedder(), transport=HalfBroken(), emit=events.append, stream=False)
+        answers = {event["mode"]: event for event in events if event["type"] == "answer"}
+        self.assertEqual(answers["plain"]["error"], "лимит")
+        self.assertIn("answer", answers["rag"])
+
+    def test_compare_grades_every_question_and_sums_up(self):
+        with tempfile.TemporaryDirectory() as directory:
+            events = list(iter_compare(index=self._index(directory), embedder=HashingEmbedder(), transport=RagAnswerTransport(), probes=(MEMORY_PROBE, MEMORY_PROBE)))
+
+        self.assertEqual(events[0]["type"], "compare_start")
+        self.assertEqual(sum(event["type"] == "answer" for event in events), 4)
+        self.assertTrue(all("index" in event for event in events if event["type"] == "answer"))
+        summary = events[-1]
+        self.assertEqual(summary["type"], "compare_summary")
+        self.assertEqual(summary["summary"]["rag"]["passed"], 2)
+        self.assertEqual(summary["summary"]["plain"]["passed"], 0)
+        self.assertEqual(summary["summary"]["rag"]["facts"], 0.67)
+        self.assertIsNone(summary["summary"]["plain"]["sources"])
+        self.assertEqual(summary["summary"]["rag"]["tokens"], 30)
 
 
 if __name__ == "__main__":

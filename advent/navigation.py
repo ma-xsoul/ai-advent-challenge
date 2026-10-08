@@ -179,6 +179,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=22,
+        title="Первый RAG-запрос",
+        description="Ответ с базой и без неё",
+        endpoint="day22.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

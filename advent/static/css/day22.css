@@ -1,0 +1,716 @@
+/* День 22: первый RAG-запрос — ответ с базой и без неё. */
+
+.day22-lab {
+  margin-top: 36px;
+}
+
+.day22-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day22-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day22-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day22-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day22-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day22-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day22-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day22-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day22-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day22-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day22-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day22-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day22-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day22-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day22-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day22-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day22-rule__formula::before {
+  content: "> ";
+}
+
+.day22-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: база, вопрос, два ответа, контрольные вопросы ──────── */
+
+.day22-rules {
+  margin-bottom: 14px;
+}
+
+.day22-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day22-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day22-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day22-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day22-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.day22-facts dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day22-facts dt::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day22-facts dd {
+  margin: 3px 0 0;
+  color: var(--text-bright);
+  font-size: 12.5px;
+}
+
+.day22-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day22-warning a {
+  color: var(--text-bright);
+}
+
+.day22-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day22-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day22-num {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+/* Кнопки и поле вопроса. */
+.day22-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day22-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day22-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day22-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day22-btn:disabled,
+.day22-pick:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day22-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  padding: 12px 16px 0;
+}
+
+.day22-pick {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.day22-pick:hover:not(:disabled) {
+  color: var(--text-bright);
+}
+
+.day22-pick span {
+  margin-right: 6px;
+  color: var(--accent);
+}
+
+.day22-ask {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.day22-ask input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 7px 10px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.day22-ask input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day22-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day22-answer .day22-error {
+  margin: 0;
+}
+
+/* Ход одного вопроса: ожидание, найденные куски, промпты, два ответа. */
+.day22-run {
+  border-top: 1px solid var(--line);
+}
+
+.day22-run[hidden] {
+  display: none;
+}
+
+.day22-expect {
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 10px 16px;
+}
+
+.day22-expect p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day22-expect .day22-label {
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+
+.day22-expect .day22-expect__sources {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day22-fold summary {
+  padding: 7px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day22-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day22-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day22-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day22-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day22-run > .day22-fold {
+  border-bottom: 1px solid var(--line);
+}
+
+.day22-prompt {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day22-prompts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  padding: 0 16px 12px;
+}
+
+.day22-hits {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 16px 12px;
+  list-style: none;
+}
+
+.day22-hit {
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.day22-hit__head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0;
+  padding: 6px 10px 0;
+  font-size: 12px;
+}
+
+.day22-hit__head code {
+  color: var(--text-bright);
+  overflow-wrap: anywhere;
+}
+
+.day22-hit__head small {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.day22-hit__section {
+  margin: 0;
+  padding: 2px 10px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.day22-hit .day22-fold summary {
+  padding: 5px 10px;
+}
+
+.day22-hit .day22-prompt {
+  border-width: 1px 0 0;
+}
+
+.day22-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.day22-answer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.day22-answer--rag {
+  border-color: var(--line-strong);
+}
+
+.day22-answer.is-passed {
+  border-color: var(--ok);
+}
+
+.day22-answer.is-failed,
+.day22-answer.is-error {
+  border-color: var(--error);
+}
+
+.day22-answer__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 12px;
+}
+
+.day22-answer__head h4 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.day22-answer--rag .day22-answer__head h4 {
+  color: var(--accent);
+}
+
+.day22-answer__meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day22-answer__body {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.day22-answer__cited {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  padding: 7px 12px;
+  font-size: 11.5px;
+}
+
+.day22-answer__cited[hidden],
+.day22-checks[hidden] {
+  display: none;
+}
+
+.day22-answer__cited .day22-label {
+  margin: 0;
+}
+
+.day22-cite {
+  color: var(--muted-bright);
+  overflow-wrap: anywhere;
+}
+
+.day22-cite b {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day22-checks {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 7px 12px 9px;
+  font-size: 11.5px;
+  list-style: none;
+}
+
+.day22-checks .is-found {
+  color: var(--ok);
+}
+
+.day22-checks .is-missing {
+  color: var(--error);
+}
+
+.day22-checks__total {
+  margin-top: 3px;
+  color: var(--text-bright);
+}
+
+/* Таблица контрольных вопросов. */
+.day22-compare__note {
+  margin: 0;
+  padding: 10px 16px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+#day22-compare-status {
+  color: var(--accent);
+}
+
+.day22-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day22-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day22-table th,
+.day22-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day22-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day22-table tbody td:first-child {
+  width: 30%;
+  color: var(--text);
+}
+
+.day22-expected {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  list-style: none;
+}
+
+.day22-expected li::before {
+  color: var(--accent);
+  content: "· ";
+}
+
+.day22-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+[data-probe-row] {
+  transition: background var(--speed) var(--ease);
+}
+
+[data-probe-row].is-active {
+  background: var(--accent-soft);
+}
+
+[data-probe-row].is-done {
+  cursor: pointer;
+}
+
+[data-probe-row].is-done:hover {
+  background: var(--surface-soft);
+}
+
+.day22-verdict {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.day22-verdict strong {
+  display: block;
+  font-weight: 500;
+}
+
+.day22-verdict small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day22-verdict.is-passed strong {
+  color: var(--ok);
+}
+
+.day22-verdict.is-failed strong,
+.day22-verdict.is-error {
+  color: var(--error);
+}
+
+.day22-detail td {
+  background: var(--surface-deep);
+  padding: 0;
+}
+
+.day22-detail .day22-answers > div {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.day22-table tfoot th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day22-table tfoot td {
+  color: var(--text-bright);
+}
+
+.day22-table tfoot[hidden] {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .day22-rules,
+  .day22-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day22-rules,
+  .day22-facts,
+  .day22-picks,
+  .day22-prompts,
+  .day22-answers {
+    grid-template-columns: 1fr;
+  }
+
+  .day22-table tbody td:first-child {
+    width: auto;
+  }
+}
