@@ -1,0 +1,645 @@
+/* День 21: индексация документов — чанки, эмбеддинги, индекс. */
+
+.day21-lab {
+  margin-top: 36px;
+}
+
+.day21-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day21-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day21-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day21-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day21-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day21-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day21-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day21-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day21-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day21-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day21-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day21-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day21-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day21-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day21-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day21-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day21-rule__formula::before {
+  content: "> ";
+}
+
+.day21-curator p + p {
+  margin-top: 6px;
+}
+
+.day21-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: корпус, сборка, сравнение, поиск ──────────────────────── */
+
+.day21-rules {
+  margin-bottom: 14px;
+}
+
+.day21-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day21-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day21-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day21-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day21-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.day21-facts dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day21-facts dt::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day21-facts dd {
+  margin: 3px 0 0;
+  color: var(--text-bright);
+  font-size: 12.5px;
+}
+
+/* Раскрывашки: список файлов, текст куска. */
+.day21-fold {
+  border-top: 1px solid var(--line);
+}
+
+.day21-panel > .day21-fold {
+  margin: 0;
+}
+
+.day21-fold summary {
+  padding: 6px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day21-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day21-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day21-fold[open] summary::before {
+  content: "[−] ";
+}
+
+.day21-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day21-fold pre {
+  max-height: 300px;
+  margin: 0;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day21-files {
+  display: grid;
+  gap: 2px;
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  padding: 6px 16px 10px;
+  list-style: none;
+}
+
+.day21-files li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11.5px;
+}
+
+.day21-files small {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.day21-kind {
+  flex: none;
+  border: 1px solid currentColor;
+  padding: 0 5px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day21-kind--doc {
+  color: var(--ok);
+}
+
+.day21-kind--code {
+  color: var(--accent);
+}
+
+.day21-kind--page {
+  color: var(--info);
+}
+
+/* Кнопки и прогресс сборки. */
+.day21-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0 0 10px;
+}
+
+.day21-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day21-btn:hover:not(:disabled),
+.day21-btn.is-active {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day21-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day21-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day21-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day21-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.day21-progress {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 16px;
+}
+
+.day21-progress[hidden] {
+  display: none;
+}
+
+.day21-progress__row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.day21-progress__name {
+  color: var(--text-bright);
+}
+
+.day21-progress__bar {
+  height: 6px;
+  border: 1px solid var(--line-strong);
+}
+
+.day21-progress__bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--speed) var(--ease);
+}
+
+.day21-progress small {
+  color: var(--muted);
+}
+
+.day21-error {
+  margin: 0 0 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+/* Таблицы: сравнение стратегий и контрольные вопросы. */
+.day21-table-wrap {
+  overflow-x: auto;
+}
+
+.day21-compare,
+.day21-probes {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day21-compare th,
+.day21-compare td,
+.day21-probes th,
+.day21-probes td {
+  border-bottom: 1px solid var(--line);
+  padding: 7px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day21-compare thead th,
+.day21-probes thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day21-compare thead small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.day21-compare tbody th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.day21-compare td {
+  color: var(--text-bright);
+}
+
+.day21-compare td.is-best {
+  color: var(--ok);
+}
+
+.day21-compare td.is-best::after {
+  content: " ◆";
+  font-size: 9px;
+}
+
+.day21-probes__question {
+  color: var(--text);
+}
+
+.day21-probes__sources {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day21-probes__empty {
+  color: var(--muted);
+}
+
+.day21-rank {
+  white-space: nowrap;
+}
+
+/* Пошаговый прогон: строка проявляется, клетка вспыхивает, когда пришло место. */
+.day21-probes__row {
+  transition: opacity var(--speed) var(--ease), transform var(--speed) var(--ease);
+}
+
+.day21-probes__row.is-entering {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.day21-rank.is-pending {
+  color: var(--muted);
+}
+
+.day21-rank.is-flash {
+  animation: day21-flash 700ms var(--ease);
+}
+
+@keyframes day21-flash {
+  from {
+    background: var(--accent-soft);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day21-probes__row,
+  .day21-rank.is-flash {
+    animation: none;
+    transition: none;
+  }
+}
+
+.day21-rank.is-first {
+  color: var(--ok);
+}
+
+.day21-rank.is-near {
+  color: var(--accent);
+}
+
+.day21-rank.is-miss {
+  color: var(--error);
+}
+
+/* Поиск и просмотр нарезки: две колонки, по стратегии. */
+.day21-search {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+}
+
+.day21-search input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 7px 10px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.day21-search input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day21-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.day21-results__col {
+  min-width: 0;
+}
+
+.day21-results__title {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day21-hits,
+.day21-pieces {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day21-hits__empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.day21-hit,
+.day21-piece {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.day21-hit__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 7px 10px 0;
+  font-size: 11.5px;
+}
+
+.day21-hit__rank {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.day21-hit__score {
+  color: var(--text-bright);
+}
+
+.day21-hit__head small {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.day21-lab .day21-hit__source {
+  margin: 0 10px;
+  justify-self: start;
+  color: var(--muted-bright);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day21-hit__section {
+  margin: 0;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.day21-hit .day21-fold summary,
+.day21-piece .day21-fold summary {
+  padding: 5px 10px;
+}
+
+.day21-viewer-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 16px 0;
+}
+
+@media (max-width: 1100px) {
+  .day21-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day21-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day21-rules,
+  .day21-facts,
+  .day21-results {
+    grid-template-columns: 1fr;
+  }
+
+  .day21-progress__row {
+    grid-template-columns: 70px minmax(0, 1fr);
+  }
+
+  .day21-progress small {
+    grid-column: 1 / -1;
+  }
+}

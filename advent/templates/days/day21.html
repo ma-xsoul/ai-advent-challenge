@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}День 21. Индексация документов · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day21.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 21</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Chunking · Embeddings · Index</span>
+    </div>
+    <h1>День 21.<br><span>Индексация документов</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать первого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Возьмите набор документов: README / статьи / код / pdf → текст, минимум 20–30 страниц текста суммарно (или эквивалент в коде).</p>
+      <ul class="homework-brief__steps">
+        <li>Реализуйте пайплайн индексации: разбиение на чанки (chunking).</li>
+        <li>Генерация эмбеддингов.</li>
+        <li>Сохранение индекса (FAISS / SQLite / JSON).</li>
+        <li>Усиление: добавьте метаданные к каждому чанку (source, title/file, section, chunk_id).</li>
+        <li>Усиление: сделайте минимум 2 стратегии chunking и сравните их — по фиксированному размеру и по структуре (заголовки/разделы/файлы).</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Локальный индекс документов с эмбеддингами + метаданные + сравнение 2 стратегий chunking.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day21-lab" aria-labelledby="day21-lab-title">
+    <div class="day21-lab__intro">
+      <p class="day21-kicker">Практика</p>
+      <h2 id="day21-lab-title">Сначала база, потом ответы по ней</h2>
+      <p>Неделя RAG: модель будет отвечать не по памяти, а по нашим документам. Первый шаг — превратить документы в индекс: нарезать на куски, каждому куску дать вектор-«отпечаток» смысла и сложить всё так, чтобы по вопросу быстро находились нужные куски. Сегодня отвечать ещё ничего не нужно — только построить базу и проверить, что поиск по ней что-то находит.</p>
+    </div>
+
+    <blockquote class="day21-curator">
+      <p>Пока просто нужно сделать разбиение на чанки.</p>
+      <p>Это типа задача со звёздочкой… Просто разделил на две части, чтобы проще было понять, что база, что усиление.</p>
+      <cite>Алексей Гладков, 28–29.09 — что требуется в день 21 и что значит блок «Усиление»</cite>
+    </blockquote>
+
+    <ol class="day21-rules">
+      <li class="day21-rule">
+        <span class="day21-rule__rank">01</span>
+        <h3>Корпус</h3>
+        <p>Что индексируем: документы и код, переведённые в текст, — не меньше 20–30 страниц. Каждый файл помнит, откуда он, чтобы ответ потом мог на него сослаться.</p>
+        <p class="day21-rule__formula">файлы → текст</p>
+      </li>
+      <li class="day21-rule">
+        <span class="day21-rule__rank">02</span>
+        <h3>Чанкинг</h3>
+        <p>Две стратегии нарезки: кусками фиксированного размера с перекрытием — и по структуре: заголовкам документа, функциям и классам кода. Сравниваем, что выходит лучше.</p>
+        <p class="day21-rule__formula">размер · структура</p>
+      </li>
+      <li class="day21-rule">
+        <span class="day21-rule__rank">03</span>
+        <h3>Эмбеддинги</h3>
+        <p>Каждый чанк превращается в вектор — числовой отпечаток смысла. Похожие по смыслу тексты дают близкие векторы, даже если слова в них разные.</p>
+        <p class="day21-rule__formula">чанк → вектор</p>
+      </li>
+      <li class="day21-rule">
+        <span class="day21-rule__rank">04</span>
+        <h3>Индекс</h3>
+        <p>Векторы и метаданные — source, файл, раздел, chunk_id — ложатся в локальный индекс. Проверка: по запросу индекс отдаёт top-K ближайших чанков.</p>
+        <p class="day21-rule__formula">вектор + метаданные → top-K</p>
+      </li>
+    </ol>
+
+    <section class="day21-panel day21-corpus" aria-labelledby="day21-corpus-title">
+      <header class="day21-panel__head">
+        <h3 id="day21-corpus-title">Корпус · наш проект</h3>
+        <span class="day21-panel__meta">{{ corpus.documents }} файлов · {{ "{:,}".format(corpus.chars).replace(",", " ") }} симв. · ≈ {{ corpus.pages }} стр.</span>
+      </header>
+      <dl class="day21-facts">
+        {% for kind, label in [("doc", "README и docs"), ("code", "код advent/"), ("page", "страницы дней")] %}
+          {% set group = corpus.kinds.get(kind, {"files": 0, "chars": 0}) %}
+          <div><dt>{{ label }}</dt><dd>{{ group.files }} файлов · ≈ {{ (group.chars / 1800)|round|int }} стр.</dd></div>
+        {% endfor %}
+        <div><dt>модель эмбеддингов</dt><dd>{{ model }}</dd></div>
+      </dl>
+      <details class="day21-fold">
+        <summary>все файлы корпуса</summary>
+        <ol class="day21-files">
+          {% for file in corpus.files %}
+            <li><span class="day21-kind day21-kind--{{ file.kind }}">{{ file.kind }}</span><code>{{ file.source }}</code><small>{{ file.chars }} симв.</small></li>
+          {% endfor %}
+        </ol>
+      </details>
+    </section>
+
+    <div class="day21-controls">
+      <button id="day21-build" class="day21-btn day21-btn--go" type="button" data-build-url="{{ url_for('day21.build') }}">[▶] Построить индекс</button>
+      <span id="day21-status" class="day21-status" aria-live="polite"></span>
+    </div>
+    <div class="day21-progress" data-progress hidden>
+      {% for strategy in strategies %}
+        <div class="day21-progress__row" data-progress-strategy="{{ strategy.key }}">
+          <span class="day21-progress__name">{{ strategy.key }}</span>
+          <span class="day21-progress__bar"><span data-progress-fill></span></span>
+          <small data-progress-text>ждёт</small>
+        </div>
+      {% endfor %}
+    </div>
+    <p id="day21-error" class="day21-error" role="alert" hidden></p>
+
+    <section class="day21-panel" aria-labelledby="day21-index-title">
+      <header class="day21-panel__head">
+        <h3 id="day21-index-title">Индекс · сравнение стратегий</h3>
+        <span class="day21-panel__meta" data-index-meta>{% if not info.built %}ещё не собран{% endif %}</span>
+      </header>
+      <div class="day21-table-wrap">
+        <table class="day21-compare" data-compare>
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              {% for strategy in strategies %}
+                <th scope="col"><strong>{{ strategy.key }}</strong><small>{{ strategy.title }}</small></th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for key, label in [("chunks", "кусков"), ("avg_chars", "средний размер, симв."), ("range", "мин – макс"), ("overlap", "текста в индексе к корпусу"), ("ms", "сборка"), ("hit1", "hit@1 — нужный файл первым"), ("hit5", "hit@5 — нужный файл в первой пятёрке"), ("mrr", "MRR — средняя 1/позиция")] %}
+              <tr data-row="{{ key }}">
+                <th scope="row">{{ label }}</th>
+                {% for strategy in strategies %}<td data-cell="{{ strategy.key }}">—</td>{% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="day21-panel" aria-labelledby="day21-search-title">
+      <header class="day21-panel__head">
+        <h3 id="day21-search-title">Поиск по индексу · top-K обеими стратегиями</h3>
+        <span class="day21-panel__meta">вопрос → вектор → ближайшие куски</span>
+      </header>
+      <form id="day21-search" class="day21-search" data-search-url="{{ url_for('day21.search') }}">
+        <label class="sr-only" for="day21-query">Запрос</label>
+        <input id="day21-query" name="q" type="search" maxlength="500" required placeholder="Например: как агент вызывает инструменты MCP?">
+        <button class="day21-btn day21-btn--go" type="submit">Найти</button>
+      </form>
+      <div class="day21-results" data-results>
+        {% for strategy in strategies %}
+          <div class="day21-results__col">
+            <p class="day21-results__title">{{ strategy.key }}</p>
+            <ol class="day21-hits" data-hits="{{ strategy.key }}"><li class="day21-hits__empty">Задайте вопрос.</li></ol>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="day21-panel" aria-labelledby="day21-probes-title">
+      <header class="day21-panel__head">
+        <h3 id="day21-probes-title">Контрольные вопросы · где нашёлся нужный файл</h3>
+        <button id="day21-probes" class="day21-btn" type="button" data-probes-url="{{ url_for('day21.probes') }}" data-probes-stream-url="{{ url_for('day21.probes_stream') }}">[↻] Прогнать</button>
+      </header>
+      <div class="day21-table-wrap">
+        <table class="day21-probes" data-probes>
+          <thead><tr><th scope="col">Вопрос</th><th scope="col">Где ответ</th>{% for strategy in strategies %}<th scope="col">{{ strategy.key }}</th>{% endfor %}</tr></thead>
+          <tbody><tr><td colspan="{{ 2 + strategies|length }}" class="day21-probes__empty">Соберите индекс — вопросы прогонятся сами.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="day21-panel" aria-labelledby="day21-viewer-title">
+      <header class="day21-panel__head">
+        <h3 id="day21-viewer-title">Как нарезан файл</h3>
+        <span class="day21-panel__meta">границы кусков обеих стратегий рядом</span>
+      </header>
+      <div class="day21-viewer-pick" data-viewer-pick data-chunks-url="{{ url_for('day21.chunks') }}">
+        {% for source in showcase %}
+          <button type="button" class="day21-btn" data-source="{{ source }}">{{ source }}</button>
+        {% endfor %}
+      </div>
+      <div class="day21-results" data-viewer>
+        {% for strategy in strategies %}
+          <div class="day21-results__col">
+            <p class="day21-results__title">{{ strategy.key }}</p>
+            <ol class="day21-pieces" data-pieces="{{ strategy.key }}"><li class="day21-hits__empty">Выберите файл.</li></ol>
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <script id="day21-initial" type="application/json">{{ info | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/day21.js') }}"></script>
+{% endblock %}

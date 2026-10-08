@@ -171,6 +171,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=21,
+        title="Индексация документов",
+        description="Чанки, эмбеддинги, индекс",
+        endpoint="day21.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -2877,6 +2877,112 @@ class AdventAppTestCase(unittest.TestCase):
         scenario = self.client.get("/days/20/api/scenario").get_json()
         self.assertEqual(scenario["key"], "mcp-orchestra")
         self.assertEqual(len(scenario["messages"]), 2)
+
+    def _day_twenty_one_client(self, directory):
+        from advent.rag import HashingEmbedder
+
+        app = create_app(
+            {
+                "TESTING": True,
+                "DAY21_INDEX_PATH": str(pathlib.Path(directory) / "index.sqlite3"),
+                "RAG_EMBEDDER": HashingEmbedder(),
+            }
+        )
+        return app.test_client()
+
+    def test_day_twenty_one_renders_the_indexing_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_twenty_one_client(directory).get("/days/21/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 21.", html)
+        self.assertIn("Индексация документов", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("README / статьи / код / pdf → текст", html)
+        self.assertIn("минимум 20–30 страниц текста суммарно", html)
+        self.assertIn("разбиение на чанки (chunking)", html)
+        self.assertIn("Генерация эмбеддингов", html)
+        self.assertIn("Сохранение индекса (FAISS / SQLite / JSON)", html)
+        self.assertIn("source, title/file, section, chunk_id", html)
+        self.assertIn("по фиксированному размеру и по структуре", html)
+        self.assertIn("Локальный индекс документов с эмбеддингами + метаданные + сравнение 2 стратегий chunking", html)
+        self.assertIn("Пока просто нужно сделать разбиение на чанки", html)
+        self.assertIn("задача со звёздочкой", html)
+        self.assertEqual(html.count('class="day21-rule"'), 4)
+        self.assertIn("Корпус · наш проект", html)
+        self.assertIn("<code>README.md</code>", html)
+        self.assertIn("Индекс · сравнение стратегий", html)
+        self.assertIn("фиксированный размер · 1200 симв., перекрытие 200", html)
+        self.assertIn('data-build-url="/days/21/api/build"', html)
+        self.assertIn('data-source="advent/mcp/agent.py"', html)
+        self.assertIn('"built": false', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day21.css", html)
+        self.assertIn("js/day21.js", html)
+        self.assertIn('href="/days/21/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_one_builds_the_index_and_searches_it(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._day_twenty_one_client(directory)
+            self.assertEqual(client.get("/days/21/api/search?q=память").status_code, 409)
+            self.assertEqual(client.get("/days/21/api/probes/stream").status_code, 409)
+
+            response = client.post("/days/21/api/build")
+            events = [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+            types = [event["type"] for event in events]
+
+            self.assertEqual(response.mimetype, "application/x-ndjson")
+            self.assertEqual(types[0], "corpus")
+            self.assertEqual(types.count("chunked"), 2)
+            self.assertEqual(types.count("built"), 2)
+            self.assertIn("embedding", types)
+            done = types.index("done")
+            self.assertEqual(types[done + 1], "probe_start")
+            self.assertEqual(types[-1], "probe_summary")
+            self.assertEqual(types.count("probe_question"), 10)
+            self.assertEqual(types.count("probe_result"), 20)
+            info = events[done]["info"]
+            self.assertTrue(info["built"])
+            self.assertEqual(info["model"], "hashing:256")
+            self.assertGreater(info["corpus"]["pages"], 30)
+            self.assertEqual(set(events[-1]["summary"]), {"fixed", "structure"})
+
+            stream = client.get("/days/21/api/probes/stream")
+            steps = [json.loads(line) for line in stream.get_data(as_text=True).splitlines() if line.strip()]
+            self.assertEqual(stream.mimetype, "application/x-ndjson")
+            self.assertEqual(steps[0], {"type": "probe_start", "total": 10, "k": 5})
+            self.assertEqual([step["type"] for step in steps[1:4]], ["probe_question", "probe_result", "probe_result"])
+            self.assertEqual([step["strategy"] for step in steps[2:4]], ["fixed", "structure"])
+            self.assertEqual(steps[1]["index"], steps[2]["index"])
+            self.assertEqual(steps[-1]["type"], "probe_summary")
+
+            found = client.get("/days/21/api/search?q=cron тик расписание сводка&k=3").get_json()
+            self.assertEqual(found["k"], 3)
+            for strategy in ("fixed", "structure"):
+                hits = found["results"][strategy]
+                self.assertEqual(len(hits), 3)
+                self.assertEqual([hit["rank"] for hit in hits], [1, 2, 3])
+                self.assertTrue(all(hit["chunk_id"].startswith(strategy + ":") for hit in hits))
+                self.assertTrue({"source", "section", "start_line", "end_line", "text", "score"} <= set(hits[0]))
+
+            pieces = client.get("/days/21/api/chunks?source=README.md").get_json()
+            self.assertTrue(pieces["strategies"]["fixed"])
+            self.assertTrue(pieces["strategies"]["structure"])
+            self.assertEqual(client.get("/days/21/api/chunks?source=../etc/passwd").status_code, 404)
+            self.assertEqual(client.get("/days/21/api/probes").get_json()["k"], 5)
+            self.assertTrue(client.get("/days/21/api/info").get_json()["built"])
+
+            self.assertEqual(client.get("/days/21/api/search?q=").status_code, 400)
+            self.assertEqual(client.get("/days/21/api/search?q=x&k=abc").status_code, 400)
+            self.assertEqual(client.get("/days/21/api/search?q=" + "x" * 501).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})
