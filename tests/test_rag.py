@@ -12,6 +12,18 @@ from advent.rag.chunking import FIXED_OVERLAP, FIXED_SIZE, STRUCTURE_MAX, _label
 from advent.rag.corpus import Document, page_text
 from advent.rag.embeddings import EmbeddingError
 from advent.rag.answer import MODES, ask, augment, citations, find_probe, grade, iter_compare, messages
+from advent.rag.chat import (
+    CONDENSE_PROMPT,
+    MEMORY_PROMPT,
+    SCENARIOS,
+    ChatStore,
+    RagChat,
+    Scenario,
+    TaskMemory,
+    scenario_summary,
+    turn as chat_turn,
+    update_memory,
+)
 from advent.rag.grounded import (
     ANSWER_PROMPT,
     CLARIFY_PROMPT,
@@ -687,6 +699,140 @@ class GroundedTestCase(unittest.TestCase):
         self.assertEqual(summary["meaning"], {"yes": 1, "partial": 0, "no": 0})
         self.assertEqual((summary["passed"], summary["false_unknown"], summary["unknown_off_topic"]), (1, 0, 1))
         json.dumps(events)
+
+
+class ChatTransport:
+    """
+    Память: цель из первого сообщения, «ограничение: …» — в constraints; goal_changed — если в сообщении
+    «новая задача». Запрос — сообщение плюс «слои памяти». Реранкер: про память — 9. Ответ цитирует
+    самую длинную строку первого фрагмента.
+    """
+
+    def __init__(self):
+        self.answer_users = []
+
+    def send(self, payload):
+        system, user = payload["messages"][0]["content"], payload["messages"][1]["content"]
+        if system == MEMORY_PROMPT:
+            message = user.rsplit("Новое сообщение пользователя:\n", 1)[1]
+            current = json.loads(user.split("Текущая память:\n", 1)[1].split("\n\n", 1)[0])
+            constraints = current["constraints"] + ([message] if message.lower().startswith("ограничение") else [])
+            text = json.dumps({
+                "goal": f"цель: {message}" if not current["goal"] or "новая задача" in message.lower() else "переформулировка",
+                "goal_changed": "новая задача" in message.lower(),
+                "clarified": current["clarified"], "constraints": constraints, "terms": current["terms"],
+            }, ensure_ascii=False)
+        elif system == CONDENSE_PROMPT:
+            text = "«слои памяти агента»"
+        elif system == RERANK_PROMPT:
+            fragments = user.split("\n\n---\n\n")
+            text = json.dumps({"scores": {str(n): (9 if "памят" in f.lower() else 1) for n, f in enumerate(fragments, start=1)}})
+        elif system.startswith(ANSWER_PROMPT):
+            self.answer_users.append(user)
+            lines = user.split("Фрагменты:\n\n", 1)[1].split("\n\n---\n\n")[0].splitlines()[1:]
+            text = json.dumps({"status": "answer", "quotes": [{"n": 1, "text": max(lines, key=len)}], "answer": "Три слоя памяти [1]."}, ensure_ascii=False)
+        else:
+            text = "Уточните, пожалуйста, вопрос."
+        return {"choices": [{"message": {"content": text}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+
+
+class RagChatTestCase(unittest.TestCase):
+    def _index(self, directory):
+        index = RagIndex(Path(directory) / "index.sqlite3")
+        index.build(documents(), HashingEmbedder())
+        return index
+
+    def test_goal_stays_word_for_word_unless_the_task_changed(self):
+        transport = ChatTransport()
+        first = update_memory(TaskMemory(), [], "Хочу понять память агента", 1, transport)["memory"]
+        self.assertEqual((first.goal, first.goal_since), ("цель: Хочу понять память агента", 1))
+
+        same = update_memory(first, [], "Ограничение: коротко", 2, transport)
+        self.assertFalse(same["changed"])
+        self.assertEqual(same["memory"].goal, first.goal)  # «переформулировка» модели не прошла
+        self.assertEqual(same["memory"].constraints, ["Ограничение: коротко"])
+
+        moved = update_memory(same["memory"], [], "Новая задача: расписание", 3, transport)
+        self.assertTrue(moved["changed"])
+        self.assertEqual((moved["memory"].goal_since, moved["memory"].goal_changes[0]["from"]), (3, first.goal))
+
+    def test_broken_memory_reply_keeps_the_old_memory(self):
+        class Broken:
+            def send(self, payload):
+                return {"choices": [{"message": {"content": "не JSON"}}]}
+
+        memory = TaskMemory(goal="цель", goal_since=1)
+        result = update_memory(memory, [], "ещё", 2, Broken())
+        self.assertIs(result["memory"], memory)
+        self.assertIn("не JSON", result["error"])
+        self.assertIn("Цель диалога: цель", memory.render())
+
+    def test_turn_uses_memory_history_and_returns_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index = self._index(directory)
+            transport = ChatTransport()
+            chat, events = RagChat(), []
+            for message in ("Какие слои памяти у агента?", "Ограничение: отвечай коротко", "А сколько живёт каждый?"):
+                entry = chat_turn(chat, message, index=index, embedder=HashingEmbedder(), transport=transport,
+                                  settings=Settings(threshold=0.0, candidates=4, top_k=2), emit=events.append, goal_keywords=("памят",))
+
+        self.assertEqual([event["type"] for event in events[:5]], ["user", "memory", "query", "retrieved", "answer"])
+        self.assertEqual(chat.turns, 3)
+        self.assertEqual(entry["turn"], 3)
+        self.assertEqual(entry["query"], "слои памяти агента")
+        self.assertEqual(entry["quotes"][0]["status"], "exact")
+        self.assertTrue(entry["checks"]["has_sources"])
+        self.assertTrue(entry["checks"]["goal_kept"])
+        self.assertEqual(chat.memory.constraints, ["Ограничение: отвечай коротко"])
+        last_prompt = transport.answer_users[-1]
+        self.assertIn("Цель диалога: цель: Какие слои памяти у агента?", last_prompt)
+        self.assertIn("Ограничения: Ограничение: отвечай коротко", last_prompt)
+        self.assertIn("Пользователь: Ограничение: отвечай коротко", last_prompt)
+        self.assertEqual(chat.history()[0], {"role": "user", "content": "Какие слои памяти у агента?"})
+        json.dumps(events, ensure_ascii=False)
+
+    def test_turn_says_i_dont_know_when_nothing_is_relevant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            chat = RagChat()
+            entry = chat_turn(chat, "Какая погода?", index=self._index(directory), embedder=HashingEmbedder(), transport=ChatTransport(),
+                              settings=Settings(threshold=0.99), emit=lambda event: None)
+        self.assertEqual((entry["status"], entry["content"]), ("unknown", UNKNOWN))
+        self.assertTrue(entry["checks"]["unknown"])
+        self.assertEqual(entry["sources"], [])
+
+    def test_store_round_trip_and_unsafe_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = ChatStore(directory)
+            self.assertEqual(store.load("abc").messages, [])
+            chat = RagChat(messages=[{"role": "user", "content": "x", "turn": 1}], memory=TaskMemory(goal="г", goal_since=1), scenario="mcp_tool")
+            store.save("abc", chat)
+            self.assertTrue((Path(directory) / "abc-d25.json").exists())
+            again = store.load("abc")
+            self.assertEqual((again.turns, again.memory.goal, again.scenario), (1, "г", "mcp_tool"))
+            self.assertTrue(store.delete("abc"))
+            self.assertFalse(store.delete("abc"))
+            with self.assertRaises(ValueError):
+                store.load("../etc")
+
+    def test_scenarios_are_long_and_end_with_a_recap(self):
+        self.assertEqual(len(SCENARIOS), 2)
+        for scenario in SCENARIOS:
+            self.assertGreaterEqual(len(scenario.messages), 10)
+            self.assertLessEqual(len(scenario.messages), 15)
+            self.assertIn("Напомни", scenario.messages[-1])
+            self.assertTrue(scenario.recap)
+
+        scenario = Scenario("s", "S", "цель", ("памят",), ("один", "два"), recap=(("памят",), ("токен",)))
+        checks = {"unknown": False, "has_sources": True, "quotes_verified": 2, "quotes_total": 2, "goal_kept": True}
+        chat = RagChat(messages=[
+            {"role": "user", "content": "один"}, {"role": "assistant", "content": "ответ", "checks": checks, "tokens": 5},
+            {"role": "user", "content": "два"}, {"role": "assistant", "content": "Цель — память, ограничение — токены.", "checks": checks, "tokens": 5},
+        ])
+        summary = scenario_summary(chat, scenario)
+        self.assertEqual((summary["turns"], summary["with_sources"], summary["goal_kept"], summary["tokens"]), (2, 2, 2, 10))
+        self.assertTrue(summary["recap_ok"])
+        chat.messages[-1]["content"] = "Цель — память."
+        self.assertFalse(scenario_summary(chat, scenario)["recap_ok"])
 
 
 if __name__ == "__main__":

@@ -203,6 +203,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=25,
+        title="Мини-чат с RAG",
+        description="История, база и цель диалога",
+        endpoint="day25.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

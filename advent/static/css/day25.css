@@ -1,0 +1,670 @@
+/* День 25: мини-чат с RAG и памятью. */
+
+.day25-lab {
+  margin-top: 36px;
+}
+
+.day25-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day25-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day25-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day25-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day25-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day25-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day25-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day25-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day25-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day25-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day25-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day25-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day25-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day25-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day25-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day25-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day25-rule__formula::before {
+  content: "> ";
+}
+
+.day25-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: панели, кнопки, раскрывашки, таблица ─────────────────── */
+
+.day25-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day25-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day25-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day25-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day25-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day25-warning a {
+  color: var(--text-bright);
+}
+
+.day25-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day25-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day25-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day25-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day25-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day25-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day25-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day25-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day25-fold summary {
+  padding: 7px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day25-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day25-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day25-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day25-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day25-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day25-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day25-table th,
+.day25-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day25-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day25-table tbody td:first-child {
+  width: 30%;
+  color: var(--text);
+}
+
+.day25-table tfoot th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day25-table tfoot td {
+  color: var(--text-bright);
+}
+
+.day25-table tfoot[hidden] {
+  display: none;
+}
+
+/* ── День 25: чат, память задачи, сценарии ──────────────────────────── */
+
+.day25-warning {
+  margin: 0 0 12px;
+  border: 1px solid var(--accent);
+}
+
+.day25-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.day25-messages {
+  display: grid;
+  gap: 10px;
+  max-height: 640px;
+  margin: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  list-style: none;
+}
+
+.day25-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.day25-message {
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day25-message p {
+  margin: 0;
+}
+
+.day25-message--user {
+  justify-self: end;
+  max-width: 85%;
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  color: var(--text-bright);
+}
+
+.day25-message__turn {
+  display: block;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day25-message--assistant {
+  background: var(--surface-deep);
+}
+
+.day25-message--assistant.is-unknown {
+  border-color: var(--accent);
+}
+
+.day25-message.is-pending .day25-message__meta {
+  color: var(--accent);
+}
+
+.day25-message__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.day25-message__meta .day25-label {
+  display: inline;
+  margin-right: 6px;
+}
+
+.day25-message__body {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.day25-clarify {
+  margin-top: 6px !important;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  color: var(--text);
+}
+
+.day25-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day25-source {
+  border: 1px solid var(--line-strong);
+  padding: 0 6px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day25-source b {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day25-quotes summary {
+  padding: 6px 0 0;
+}
+
+.day25-quotes ol {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+}
+
+.day25-quotes blockquote {
+  margin: 2px 0 0;
+  border-left: 2px solid var(--ok);
+  padding-left: 8px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day25-quotes .is-missing blockquote {
+  border-left-color: var(--error);
+}
+
+.day25-quote__mark {
+  color: var(--ok);
+}
+
+.day25-quotes .is-missing .day25-quote__mark {
+  color: var(--error);
+}
+
+.day25-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin-top: 8px !important;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  font-size: 11.5px;
+}
+
+.day25-checks .is-ok {
+  color: var(--ok);
+}
+
+.day25-checks .is-bad {
+  color: var(--error);
+}
+
+.day25-checks__cost {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.day25-form {
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding: 12px 16px;
+}
+
+.day25-form input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 7px 10px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.day25-form input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* Память задачи: справа от чата, новое подсвечивается. */
+.day25-memory {
+  position: sticky;
+  top: 12px;
+}
+
+.day25-memory__list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.day25-memory__list dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day25-memory__list dt::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day25-memory__list dd {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.day25-memory__list p {
+  margin: 0;
+}
+
+.day25-memory__list small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day25-memory__list .day25-changed {
+  color: var(--accent);
+}
+
+.day25-goal {
+  color: var(--text-bright);
+}
+
+.day25-memory__list ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+}
+
+.day25-memory__list li::before {
+  color: var(--accent);
+  content: "· ";
+}
+
+.day25-memory .is-new {
+  animation: day25-flash 1400ms var(--ease);
+}
+
+@keyframes day25-flash {
+  from {
+    background: var(--accent-soft);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day25-memory .is-new {
+    animation: none;
+  }
+}
+
+/* Сценарии. */
+.day25-scenarios {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.day25-scenario {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 10px 12px;
+}
+
+.day25-scenario h4 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.day25-scenario__goal {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day25-scenario .day25-fold {
+  align-self: stretch;
+}
+
+.day25-scenario .day25-fold summary {
+  padding: 2px 0;
+}
+
+.day25-scenario__messages {
+  margin: 4px 0 0;
+  padding-left: 22px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.day25-scenario__progress {
+  margin: 0;
+  color: var(--accent);
+  font-size: 11.5px;
+}
+
+.day25-table-wrap {
+  padding: 0 16px 12px;
+}
+
+.day25-table-wrap[hidden] {
+  display: none;
+}
+
+.day25-table th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day25-table td.is-ok {
+  color: var(--ok);
+}
+
+.day25-table td.is-bad {
+  color: var(--error);
+}
+
+@media (max-width: 1100px) {
+  .day25-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day25-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .day25-memory {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .day25-rules,
+  .day25-scenarios {
+    grid-template-columns: 1fr;
+  }
+
+  .day25-message--user {
+    max-width: 100%;
+  }
+}

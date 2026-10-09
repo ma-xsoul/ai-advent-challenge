@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3291,6 +3291,140 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(client.post("/days/24/api/ask", json={"question": " "}).status_code, 400)
             self.assertEqual(client.post("/days/24/api/ask", json={"question": "x", "settings": {"rerank_min": 11}}).status_code, 400)
             self.assertEqual(client.post("/days/24/api/ask", json={"question": "x" * 501}).status_code, 400)
+
+    def _day_twenty_five_client(self, directory, transport=None):
+        from advent.rag import HashingEmbedder
+
+        # Все папки — временные: сброс и диалоги не дотянутся до настоящих data/.
+        app = create_app(
+            {
+                "TESTING": True,
+                "DAY21_INDEX_PATH": str(pathlib.Path(directory) / "index.sqlite3"),
+                "RAG_EMBEDDER": HashingEmbedder(),
+                "AGENT_TRANSPORT": transport,
+                "AGENT_STORE_DIR": str(pathlib.Path(directory) / "agents"),
+                "DAY18_DIR": str(pathlib.Path(directory) / "day18"),
+                "DAY19_REPORTS_DIR": directory,
+                "DAY20_REPORTS_DIR": directory,
+            }
+        )
+        return app.test_client()
+
+    def test_day_twenty_five_renders_the_rag_chat_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_twenty_five_client(directory).get("/days/25/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 25.", html)
+        self.assertIn("Мини-чат с RAG и памятью", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("хранит историю диалога, при каждом новом вопросе ищет контекст в базе через RAG", html)
+        self.assertIn("всегда выводит источники", html)
+        self.assertIn("«память задачи» (task state)", html)
+        self.assertIn("на 2 длинных сценариях по 10–15 сообщений", html)
+        self.assertIn("не теряет цель и продолжает выдавать ответы с источниками", html)
+        self.assertIn("Мини-чат с RAG + источниками + памятью задачи", html)
+        self.assertIn("надо RAG привязать", html)
+        self.assertIn("собрать всё вместе", html)
+        self.assertEqual(html.count('class="day25-rule"'), 4)
+        self.assertIn("Индекс ещё не собран", html)
+        self.assertIn('data-chat-url="/days/25/api/chat"', html)
+        self.assertIn('data-scenario-url="/days/25/api/scenario"', html)
+        self.assertEqual(html.count('class="day25-scenario"'), 2)
+        self.assertIn("Свой MCP-инструмент", html)
+        self.assertIn("Память в длинном разговоре", html)
+        self.assertIn('id="day25-initial"', html)
+        self.assertIn("agent_session=", response.headers.get("Set-Cookie", ""))
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day25.css", html)
+        self.assertIn("js/markdown.js", html)
+        self.assertIn("js/day25.js", html)
+        self.assertIn('href="/days/25/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_five_chats_with_sources_and_task_memory(self):
+        import os
+        import tempfile
+
+        from advent.rag import HashingEmbedder, RagIndex, collect
+        from advent.rag.chat import CONDENSE_PROMPT, MEMORY_PROMPT
+        from advent.rag.grounded import ANSWER_PROMPT
+        from advent.rag.rerank import RERANK_PROMPT
+
+        class Transport:
+            """Память копит ограничения, реранкер ставит 8 всем, ответ цитирует первый кусок."""
+
+            def send(self, payload):
+                system, user = payload["messages"][0]["content"], payload["messages"][1]["content"]
+                if system == MEMORY_PROMPT:
+                    message = user.rsplit("Новое сообщение пользователя:\n", 1)[1]
+                    current = json.loads(user.split("Текущая память:\n", 1)[1].split("\n\n", 1)[0])
+                    constraints = current["constraints"] + ([message] if message.startswith("Ограничение") else [])
+                    text = json.dumps({"goal": current["goal"] or "понять память агента", "goal_changed": False,
+                                       "clarified": [], "constraints": constraints, "terms": []}, ensure_ascii=False)
+                elif system == CONDENSE_PROMPT:
+                    text = "слои памяти агента"
+                elif system == RERANK_PROMPT:
+                    count = user.count("\n\n---\n\n") + 1
+                    text = json.dumps({"scores": {str(n): 8 for n in range(1, count + 1)}})
+                elif system.startswith(ANSWER_PROMPT):
+                    lines = user.split("Фрагменты:\n\n", 1)[1].split("\n\n---\n\n")[0].splitlines()[1:]
+                    text = json.dumps({"status": "answer", "quotes": [{"n": 1, "text": max(lines, key=len)}], "answer": "Ответ [1]."}, ensure_ascii=False)
+                else:
+                    text = "Уточните вопрос."
+                return {"choices": [{"message": {"content": text}}], "usage": {"prompt_tokens": 1, "completion_tokens": 1}}
+
+        def events(response):
+            return [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._day_twenty_five_client(directory, Transport())
+            client.set_cookie("agent_session", "s25")
+            self.assertEqual(client.post("/days/25/api/chat", json={"message": "Слои?"}).status_code, 409)
+
+            RagIndex(pathlib.Path(directory) / "index.sqlite3").build(collect(), HashingEmbedder())
+            loose = {"threshold": 0.0}
+            first = events(client.post("/days/25/api/chat", json={"message": "Какие слои памяти у агента?", "settings": loose}))
+            self.assertEqual([event["type"] for event in first], ["user", "memory", "query", "retrieved", "answer", "done"])
+            answer = first[4]
+            self.assertTrue(answer["checks"]["has_sources"])
+            self.assertEqual(answer["quotes"][0]["status"], "exact")
+            self.assertEqual(first[1]["goal"], "понять память агента")
+
+            events(client.post("/days/25/api/chat", json={"message": "Ограничение: отвечай коротко", "settings": loose}))
+            state = client.get("/days/25/api/state").get_json()
+            self.assertEqual(len(state["messages"]), 4)
+            self.assertEqual(state["memory"]["constraints"], ["Ограничение: отвечай коротко"])
+            self.assertTrue(os.path.exists(pathlib.Path(directory) / "agents" / "s25-d25.json"))
+            page = client.get("/days/25/").get_data(as_text=True)
+            initial = json.loads(page.split('id="day25-initial" type="application/json">', 1)[1].split("</script>", 1)[0])
+            self.assertEqual((initial["memory"]["goal"], len(initial["messages"])), ("понять память агента", 4))
+
+            run = events(client.post("/days/25/api/scenario", json={"key": "long_memory", "settings": loose}))
+            self.assertEqual(run[0]["type"], "scenario_start")
+            self.assertEqual(sum(event["type"] == "answer" for event in run), 12)
+            summary = next(event for event in run if event["type"] == "scenario_summary")
+            self.assertEqual((summary["turns"], summary["with_sources"], summary["goal_kept"], summary["goal_changes"]), (12, 12, 12, 0))
+            state = client.get("/days/25/api/state").get_json()
+            self.assertEqual((len(state["messages"]), state["scenario"]), (24, "long_memory"))
+            self.assertEqual(state["summary"]["turns"], 12)
+
+            reset = client.post("/days/25/api/reset").get_json()
+            self.assertEqual((reset["deleted"], reset["messages"]), (True, []))
+
+            events(client.post("/days/25/api/chat", json={"message": "Какие слои памяти у агента?"}))
+            client.post("/api/reset-all")
+            self.assertFalse(os.path.exists(pathlib.Path(directory) / "agents" / "s25-d25.json"))
+
+            self.assertEqual(client.post("/days/25/api/chat", json={"message": " "}).status_code, 400)
+            self.assertEqual(client.post("/days/25/api/chat", json={"message": "x" * 501}).status_code, 400)
+            self.assertEqual(client.post("/days/25/api/scenario", json={"key": "нет такого"}).status_code, 404)
+            self.assertEqual(client.post("/days/25/api/chat", json={"message": "x", "settings": {"threshold": 3}}).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}День 25. Мини-чат с RAG · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day25.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 25</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Chat · RAG · Task memory</span>
+    </div>
+    <h1>День 25.<br><span>Мини-чат с RAG и памятью</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать пятого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Реализуйте мини-чат (CLI/веб), который хранит историю диалога, при каждом новом вопросе ищет контекст в базе через RAG, отвечает с учётом найденной информации и всегда выводит источники.</p>
+      <ul class="homework-brief__steps">
+        <li>Усиление: добавьте «память задачи» (task state) — что пользователь уже уточнил, какие ограничения/термины зафиксированы, что является целью диалога.</li>
+        <li>Проверьте на 2 длинных сценариях по 10–15 сообщений.</li>
+        <li>Проверьте, что ассистент не теряет цель и продолжает выдавать ответы с источниками.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Мини-чат с RAG + источниками + памятью задачи.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day25-lab" aria-labelledby="day25-lab-title">
+    <div class="day25-lab__intro">
+      <p class="day25-kicker">Практика</p>
+      <h2 id="day25-lab-title">Собрать всё вместе</h2>
+      <p>Последний день недели RAG. Чат из дней 7–11 умел помнить разговор, но отвечал по памяти модели. Дни 21–24 научили искать в базе проекта и отвечать с источниками, но каждый вопрос жил сам по себе. Сегодня это один чат: каждое новое сообщение ищет контекст в базе с учётом разговора, ответ всегда приходит с источниками, а «память задачи» держит цель диалога, уточнения и ограничения — чтобы на десятом сообщении ассистент не забыл, зачем разговор начинался.</p>
+    </div>
+
+    <blockquote class="day25-curator">
+      <p>Ну к нему надо RAG привязать. Чтобы ссылалось на какие-то документы.</p>
+      <p>Ну да, тут прям собрать всё вместе. Не факт, что у всех чат был.</p>
+      <cite>Алексей Гладков, 4.10 — что делать в день 25, если чат уже есть</cite>
+    </blockquote>
+
+    <ol class="day25-rules">
+      <li class="day25-rule">
+        <span class="day25-rule__rank">01</span>
+        <h3>История диалога</h3>
+        <p>Чат помнит прошлые реплики и переживает перезагрузку страницы. Короткий вопрос вслед — «а сколько он живёт?» — понимается в контексте разговора.</p>
+        <p class="day25-rule__formula">история + новое сообщение</p>
+      </li>
+      <li class="day25-rule">
+        <span class="day25-rule__rank">02</span>
+        <h3>RAG на каждом шаге</h3>
+        <p>Каждое сообщение ищет контекст в базе проекта. Вопрос вслед сначала переписывается в самостоятельный запрос — иначе по «а сколько он живёт?» поиск ничего не найдёт.</p>
+        <p class="day25-rule__formula">сообщение → запрос → поиск → ответ</p>
+      </li>
+      <li class="day25-rule">
+        <span class="day25-rule__rank">03</span>
+        <h3>Источники всегда</h3>
+        <p>У каждого ответа — источники и цитаты из найденных кусков, как в дне 24. Нет опоры в базе — честное «не знаю» и просьба уточнить, а не ответ по памяти модели.</p>
+        <p class="day25-rule__formula">ответ + источники + цитаты</p>
+      </li>
+      <li class="day25-rule">
+        <span class="day25-rule__rank">04</span>
+        <h3>Память задачи</h3>
+        <p>Цель диалога, что уже уточнено, какие ограничения и термины зафиксированы. Обновляется после каждого хода и уходит в промпт. Проверка — два длинных сценария по 10–15 сообщений.</p>
+        <p class="day25-rule__formula">цель · уточнения · ограничения</p>
+      </li>
+    </ol>
+
+    {% if not state.ready %}
+      <p class="day25-warning">{{ state.reason }} <a href="{{ url_for('day21.index') }}">Открыть день 21 →</a></p>
+    {% endif %}
+
+    <div class="day25-workspace">
+      <section class="day25-panel day25-chat" aria-labelledby="day25-chat-title">
+        <header class="day25-panel__head">
+          <h3 id="day25-chat-title">Чат · RAG на каждом сообщении</h3>
+          <span class="day25-panel__meta">поиск дня 23 · ответ с цитатами дня 24 · {{ model }}</span>
+        </header>
+        <ol class="day25-messages" data-messages aria-live="polite">
+          <li class="day25-empty" data-empty>Спросите что-нибудь о проекте — или прогоните длинный сценарий ниже.</li>
+        </ol>
+        <form id="day25-form" class="day25-form" data-chat-url="{{ url_for('day25.chat') }}" data-reset-url="{{ url_for('day25.reset') }}">
+          <label class="sr-only" for="day25-message">Сообщение</label>
+          <input id="day25-message" name="message" type="text" maxlength="500" required autocomplete="off" placeholder="Например: как агент вызывает инструменты MCP?" {% if not state.ready %}disabled{% endif %}>
+          <button class="day25-btn day25-btn--go" type="submit" {% if not state.ready %}disabled{% endif %}>Отправить</button>
+          <button class="day25-btn" type="button" data-reset>Новый диалог</button>
+        </form>
+        <p id="day25-error" class="day25-error" role="alert" hidden></p>
+      </section>
+
+      <aside class="day25-panel day25-memory" aria-labelledby="day25-memory-title">
+        <header class="day25-panel__head">
+          <h3 id="day25-memory-title">Память задачи</h3>
+          <span class="day25-panel__meta" data-memory-meta>пусто</span>
+        </header>
+        <dl class="day25-memory__list" data-memory>
+          <div data-memory-field="goal"><dt>цель диалога</dt><dd><p class="day25-muted">появится после первого сообщения</p></dd></div>
+          <div data-memory-field="clarified"><dt>уже уточнено</dt><dd><p class="day25-muted">—</p></dd></div>
+          <div data-memory-field="constraints"><dt>ограничения</dt><dd><p class="day25-muted">—</p></dd></div>
+          <div data-memory-field="terms"><dt>термины</dt><dd><p class="day25-muted">—</p></dd></div>
+        </dl>
+      </aside>
+    </div>
+
+    <section class="day25-panel" aria-labelledby="day25-scenarios-title">
+      <header class="day25-panel__head">
+        <h3 id="day25-scenarios-title">Длинные сценарии · по 12 сообщений</h3>
+        <span class="day25-panel__meta">сценарий начинает диалог с чистого листа · ход ≈ 5–6 с</span>
+      </header>
+      <div class="day25-scenarios" data-scenarios data-scenario-url="{{ url_for('day25.scenario') }}">
+        {% for scenario in scenarios %}
+          <article class="day25-scenario" data-scenario="{{ scenario.key }}">
+            <h4>{{ scenario.title }}</h4>
+            <p class="day25-scenario__goal">цель: {{ scenario.goal }}</p>
+            <details class="day25-fold">
+              <summary>все {{ scenario.messages|length }} сообщений</summary>
+              <ol class="day25-scenario__messages">
+                {% for message in scenario.messages %}<li>{{ message }}</li>{% endfor %}
+              </ol>
+            </details>
+            <button class="day25-btn day25-btn--go" type="button" data-run="{{ scenario.key }}" {% if not state.ready %}disabled{% endif %}>[▶] Прогнать</button>
+            <p class="day25-scenario__progress" data-progress></p>
+          </article>
+        {% endfor %}
+      </div>
+      <div class="day25-table-wrap" data-summary hidden>
+        <table class="day25-table">
+          <tbody>
+            {% for key, label in [
+              ("turns", "ходов"),
+              ("with_sources", "ответов с источниками"),
+              ("unknown", "«не знаю»"),
+              ("quotes", "цитат нашлось в кусках"),
+              ("goal_kept", "ходов, где цель держится"),
+              ("goal_changes", "смен цели"),
+              ("recap_ok", "последний ответ назвал цель и ограничение"),
+              ("tokens", "токенов на сценарий"),
+            ] %}
+              <tr data-summary-row="{{ key }}"><th scope="row">{{ label }}</th><td data-summary-cell>—</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <script id="day25-initial" type="application/json">{{ chat | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day25.js') }}"></script>
+{% endblock %}
