@@ -15,18 +15,12 @@
 
 from __future__ import annotations
 
-import json
-import queue
-import threading
-from collections.abc import Callable, Iterator
-from typing import Any
+from flask import Blueprint, jsonify, render_template, request
 
-from flask import Blueprint, Response, current_app, jsonify, render_template, request, stream_with_context
-
-from ...agent.transport import DeepSeekTransport, TransportError
 from ...navigation import get_day
-from ...rag import DEFAULT_PATH, PROBES, EmbeddingError, IndexNotReady, OllamaEmbedder, RagIndex
+from ...rag import PROBES
 from ...rag.answer import MAX_K, MODE_TITLES, MODEL, MODES, STRATEGY, TOP_K, ask, find_probe, iter_compare
+from ..rag_pages import embedder, index_state, ndjson_stream, rag_index, transport
 
 
 bp = Blueprint("day22", __name__, url_prefix="/days/22")
@@ -34,70 +28,18 @@ bp = Blueprint("day22", __name__, url_prefix="/days/22")
 MAX_QUESTION = 500
 
 
-def _index() -> RagIndex:
-    return RagIndex(current_app.config.get("DAY21_INDEX_PATH") or DEFAULT_PATH)
-
-
-def _embedder():
-    return current_app.config.get("RAG_EMBEDDER") or OllamaEmbedder()
-
-
-def _transport():
-    return current_app.config.get("AGENT_TRANSPORT") or DeepSeekTransport()
-
-
-def _index_state(index: RagIndex, embedder) -> dict[str, Any]:
-    """Готов ли индекс для вопросов: собран, той же моделью, со стратегией structure."""
-    info = index.info()
-    state = {"ready": False, "model": info.get("model"), "built_at": info.get("built_at")}
-    if not info["built"]:
-        return {**state, "reason": "Индекс ещё не собран — соберите его на странице дня 21."}
-    if info.get("model") != embedder.name:
-        return {**state, "reason": f"Индекс собран моделью {info['model']}, а вопросы — {embedder.name}. Пересоберите на дне 21."}
-    strategy = (info.get("strategies") or {}).get(STRATEGY)
-    if not strategy:
-        return {**state, "reason": f"В индексе нет стратегии {STRATEGY} — пересоберите на дне 21."}
-    return {**state, "ready": True, "chunks": strategy["chunks"], "documents": info["corpus"]["documents"]}
-
-
 @bp.get("/")
 def index():
     return render_template(
         "days/day22.html",
         active_day=get_day(22),
-        state=_index_state(_index(), _embedder()),
+        state=index_state(rag_index(), embedder()),
         probes=[{"index": number, **probe.as_dict()} for number, probe in enumerate(PROBES, start=1)],
         modes=[{"key": mode, "title": MODE_TITLES[mode]} for mode in MODES],
         strategy=STRATEGY,
         top_k=TOP_K,
         model=MODEL,
     )
-
-
-def _stream(work: Callable[[Callable[[dict[str, Any]], None]], None]) -> Response:
-    """Работа идёт в своём потоке, события — через очередь: страница видит их сразу."""
-    events: queue.Queue[dict[str, Any] | None] = queue.Queue()
-
-    def worker() -> None:
-        try:
-            work(events.put)
-        except (IndexNotReady, EmbeddingError, TransportError) as error:
-            events.put({"type": "error", "error": str(error)})
-        except Exception as error:  # noqa: BLE001 — до страницы должна дойти любая причина
-            events.put({"type": "error", "error": f"{type(error).__name__}: {error}"})
-        finally:
-            events.put(None)
-
-    threading.Thread(target=worker, name="rag-answer", daemon=True).start()
-
-    def generate() -> Iterator[str]:
-        while (event := events.get()) is not None:
-            yield json.dumps(event, ensure_ascii=False) + "\n"
-
-    response = Response(stream_with_context(generate()), mimetype="application/x-ndjson")
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["X-Accel-Buffering"] = "no"
-    return response
 
 
 @bp.post("/api/ask")
@@ -116,8 +58,8 @@ def ask_question():
     except (TypeError, ValueError):
         return jsonify({"error": "k — целое число"}), 400
 
-    index, embedder, transport = _index(), _embedder(), _transport()
-    state = _index_state(index, embedder)
+    index, embedder_, transport_ = rag_index(), embedder(), transport()
+    state = index_state(index, embedder_)
     if not state["ready"]:
         return jsonify({"error": state["reason"]}), 409
     probe = find_probe(question)
@@ -125,25 +67,25 @@ def ask_question():
     def work(emit):
         if probe is not None:
             emit({"type": "probe", "index": PROBES.index(probe) + 1, **probe.as_dict()})
-        ask(question, index=index, embedder=embedder, transport=transport, emit=emit, k=k, probe=probe)
+        ask(question, index=index, embedder=embedder_, transport=transport_, emit=emit, k=k, probe=probe)
         emit({"type": "done"})
 
-    return _stream(work)
+    return ndjson_stream(work)
 
 
 @bp.post("/api/compare")
 def compare():
     """Десять контрольных вопросов по очереди, оба режима, сверка с ожиданием, итог."""
-    index, embedder, transport = _index(), _embedder(), _transport()
-    state = _index_state(index, embedder)
+    index, embedder_, transport_ = rag_index(), embedder(), transport()
+    state = index_state(index, embedder_)
     if not state["ready"]:
         return jsonify({"error": state["reason"]}), 409
 
     def work(emit):
-        for event in iter_compare(index=index, embedder=embedder, transport=transport):
+        for event in iter_compare(index=index, embedder=embedder_, transport=transport_):
             emit(event)
 
-    return _stream(work)
+    return ndjson_stream(work)
 
 
 @bp.get("/api/probes")

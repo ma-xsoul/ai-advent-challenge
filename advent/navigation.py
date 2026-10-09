@@ -187,6 +187,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=23,
+        title="Реранкинг и фильтрация",
+        description="Второй этап после поиска",
+        endpoint="day23.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

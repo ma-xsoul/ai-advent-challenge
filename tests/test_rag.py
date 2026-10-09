@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,17 @@ from advent.rag.chunking import FIXED_OVERLAP, FIXED_SIZE, STRUCTURE_MAX, _label
 from advent.rag.corpus import Document, page_text
 from advent.rag.embeddings import EmbeddingError
 from advent.rag.answer import MODES, ask, augment, citations, find_probe, grade, iter_compare, messages
-from advent.rag.probes import PROBES, Fact, Probe, evaluate
+from advent.rag.probes import NEGATIVE_PROBES, PROBES, REFUSAL, Fact, Probe, evaluate
+from advent.rag.rerank import (
+    NOTHING_FOUND,
+    REWRITE_PROMPT,
+    RERANK_PROMPT,
+    Settings,
+    funnel,
+    iter_compare as iter_rerank_compare,
+    parse_scores,
+    run_question,
+)
 
 
 # Тела подлиннее: короткие соседние куски структурная нарезка склеивает в один.
@@ -371,6 +382,146 @@ class RagAnswerTestCase(unittest.TestCase):
         self.assertEqual(summary["summary"]["rag"]["facts"], 0.67)
         self.assertIsNone(summary["summary"]["plain"]["sources"])
         self.assertEqual(summary["summary"]["rag"]["tokens"], 30)
+
+
+class RerankTransport(RagAnswerTransport):
+    """Переписывает вопрос, оценивает куски «про память» на 9, прочие — на 1; отвечает как RagAnswerTransport."""
+
+    def __init__(self, rerank_reply=None):
+        super().__init__()
+        self.rerank_reply = rerank_reply
+        self.calls = {"rewrite": 0, "rerank": 0, "answer": 0}
+
+    def send(self, payload):
+        system = payload["messages"][0]["content"]
+        if system == REWRITE_PROMPT:
+            self.calls["rewrite"] += 1
+            return {"choices": [{"message": {"content": "«слои памяти chat task user краткосрочная»"}}], "usage": {"prompt_tokens": 4, "completion_tokens": 3}}
+        if system == RERANK_PROMPT:
+            self.calls["rerank"] += 1
+            self.payloads.append(payload)
+            if self.rerank_reply is not None:
+                return {"choices": [{"message": {"content": self.rerank_reply}}], "usage": {}}
+            fragments = payload["messages"][1]["content"].split("\n\n---\n\n")
+            scores = {str(n): (9 if "памят" in fragment.lower() else 1) for n, fragment in enumerate(fragments, start=1)}
+            return {"choices": [{"message": {"content": json.dumps({"scores": scores})}}], "usage": {"prompt_tokens": 20, "completion_tokens": 5}}
+        self.calls["answer"] += 1
+        return super().send(payload)
+
+    def stream(self, payload):
+        self.calls["answer"] += 1
+        yield from super().stream(payload)
+
+
+class RerankTestCase(unittest.TestCase):
+    def _index(self, directory):
+        index = RagIndex(Path(directory) / "index.sqlite3")
+        index.build(documents(), HashingEmbedder())
+        return index
+
+    def test_settings_are_validated(self):
+        self.assertEqual(Settings.parse(None), Settings())
+        self.assertEqual(Settings.parse({"threshold": "0.6", "top_k": 3}).threshold, 0.6)
+        for bad, message in (({"threshold": 2}, "threshold"), ({"top_k": "x"}, "число"), ({"candidates": 3, "top_k": 5}, "больше кандидатов")):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(ValueError, message):
+                    Settings.parse(bad)
+
+    def test_rerank_scores_are_parsed_defensively(self):
+        self.assertEqual(parse_scores('{"scores": {"1": 9, "3": "4"}}', 3), [9, 0, 4])
+        self.assertEqual(parse_scores('ответ: {"scores": [{"n": 2, "score": 12}]}', 2), [0, 10])
+        self.assertEqual(parse_scores('{"1": 3, "2": "плохо"}', 2), [3, 0])
+        self.assertIsNone(parse_scores("не JSON", 2))
+        self.assertIsNone(parse_scores('{"scores": 5}', 2))
+
+    def test_negative_probes_expect_an_honest_refusal(self):
+        self.assertEqual(len(NEGATIVE_PROBES), 3)
+        for probe in NEGATIVE_PROBES:
+            self.assertEqual(probe.sources, ())
+            self.assertEqual(probe.facts, (REFUSAL,))
+        verdict = grade(NEGATIVE_PROBES[0], NOTHING_FOUND, [])
+        self.assertTrue(verdict["passed"])
+        self.assertIsNone(verdict["sources_ok"])
+        self.assertFalse(grade(NEGATIVE_PROBES[0], "Создайте Deployment и Service.", [])["passed"])
+
+    def test_funnel_marks_where_each_candidate_dropped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index = self._index(directory)
+            transport = RerankTransport()
+            settings = Settings(threshold=0.0, candidates=6, top_k=1, rerank_min=5)
+            base = funnel("слои памяти", "base", index=index, embedder=HashingEmbedder(), transport=transport, settings=settings)
+            filtered = funnel("слои памяти", "filter", index=index, embedder=HashingEmbedder(), transport=transport, settings=settings)
+            rewritten = funnel("слои памяти", "rewrite", index=index, embedder=HashingEmbedder(), transport=transport, settings=settings)
+            strict = funnel("слои памяти", "filter", index=index, embedder=HashingEmbedder(), transport=transport, settings=Settings(threshold=0.99, candidates=6, top_k=1))
+
+        self.assertEqual(len(base["context"]), 1)
+        self.assertEqual(base["cost"], {"rewrite": None, "rerank": None})
+        stages = [row["stage"] for row in filtered["candidates"]]
+        self.assertEqual(stages.count("context"), 1)
+        self.assertIn("rerank", stages)
+        context_row = next(row for row in filtered["candidates"] if row["stage"] == "context")
+        self.assertEqual(context_row["rerank"], 9)
+        self.assertEqual(filtered["context"][0].rank, 1)
+        self.assertIn("памят", filtered["context"][0].text.lower())
+        self.assertEqual(rewritten["query"], "слои памяти chat task user краткосрочная")
+        self.assertTrue({row["via"] for row in rewritten["candidates"]} <= {"question", "rewrite", "both"})
+        self.assertEqual(rewritten["cost"]["rewrite"]["tokens"], 7)
+        self.assertEqual({row["stage"] for row in strict["candidates"]}, {"threshold"})
+        self.assertEqual(strict["context"], [])
+        self.assertIsNone(strict["cost"]["rerank"])
+        self.assertEqual(transport.calls["rerank"], 2)
+
+    def test_broken_reranker_keeps_vector_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = funnel(
+                "слои памяти", "filter", index=self._index(directory), embedder=HashingEmbedder(),
+                transport=RerankTransport(rerank_reply="не скажу"), settings=Settings(threshold=0.0, candidates=4, top_k=2),
+            )
+        self.assertEqual(len(result["context"]), 2)
+        self.assertEqual(result["cost"]["rerank"]["error"], "реранкер вернул не JSON")
+        self.assertTrue(all(row["rerank"] is None for row in result["candidates"]))
+
+    def test_run_question_skips_the_model_when_nothing_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index = self._index(directory)
+            transport = RerankTransport()
+            events = []
+            results = run_question(
+                NEGATIVE_PROBES[2].question, index=index, embedder=HashingEmbedder(), transport=transport,
+                settings=Settings(threshold=0.99), emit=events.append, probe=NEGATIVE_PROBES[2],
+            )
+
+        self.assertEqual(sum(event["type"] == "funnel" for event in events), 3)
+        self.assertEqual(results["filter"]["answer"], NOTHING_FOUND)
+        self.assertTrue(results["filter"]["skipped"])
+        self.assertTrue(results["filter"]["grade"]["passed"])
+        self.assertTrue(results["rewrite"]["skipped"])
+        self.assertFalse(results["base"].get("skipped"))
+        self.assertEqual(transport.calls["answer"], 1)
+        self.assertEqual(results["rewrite"]["tokens"], 7)
+
+    def test_compare_counts_answers_refusals_and_cost(self):
+        probes = (MEMORY_PROBE, Probe("Что такое Kubernetes?", (), "нет", (REFUSAL,)))
+        with tempfile.TemporaryDirectory() as directory:
+            events = list(iter_rerank_compare(
+                index=self._index(directory), embedder=HashingEmbedder(), transport=RerankTransport(),
+                settings=Settings(threshold=0.0, candidates=6, top_k=2), probes=probes,
+            ))
+
+        self.assertEqual(events[0]["type"], "compare_start")
+        rows = [event for event in events if event["type"] == "compare_row"]
+        self.assertEqual(sorted(row["index"] for row in rows), [1, 2])
+        self.assertTrue(next(row for row in rows if row["index"] == 2)["negative"])
+        summary = events[-1]
+        self.assertEqual((summary["on_topic"], summary["off_topic"]), (1, 1))
+        self.assertEqual(summary["summary"]["filter"]["passed"], 1)
+        self.assertGreater(summary["summary"]["rewrite"]["tokens"], summary["summary"]["base"]["tokens"])
+        # Без фильтра в контекст попадает и посторонний rates.py, реранкер его выкидывает.
+        self.assertEqual(summary["summary"]["base"]["precision"], 0.5)
+        self.assertEqual(summary["summary"]["filter"]["precision"], 1.0)
+        row = next(row for row in rows if row["index"] == 1)
+        self.assertEqual((row["modes"]["base"]["relevant"], row["modes"]["base"]["context"]), (1, 2))
+        self.assertIsNone(next(row for row in rows if row["index"] == 2)["modes"]["base"]["relevant"])
 
 
 if __name__ == "__main__":

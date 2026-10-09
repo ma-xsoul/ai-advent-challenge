@@ -1,0 +1,877 @@
+/* День 23: реранкинг и фильтрация — второй этап после поиска. */
+
+.day23-lab {
+  margin-top: 36px;
+}
+
+.day23-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day23-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day23-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day23-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day23-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day23-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day23-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day23-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day23-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day23-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day23-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day23-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day23-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day23-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day23-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day23-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day23-rule__formula::before {
+  content: "> ";
+}
+
+.day23-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: настройки, вопрос, три ответа, контрольные вопросы ─── */
+
+.day23-rules {
+  margin-bottom: 14px;
+}
+
+.day23-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day23-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day23-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day23-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day23-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day23-warning a {
+  color: var(--text-bright);
+}
+
+.day23-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day23-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day23-num {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+/* Кнопки и поле вопроса. */
+.day23-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day23-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day23-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day23-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day23-btn:disabled,
+.day23-pick:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day23-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  padding: 12px 16px 0;
+}
+
+.day23-pick {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.day23-pick:hover:not(:disabled) {
+  color: var(--text-bright);
+}
+
+.day23-pick span {
+  margin-right: 6px;
+  color: var(--accent);
+}
+
+.day23-ask {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.day23-ask input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 7px 10px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.day23-ask input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day23-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day23-answer .day23-error {
+  margin: 0;
+}
+
+/* Ход одного вопроса: ожидание, воронки, три ответа. */
+.day23-run {
+  border-top: 1px solid var(--line);
+}
+
+.day23-run[hidden] {
+  display: none;
+}
+
+.day23-expect {
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 10px 16px;
+}
+
+.day23-expect p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day23-expect .day23-label {
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+
+.day23-expect .day23-expect__sources {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day23-fold summary {
+  padding: 7px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day23-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day23-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day23-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day23-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day23-answers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.day23-answer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.day23-answer--rag {
+  border-color: var(--line-strong);
+}
+
+.day23-answer.is-passed {
+  border-color: var(--ok);
+}
+
+.day23-answer.is-failed,
+.day23-answer.is-error {
+  border-color: var(--error);
+}
+
+.day23-answer__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 12px;
+}
+
+.day23-answer__head h4 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.day23-answer--rag .day23-answer__head h4 {
+  color: var(--accent);
+}
+
+.day23-answer__meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day23-answer__body {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.day23-answer__cited {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  border-top: 1px solid var(--line);
+  padding: 7px 12px;
+  font-size: 11.5px;
+}
+
+.day23-answer__cited[hidden],
+.day23-checks[hidden] {
+  display: none;
+}
+
+.day23-answer__cited .day23-label {
+  margin: 0;
+}
+
+.day23-cite {
+  color: var(--muted-bright);
+  overflow-wrap: anywhere;
+}
+
+.day23-cite b {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day23-checks {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 7px 12px 9px;
+  font-size: 11.5px;
+  list-style: none;
+}
+
+.day23-checks .is-found {
+  color: var(--ok);
+}
+
+.day23-checks .is-missing {
+  color: var(--error);
+}
+
+.day23-checks__total {
+  margin-top: 3px;
+  color: var(--text-bright);
+}
+
+/* Таблица контрольных вопросов. */
+.day23-compare__note {
+  margin: 0;
+  padding: 10px 16px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+#day23-compare-status {
+  color: var(--accent);
+}
+
+.day23-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day23-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day23-table th,
+.day23-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day23-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day23-table tbody td:first-child {
+  width: 30%;
+  color: var(--text);
+}
+
+.day23-expected {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  list-style: none;
+}
+
+.day23-expected li::before {
+  color: var(--accent);
+  content: "· ";
+}
+
+.day23-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+[data-probe-row] {
+  transition: background var(--speed) var(--ease);
+}
+
+[data-probe-row].is-active {
+  background: var(--accent-soft);
+}
+
+[data-probe-row].is-done {
+  cursor: pointer;
+}
+
+[data-probe-row].is-done:hover {
+  background: var(--surface-soft);
+}
+
+.day23-verdict {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.day23-verdict strong {
+  display: block;
+  font-weight: 500;
+}
+
+.day23-verdict small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day23-verdict.is-passed strong {
+  color: var(--ok);
+}
+
+.day23-verdict.is-failed strong,
+.day23-verdict.is-error {
+  color: var(--error);
+}
+
+.day23-detail td {
+  background: var(--surface-deep);
+  padding: 0;
+}
+
+.day23-detail .day23-answers > div {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.day23-table tfoot th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day23-table tfoot td {
+  color: var(--text-bright);
+}
+
+.day23-table tfoot[hidden] {
+  display: none;
+}
+
+/* ── День 23: настройки, воронка, вопросы вне базы ─────────────────── */
+
+.day23-settings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 16px;
+  padding: 12px 16px;
+}
+
+.day23-setting {
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+}
+
+.day23-setting span {
+  color: var(--muted-bright);
+}
+
+.day23-setting span::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day23-setting input {
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 5px 8px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 13px;
+}
+
+.day23-setting input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day23-setting input:invalid {
+  border-color: var(--error);
+}
+
+.day23-setting small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day23-pick em,
+.day23-tag {
+  margin-left: 4px;
+  border: 1px solid var(--info);
+  padding: 0 4px;
+  color: var(--info);
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+}
+
+.day23-query {
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.day23-query[hidden] {
+  display: none;
+}
+
+.day23-query .day23-label {
+  display: inline;
+  margin-right: 8px;
+}
+
+.day23-detail .day23-query {
+  padding: 10px 16px 0;
+}
+
+.day23-funnel {
+  border-bottom: 1px solid var(--line);
+}
+
+.day23-funnel .day23-table-wrap {
+  padding: 0 16px 12px;
+}
+
+.day23-candidates {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11.5px;
+}
+
+.day23-candidates th:nth-child(1) {
+  width: 28px;
+}
+
+.day23-candidates th:nth-child(3) {
+  width: 22%;
+}
+
+.day23-candidates th:nth-child(4) {
+  width: 64px;
+}
+
+.day23-candidates th:nth-child(5) {
+  width: 150px;
+}
+
+.day23-candidates th,
+.day23-candidates td {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day23-candidates thead th {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Кусок — одной строкой: файл, раздел, кто нашёл; полностью — в подсказке. */
+.day23-piece {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.day23-lab .day23-piece code {
+  border: 0;
+  padding: 0;
+  color: var(--text-bright);
+}
+
+.day23-piece small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day23-piece .day23-via {
+  border: 1px solid var(--info);
+  padding: 0 4px;
+  color: var(--info);
+}
+
+.day23-score {
+  white-space: nowrap;
+}
+
+.day23-score small {
+  margin-left: 6px;
+}
+
+.day23-score .day23-bar {
+  display: inline-block;
+  width: calc(100% - 52px);
+  vertical-align: middle;
+}
+
+.day23-cut td {
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.day23-cut td:hover {
+  color: var(--text-bright);
+}
+
+.day23-score small {
+  color: var(--muted);
+}
+
+.day23-candidates tr[hidden] {
+  display: none;
+}
+
+.day23-bar {
+  position: relative;
+  display: block;
+  height: 6px;
+  margin: 4px 0 3px;
+  border: 1px solid var(--line-strong);
+}
+
+.day23-bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--muted);
+}
+
+.day23-bar__mark {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--accent);
+}
+
+.day23-rerank,
+.day23-stage {
+  white-space: nowrap;
+}
+
+.day23-candidates .is-context .day23-bar__fill {
+  background: var(--ok);
+}
+
+.day23-candidates .is-context .day23-stage,
+.day23-candidates .is-context .day23-rerank {
+  color: var(--ok);
+}
+
+.day23-candidates .is-rerank .day23-stage,
+.day23-candidates .is-rerank .day23-rerank {
+  color: var(--error);
+}
+
+.day23-candidates .is-top_k .day23-stage {
+  color: var(--accent);
+}
+
+.day23-candidates .is-threshold {
+  opacity: 0.55;
+}
+
+.day23-candidates .is-threshold .day23-stage {
+  color: var(--muted);
+}
+
+[data-probe-row].is-waiting .day23-verdict {
+  color: var(--muted);
+}
+
+[data-probe-row].is-flash {
+  animation: day23-flash 900ms var(--ease);
+}
+
+@keyframes day23-flash {
+  from {
+    background: var(--accent-soft);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-probe-row].is-flash {
+    animation: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .day23-rules,
+  .day23-settings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day23-answers {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .day23-rules,
+  .day23-settings,
+  .day23-picks {
+    grid-template-columns: 1fr;
+  }
+
+  .day23-table tbody td:first-child {
+    width: auto;
+  }
+}

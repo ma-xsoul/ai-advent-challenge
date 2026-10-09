@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}День 23. Реранкинг и фильтрация · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day23.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 23</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Threshold · Rerank · Query rewrite</span>
+    </div>
+    <h1>День 23.<br><span>Реранкинг и фильтрация</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать третьего дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Добавьте второй этап после поиска: reranker или фильтр релевантности (порог similarity / отдельная модель / heuristic).</p>
+      <ul class="homework-brief__steps">
+        <li>Настройте порог отсечения нерелевантных результатов.</li>
+        <li>Настройте топ-K до и после фильтрации.</li>
+        <li>Сравните качество без фильтра/rewriting и качество с фильтром.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Улучшенный RAG: фильтрация/реранкинг + query rewrite + сравнение режимов.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day23-lab" aria-labelledby="day23-lab-title">
+    <div class="day23-lab__intro">
+      <p class="day23-kicker">Практика</p>
+      <h2 id="day23-lab-title">Между поиском и моделью — второй этап</h2>
+      <p>Вчера RAG ответил по ожиданию на 9–10 вопросов из 10, но ответ строится только из того, что принёс поиск. На вопросе про конспект поиск так и не достал файл с настройками, и модели не хватило фактов. Сегодня между поиском и моделью встаёт второй этап: он отсекает лишние куски и переупорядочивает остальные, а сам вопрос перед поиском переписывается. Стало ли лучше — проверяем на тех же десяти вопросах.</p>
+    </div>
+
+    <blockquote class="day23-curator">
+      <p>Код нужно оценивать конкретными метриками, причём измеримыми… и плясать уже от них.</p>
+      <cite>Алексей Гладков, 5.10 — как оценивать результат работы: числами, а не на глаз</cite>
+    </blockquote>
+
+    <ol class="day23-rules">
+      <li class="day23-rule">
+        <span class="day23-rule__rank">01</span>
+        <h3>Порог</h3>
+        <p>Куски с похожестью на вопрос ниже порога не идут модели вовсе: лучше честное «в базе нет», чем ответ по случайному соседу.</p>
+        <p class="day23-rule__formula">score ≥ порог</p>
+      </li>
+      <li class="day23-rule">
+        <span class="day23-rule__rank">02</span>
+        <h3>Реранкинг</h3>
+        <p>Поиск берёт кандидатов с запасом, второй этап — отдельная модель или эвристика — оценивает каждого точнее и оставляет лучших. Топ-K до и после — разные числа.</p>
+        <p class="day23-rule__formula">top-20 → rerank → top-5</p>
+      </li>
+      <li class="day23-rule">
+        <span class="day23-rule__rank">03</span>
+        <h3>Query rewrite</h3>
+        <p>Вопрос пользователя переписывается в поисковый запрос: без воды, с терминами и именами из проекта — так поиск попадает в нужные куски чаще.</p>
+        <p class="day23-rule__formula">вопрос → запрос для поиска</p>
+      </li>
+      <li class="day23-rule">
+        <span class="day23-rule__rank">04</span>
+        <h3>Сравнение режимов</h3>
+        <p>Те же десять контрольных вопросов дня 22: без фильтра, с фильтром, с переписанным запросом. Считаем, сколько ответов по ожиданию и что нашёл поиск.</p>
+        <p class="day23-rule__formula">до · после</p>
+      </li>
+    </ol>
+
+    <section class="day23-panel" aria-labelledby="day23-settings-title">
+      <header class="day23-panel__head">
+        <h3 id="day23-settings-title">Настройки второго этапа</h3>
+        <span class="day23-panel__meta">
+          {% if state.ready %}индекс дня 21 · {{ state.chunks }} кусков {{ strategy }} · {{ state.model }} · ответы {{ model }}{% else %}индекс не готов{% endif %}
+        </span>
+      </header>
+      {% if not state.ready %}
+        <p class="day23-warning">{{ state.reason }} <a href="{{ url_for('day21.index') }}">Открыть день 21 →</a></p>
+      {% endif %}
+      <form class="day23-settings" data-settings>
+        {% for key, label, hint, step in [
+          ("threshold", "порог похожести", "кандидаты ниже — не идут дальше", "0.01"),
+          ("candidates", "топ-K до фильтра", "сколько кандидатов берёт поиск", "1"),
+          ("top_k", "топ-K после", "сколько кусков уходит модели", "1"),
+          ("rerank_min", "реранк ≥", "оценка DeepSeek 0–10, ниже — вон", "1"),
+        ] %}
+          <label class="day23-setting">
+            <span>{{ label }}</span>
+            <input type="number" name="{{ key }}" value="{{ settings[key] }}" min="{{ limits[key][0] }}" max="{{ limits[key][1] }}" step="{{ step }}" required>
+            <small>{{ hint }}</small>
+          </label>
+        {% endfor %}
+      </form>
+    </section>
+
+    <section class="day23-panel" aria-labelledby="day23-ask-title">
+      <header class="day23-panel__head">
+        <h3 id="day23-ask-title">Вопрос · три режима рядом</h3>
+        <span class="day23-panel__meta">та же модель и тот же промпт — разные куски</span>
+      </header>
+      <div class="day23-picks" data-picks>
+        {% for probe in probes %}
+          <button type="button" class="day23-pick{% if probe.negative %} is-negative{% endif %}" data-question="{{ probe.question }}"><span>{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em>вне базы</em>{% endif %}</button>
+        {% endfor %}
+      </div>
+      <form id="day23-ask" class="day23-ask" data-ask-url="{{ url_for('day23.ask_question') }}">
+        <label class="sr-only" for="day23-question">Вопрос</label>
+        <input id="day23-question" name="question" type="search" maxlength="500" required placeholder="Спросите что-нибудь о проекте или выберите контрольный вопрос" {% if not state.ready %}disabled{% endif %}>
+        <button class="day23-btn day23-btn--go" type="submit" {% if not state.ready %}disabled{% endif %}>Спросить</button>
+      </form>
+      <p id="day23-error" class="day23-error" role="alert" hidden></p>
+
+      <div class="day23-run" data-run hidden>
+        <div class="day23-expect" data-expect hidden>
+          <p class="day23-label">Ожидание</p>
+          <p data-expect-text></p>
+          <p class="day23-expect__sources" data-expect-sources></p>
+        </div>
+
+        {% for mode in modes if mode.key != "base" %}
+          <details class="day23-fold day23-funnel" data-funnel="{{ mode.key }}"{% if mode.key == "filter" %} open{% endif %}>
+            <summary>Воронка · {{ mode.title }} · <span data-funnel-meta>ищем…</span></summary>
+            <p class="day23-query" data-funnel-query hidden></p>
+            <div class="day23-table-wrap">
+              <table class="day23-candidates">
+                <thead><tr><th scope="col">#</th><th scope="col">Кусок</th><th scope="col">Похожесть</th><th scope="col">Реранк</th><th scope="col">Итог</th></tr></thead>
+                <tbody data-funnel-rows></tbody>
+              </table>
+            </div>
+          </details>
+        {% endfor %}
+
+        <div class="day23-answers">
+          {% for mode in modes %}
+            <article class="day23-answer day23-answer--{{ mode.key }}" data-answer="{{ mode.key }}">
+              <header class="day23-answer__head">
+                <h4>{{ mode.title }}</h4>
+                <span class="day23-answer__meta" data-answer-meta>ждёт</span>
+              </header>
+              <div class="day23-answer__body markdown-body" data-answer-body></div>
+              <div class="day23-answer__cited" data-answer-cited hidden></div>
+              <ul class="day23-checks" data-answer-checks hidden></ul>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="day23-panel" aria-labelledby="day23-compare-title">
+      <header class="day23-panel__head">
+        <h3 id="day23-compare-title">Контрольные вопросы · 10 по базе и 3 вне её</h3>
+        <button id="day23-compare" class="day23-btn" type="button" data-compare-url="{{ url_for('day23.compare') }}" {% if not state.ready %}disabled{% endif %}>[▶] Прогнать 13 вопросов</button>
+      </header>
+      <p class="day23-compare__note">Ответ засчитан ✓, если прозвучали хотя бы ⅔ фактов; на вопросе вне базы — если ответ честно говорит, что в базе этого нет. «Файл» — нужный файл дошёл до модели. Токены — вместе с переписыванием запроса и реранком. <span id="day23-compare-status" aria-live="polite"></span></p>
+      <div class="day23-table-wrap">
+        <table class="day23-table" data-compare-table>
+          <thead>
+            <tr>
+              <th scope="col">Вопрос</th>
+              <th scope="col">Ожидание</th>
+              {% for mode in modes %}<th scope="col">{{ mode.title }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for probe in probes %}
+              <tr data-probe-row="{{ probe.index }}"{% if probe.negative %} class="is-negative"{% endif %}>
+                <td><span class="day23-num">{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em class="day23-tag">вне базы</em>{% endif %}</td>
+                <td>
+                  <ul class="day23-expected">
+                    {% for fact in probe.facts %}<li>{{ fact }}</li>{% endfor %}
+                  </ul>
+                  {% if probe.sources %}<p class="day23-sources">{% for source in probe.sources %}<code>{{ source }}</code>{% endfor %}</p>{% endif %}
+                </td>
+                {% for mode in modes %}<td class="day23-verdict" data-verdict="{{ mode.key }}">—</td>{% endfor %}
+              </tr>
+              <tr class="day23-detail" data-probe-detail="{{ probe.index }}" hidden>
+                <td colspan="{{ 2 + modes|length }}">
+                  <p class="day23-query" data-detail-query hidden></p>
+                  <div class="day23-answers">
+                    {% for mode in modes %}
+                      <div>
+                        <p class="day23-label">{{ mode.title }}</p>
+                        <div class="markdown-body" data-detail-answer="{{ mode.key }}"></div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot data-compare-summary hidden>
+            {% for key, label in [
+              ("passed", "ответов по ожиданию · 10 по базе"),
+              ("refused", "честное «в базе нет» · 3 вне базы"),
+              ("found_expected", "нужный файл дошёл до модели"),
+              ("avg_context", "кусков модели в среднем"),
+              ("precision", "кусков из нужных файлов"),
+              ("tokens", "токенов на прогон, с реранком и rewrite"),
+              ("avg_ms", "среднее время на вопрос"),
+            ] %}
+              <tr data-summary-row="{{ key }}">
+                <th scope="row" colspan="2">{{ label }}</th>
+                {% for mode in modes %}<td data-summary-cell="{{ mode.key }}">—</td>{% endfor %}
+              </tr>
+            {% endfor %}
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day23.js') }}"></script>
+{% endblock %}

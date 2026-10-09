@@ -28,6 +28,7 @@ from .days.day19.routes import bp as day19_blueprint
 from .days.day20.routes import bp as day20_blueprint
 from .days.day21.routes import bp as day21_blueprint
 from .days.day22.routes import bp as day22_blueprint
+from .days.day23.routes import bp as day23_blueprint
 from .agent import Agent, AgentConfig, AgentRegistry, JsonStore
 from .navigation import DAYS
 
@@ -94,6 +95,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(day20_blueprint)
     app.register_blueprint(day21_blueprint)
     app.register_blueprint(day22_blueprint)
+    app.register_blueprint(day23_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(

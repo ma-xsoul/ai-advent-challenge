@@ -157,7 +157,8 @@ def grade(probe: Probe, answer: str, cited: list[dict[str, Any]] | None) -> dict
     facts = [{"label": fact.label, "found": fact.found_in(answer)} for fact in probe.facts]
     found = sum(fact["found"] for fact in facts)
     need = max(1, math.ceil(len(facts) * PASS_SHARE)) if facts else 0
-    sources = None if cited is None else any(item["source"] in probe.sources for item in cited)
+    # У вопроса вне базы нужного файла нет — источник не проверяется.
+    sources = None if cited is None or not probe.sources else any(item["source"] in probe.sources for item in cited)
     return {"facts": facts, "found": found, "total": len(facts), "need": need, "passed": found >= need, "sources_ok": sources}
 
 

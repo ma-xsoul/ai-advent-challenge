@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3095,6 +3095,106 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(client.post("/days/22/api/ask", json=["x"]).status_code, 400)
             self.assertEqual(client.post("/days/22/api/ask", json={"question": "x", "k": "abc"}).status_code, 400)
             self.assertEqual(client.post("/days/22/api/ask", json={"question": "x" * 501}).status_code, 400)
+
+    def test_day_twenty_three_renders_the_rerank_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_twenty_two_client(directory).get("/days/23/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 23.", html)
+        self.assertIn("Реранкинг и фильтрация", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("reranker или фильтр релевантности (порог similarity / отдельная модель / heuristic)", html)
+        self.assertIn("порог отсечения нерелевантных результатов", html)
+        self.assertIn("топ-K до и после фильтрации", html)
+        self.assertIn("качество без фильтра/rewriting и качество с фильтром", html)
+        self.assertIn("Улучшенный RAG: фильтрация/реранкинг + query rewrite + сравнение режимов", html)
+        self.assertIn("оценивать конкретными метриками", html)
+        self.assertEqual(html.count('class="day23-rule"'), 4)
+        self.assertIn("Индекс ещё не собран", html)
+        self.assertIn('name="threshold" value="0.5"', html)
+        self.assertIn('name="candidates" value="20"', html)
+        self.assertEqual(html.count("data-probe-row="), 13)
+        self.assertEqual(html.count('class="day23-pick is-negative"'), 3)
+        self.assertIn("Как задеплоить проект в Kubernetes?", html)
+        self.assertIn("честно: в базе этого нет", html)
+        self.assertIn('data-funnel="filter"', html)
+        self.assertIn('data-funnel="rewrite"', html)
+        self.assertIn('data-compare-url="/days/23/api/compare"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day23.css", html)
+        self.assertIn("js/markdown.js", html)
+        self.assertIn("js/day23.js", html)
+        self.assertIn('href="/days/23/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_three_filters_reranks_and_compares(self):
+        import tempfile
+
+        from advent.rag import HashingEmbedder, RagIndex, collect
+        from advent.rag.rerank import NOTHING_FOUND, REWRITE_PROMPT, RERANK_PROMPT
+
+        class Transport:
+            """Переписывает, оценивает всех кандидатов на 8, отвечает по кускам."""
+
+            def send(self, payload):
+                system = payload["messages"][0]["content"]
+                if system == REWRITE_PROMPT:
+                    text = "слои памяти chat task user"
+                elif system == RERANK_PROMPT:
+                    count = payload["messages"][1]["content"].count("\n\n---\n\n") + 1
+                    text = json.dumps({"scores": {str(n): 8 for n in range(1, count + 1)}})
+                else:
+                    text = "Слои chat, task и user [1]; chat до «Нового диалога», user — пока не удалят руками [1]."
+                return {"choices": [{"message": {"content": text}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+
+            def stream(self, payload):
+                yield {"choices": [{"delta": {"content": self.send(payload)["choices"][0]["message"]["content"]}}]}
+
+        def events(response):
+            return [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._day_twenty_two_client(directory, Transport())
+            self.assertEqual(client.post("/days/23/api/ask", json={"question": "Слои?"}).status_code, 409)
+            self.assertEqual(client.post("/days/23/api/compare", json={}).status_code, 409)
+
+            RagIndex(pathlib.Path(directory) / "index.sqlite3").build(collect(), HashingEmbedder())
+            loose = {"threshold": 0.0, "candidates": 8, "top_k": 3, "rerank_min": 5}
+
+            got = events(client.post("/days/23/api/ask", json={"question": "Какие слои памяти есть у агента и сколько живёт каждый?", "settings": loose}))
+            types = [event["type"] for event in got]
+            self.assertEqual(types[:2], ["probe", "settings"])
+            funnels = {event["mode"]: event for event in got if event["type"] == "funnel"}
+            self.assertEqual(set(funnels), {"base", "filter", "rewrite"})
+            self.assertEqual(len(funnels["filter"]["candidates"]), 8)
+            self.assertEqual(funnels["filter"]["context"], 3)
+            self.assertEqual(funnels["rewrite"]["query"], "слои памяти chat task user")
+            answers = {event["mode"]: event for event in got if event["type"] == "answer"}
+            self.assertTrue(all(answers[mode]["grade"]["passed"] for mode in answers))
+            self.assertEqual(got[-1]["type"], "done")
+
+            strict = events(client.post("/days/23/api/ask", json={"question": "Какая погода будет завтра в Москве?", "settings": {"threshold": 0.99}}))
+            answers = {event["mode"]: event for event in strict if event["type"] == "answer"}
+            self.assertEqual(answers["filter"]["answer"], NOTHING_FOUND)
+            self.assertTrue(answers["filter"]["grade"]["passed"])
+
+            compare = events(client.post("/days/23/api/compare", json={"settings": loose}))
+            self.assertEqual(compare[0]["type"], "compare_start")
+            self.assertEqual(sum(event["type"] == "compare_row" for event in compare), 13)
+            summary = compare[-1]
+            self.assertEqual(summary["type"], "compare_summary")
+            self.assertEqual((summary["on_topic"], summary["off_topic"]), (10, 3))
+
+            self.assertEqual(client.post("/days/23/api/ask", json={"question": " "}).status_code, 400)
+            self.assertEqual(client.post("/days/23/api/ask", json={"question": "x", "settings": {"threshold": 5}}).status_code, 400)
+            self.assertEqual(client.post("/days/23/api/ask", json={"question": "x" * 501}).status_code, 400)
+            self.assertEqual(client.post("/days/23/api/compare", json={"settings": {"top_k": 0}}).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})
