@@ -362,7 +362,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3195,6 +3195,102 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(client.post("/days/23/api/ask", json={"question": "x", "settings": {"threshold": 5}}).status_code, 400)
             self.assertEqual(client.post("/days/23/api/ask", json={"question": "x" * 501}).status_code, 400)
             self.assertEqual(client.post("/days/23/api/compare", json={"settings": {"top_k": 0}}).status_code, 400)
+
+    def test_day_twenty_four_renders_the_citations_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_twenty_two_client(directory).get("/days/24/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 24.", html)
+        self.assertIn("Цитаты, источники и анти-галлюцинации", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("ответ, список источников (source + section/chunk_id) и цитаты (фрагменты из найденных чанков)", html)
+        self.assertIn("есть ли источники в каждом ответе", html)
+        self.assertIn("Есть ли цитаты в каждом ответе", html)
+        self.assertIn("Совпадает ли смысл ответа с цитатами", html)
+        self.assertIn("если релевантность ниже порога, ассистент обязан сказать «не знаю» и попросить уточнение", html)
+        self.assertIn("Ответы с обязательными источниками и цитатами + режим «не знаю» при слабом контексте", html)
+        self.assertIn("это называется чёрный ящик", html)
+        self.assertEqual(html.count('class="day24-rule"'), 4)
+        self.assertIn("Индекс ещё не собран", html)
+        self.assertIn('name="rerank_min" value="5"', html)
+        self.assertIn('name="threshold" value="0.5"', html)
+        self.assertEqual(html.count("data-probe-row="), 13)
+        self.assertEqual(html.count("<em>вне базы</em>"), 3)
+        self.assertIn('data-ask-url="/days/24/api/ask"', html)
+        self.assertIn('data-compare-url="/days/24/api/compare"', html)
+        self.assertIn('id="day24-quote-titles"', html)
+        self.assertIn('"missing":', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day24.css", html)
+        self.assertIn("js/markdown.js", html)
+        self.assertIn("js/day24.js", html)
+        self.assertIn('href="/days/24/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_four_answers_with_quotes_or_says_i_dont_know(self):
+        import tempfile
+
+        from advent.rag import HashingEmbedder, RagIndex, collect
+        from advent.rag.grounded import ANSWER_PROMPT, JUDGE_PROMPT, UNKNOWN
+        from advent.rag.rerank import RERANK_PROMPT
+
+        class Transport:
+            """Реранкер ставит 8 всем, ответ цитирует самую длинную строку первого куска, судья — «yes»."""
+
+            def send(self, payload):
+                system, user = payload["messages"][0]["content"], payload["messages"][1]["content"]
+                if system == RERANK_PROMPT:
+                    count = user.count("\n\n---\n\n") + 1
+                    text = json.dumps({"scores": {str(n): 8 for n in range(1, count + 1)}})
+                elif system == ANSWER_PROMPT:
+                    quote = max(user.split("\n\n---\n\n")[0].splitlines()[3:], key=len)
+                    text = json.dumps({"status": "answer", "answer": "Ответ по куску [1].", "quotes": [{"n": 1, "text": quote}]})
+                elif system == JUDGE_PROMPT:
+                    text = json.dumps({"verdict": "yes", "unsupported": [], "comment": "подтверждено"})
+                else:
+                    text = "Уточните, пожалуйста, вопрос."
+                return {"choices": [{"message": {"content": text}}], "usage": {"prompt_tokens": 3, "completion_tokens": 2}}
+
+        def events(response):
+            return [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._day_twenty_two_client(directory, Transport())
+            self.assertEqual(client.post("/days/24/api/ask", json={"question": "Слои?"}).status_code, 409)
+            self.assertEqual(client.post("/days/24/api/compare", json={}).status_code, 409)
+
+            RagIndex(pathlib.Path(directory) / "index.sqlite3").build(collect(), HashingEmbedder())
+            loose = {"threshold": 0.0}
+
+            got = events(client.post("/days/24/api/ask", json={"question": "Какие слои памяти есть у агента и сколько живёт каждый?", "settings": loose}))
+            self.assertEqual([event["type"] for event in got], ["probe", "retrieved", "answer", "judge", "checks", "done"])
+            answer = got[2]
+            self.assertEqual(answer["status"], "answer")
+            self.assertEqual(answer["quotes"][0]["status"], "exact")
+            self.assertEqual(answer["sources"][0]["chunk_id"], got[1]["context"][0]["chunk_id"])
+            self.assertTrue(got[4]["passed"])
+
+            strict = events(client.post("/days/24/api/ask", json={"question": "Какая погода будет завтра в Москве?", "settings": {"threshold": 0.0, "rerank_min": 9}}))
+            answer = next(event for event in strict if event["type"] == "answer")
+            self.assertEqual((answer["status"], answer["answer"]), ("unknown", UNKNOWN))
+            self.assertIn("Уточните", answer["clarify"])
+            self.assertNotIn("judge", [event["type"] for event in strict])
+
+            compare = events(client.post("/days/24/api/compare", json={"settings": loose}))
+            self.assertEqual(sum(event["type"] == "compare_row" for event in compare), 13)
+            summary = compare[-1]
+            self.assertEqual((summary["type"], summary["on_topic"], summary["off_topic"]), ("compare_summary", 10, 3))
+            self.assertEqual(summary["with_quotes"], summary["answered"])
+
+            self.assertEqual(client.post("/days/24/api/ask", json={"question": " "}).status_code, 400)
+            self.assertEqual(client.post("/days/24/api/ask", json={"question": "x", "settings": {"rerank_min": 11}}).status_code, 400)
+            self.assertEqual(client.post("/days/24/api/ask", json={"question": "x" * 501}).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

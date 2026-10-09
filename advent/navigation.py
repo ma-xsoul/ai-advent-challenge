@@ -195,6 +195,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=24,
+        title="Цитаты и источники",
+        description="Ответ с доказательствами или «не знаю»",
+        endpoint="day24.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

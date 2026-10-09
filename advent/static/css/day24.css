@@ -1,0 +1,789 @@
+/* День 24: цитаты, источники и анти-галлюцинации. */
+
+.day24-lab {
+  margin-top: 36px;
+}
+
+.day24-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day24-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day24-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day24-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day24-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day24-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day24-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day24-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day24-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day24-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day24-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day24-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day24-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day24-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day24-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day24-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day24-rule__formula::before {
+  content: "> ";
+}
+
+.day24-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: настройки, вопрос, три ответа, контрольные вопросы ─── */
+
+.day24-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day24-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day24-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day24-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day24-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day24-warning a {
+  color: var(--text-bright);
+}
+
+.day24-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day24-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day24-num {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+/* Кнопки и поле вопроса. */
+.day24-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day24-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day24-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day24-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day24-btn:disabled,
+.day24-pick:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day24-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  padding: 12px 16px 0;
+}
+
+.day24-pick {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.day24-pick:hover:not(:disabled) {
+  color: var(--text-bright);
+}
+
+.day24-pick span {
+  margin-right: 6px;
+  color: var(--accent);
+}
+
+.day24-ask {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.day24-ask input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 7px 10px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.day24-ask input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day24-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day24-answer .day24-error {
+  margin: 0;
+}
+
+/* Ход одного вопроса: ожидание, воронки, три ответа. */
+.day24-run {
+  border-top: 1px solid var(--line);
+}
+
+.day24-run[hidden] {
+  display: none;
+}
+
+.day24-fold summary {
+  padding: 7px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day24-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day24-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day24-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day24-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day24-compare__note {
+  margin: 0;
+  padding: 10px 16px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+#day24-compare-status {
+  color: var(--accent);
+}
+
+.day24-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day24-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day24-table th,
+.day24-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day24-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day24-table tbody td:first-child {
+  width: 30%;
+  color: var(--text);
+}
+
+[data-probe-row] {
+  transition: background var(--speed) var(--ease);
+}
+
+[data-probe-row].is-active {
+  background: var(--accent-soft);
+}
+
+[data-probe-row].is-done {
+  cursor: pointer;
+}
+
+[data-probe-row].is-done:hover {
+  background: var(--surface-soft);
+}
+
+.day24-detail td {
+  background: var(--surface-deep);
+  padding: 0;
+}
+
+.day24-table tfoot th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day24-table tfoot td {
+  color: var(--text-bright);
+}
+
+.day24-table tfoot[hidden] {
+  display: none;
+}
+
+/* ── День 23: настройки, воронка, вопросы вне базы ─────────────────── */
+
+.day24-settings {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 16px;
+  padding: 12px 16px;
+}
+
+.day24-setting {
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+}
+
+.day24-setting span {
+  color: var(--muted-bright);
+}
+
+.day24-setting span::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day24-setting input {
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 5px 8px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 13px;
+}
+
+.day24-setting input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day24-setting input:invalid {
+  border-color: var(--error);
+}
+
+.day24-setting small {
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day24-pick em,
+.day24-tag {
+  margin-left: 4px;
+  border: 1px solid var(--info);
+  padding: 0 4px;
+  color: var(--info);
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+}
+
+[data-probe-row].is-waiting .day24-verdict {
+  color: var(--muted);
+}
+
+[data-probe-row].is-flash {
+  animation: day24-flash 900ms var(--ease);
+}
+
+@keyframes day24-flash {
+  from {
+    background: var(--accent-soft);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-probe-row].is-flash {
+    animation: none;
+  }
+}
+
+/* ── День 24: ответ, источники, цитаты, судья ───────────────────────── */
+
+.day24-settings {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.day24-retrieved {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 16px;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day24-answer {
+  margin: 12px 16px 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+}
+
+.day24-answer__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 12px;
+}
+
+.day24-answer__head h4 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.day24-answer__body {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.day24-badge {
+  border: 1px solid var(--line-strong);
+  padding: 1px 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day24-badge.is-answer {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.day24-badge.is-unknown {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day24-clarify {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day24-clarify[hidden],
+.day24-checks[hidden] {
+  display: none;
+}
+
+.day24-clarify .day24-label {
+  display: inline;
+  margin-right: 8px;
+  color: var(--accent);
+}
+
+.day24-proof {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.day24-block {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 8px 12px 10px;
+}
+
+.day24-sources,
+.day24-quotes,
+.day24-unsupported {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.day24-source b {
+  margin-right: 6px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day24-lab .day24-source code {
+  border: 0;
+  padding: 0;
+  color: var(--text-bright);
+  overflow-wrap: anywhere;
+}
+
+.day24-source small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day24-source .day24-source__id {
+  color: var(--muted-bright);
+}
+
+.day24-quote__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  margin: 0 0 4px;
+  font-size: 11.5px;
+}
+
+.day24-quote__head small {
+  margin-left: auto;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.day24-quote blockquote {
+  margin: 0;
+  border-left: 2px solid var(--line-strong);
+  padding: 2px 0 2px 10px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day24-quote.is-exact .day24-quote__head,
+.day24-quote.is-near .day24-quote__head {
+  color: var(--ok);
+}
+
+.day24-quote.is-exact blockquote,
+.day24-quote.is-near blockquote {
+  border-left-color: var(--ok);
+}
+
+.day24-quote.is-elsewhere .day24-quote__head,
+.day24-quote.is-partial .day24-quote__head {
+  color: var(--accent);
+}
+
+.day24-quote.is-missing .day24-quote__head {
+  color: var(--error);
+}
+
+.day24-quote.is-missing blockquote {
+  border-left-color: var(--error);
+}
+
+.day24-quote .day24-fold summary {
+  padding: 4px 0 0;
+}
+
+.day24-chunk {
+  max-height: 260px;
+  margin: 4px 0 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day24-chunk mark {
+  background: var(--accent-soft);
+  color: var(--text-bright);
+}
+
+.day24-verdict {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.day24-verdict.is-yes {
+  color: var(--ok);
+}
+
+.day24-verdict.is-partial {
+  color: var(--accent);
+}
+
+.day24-verdict.is-no,
+.day24-verdict.is-none {
+  color: var(--error);
+}
+
+.day24-judge__comment {
+  margin: 0 0 6px;
+  color: var(--muted-bright);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.day24-unsupported li::before {
+  color: var(--error);
+  content: "✗ ";
+}
+
+.day24-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 9px 16px 12px;
+  color: var(--ok);
+  font-size: 12px;
+  list-style: none;
+}
+
+.day24-checks .is-bad {
+  color: var(--error);
+}
+
+.day24-checks .is-half {
+  color: var(--accent);
+}
+
+.day24-checks li:last-child {
+  color: var(--muted);
+}
+
+/* Таблица: клетки красятся по итогу проверки. */
+.day24-table td.is-good {
+  color: var(--ok);
+}
+
+.day24-table td.is-half {
+  color: var(--accent);
+}
+
+.day24-table td.is-bad {
+  color: var(--error);
+}
+
+.day24-table td[data-cell] {
+  white-space: nowrap;
+}
+
+.day24-detail td > div {
+  padding: 10px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.day24-detail__quotes {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted-bright);
+}
+
+.day24-detail__quotes .is-missing {
+  color: var(--error);
+}
+
+@media (max-width: 1100px) {
+  .day24-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day24-proof {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .day24-rules,
+  .day24-settings,
+  .day24-picks {
+    grid-template-columns: 1fr;
+  }
+
+  .day24-table td[data-cell] {
+    white-space: normal;
+  }
+}

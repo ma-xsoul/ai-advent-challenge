@@ -12,6 +12,17 @@ from advent.rag.chunking import FIXED_OVERLAP, FIXED_SIZE, STRUCTURE_MAX, _label
 from advent.rag.corpus import Document, page_text
 from advent.rag.embeddings import EmbeddingError
 from advent.rag.answer import MODES, ask, augment, citations, find_probe, grade, iter_compare, messages
+from advent.rag.grounded import (
+    ANSWER_PROMPT,
+    CLARIFY_PROMPT,
+    JUDGE_PROMPT,
+    UNKNOWN,
+    ask as ask_grounded,
+    check as check_grounded,
+    iter_compare as iter_grounded_compare,
+    sources_of,
+    verify_quote,
+)
 from advent.rag.probes import NEGATIVE_PROBES, PROBES, REFUSAL, Fact, Probe, evaluate
 from advent.rag.rerank import (
     NOTHING_FOUND,
@@ -522,6 +533,160 @@ class RerankTestCase(unittest.TestCase):
         row = next(row for row in rows if row["index"] == 1)
         self.assertEqual((row["modes"]["base"]["relevant"], row["modes"]["base"]["context"]), (1, 2))
         self.assertIsNone(next(row for row in rows if row["index"] == 2)["modes"]["base"]["relevant"])
+
+
+class GroundedTransport:
+    """Реранкер: на вопрос про память куски про память — 9, прочее — 1. Ответ — JSON с цитатой из первого куска. Судья — «yes»."""
+
+    def __init__(self, answer=None, verdict="yes"):
+        self.answer = answer
+        self.verdict = verdict
+        self.calls = {"rerank": 0, "answer": 0, "judge": 0, "clarify": 0}
+
+    def send(self, payload):
+        system, user = payload["messages"][0]["content"], payload["messages"][1]["content"]
+        if system == RERANK_PROMPT:
+            self.calls["rerank"] += 1
+            fragments = user.split("\n\n---\n\n")
+            about_memory = "памят" in user.split("\n", 1)[0].lower()
+            text = json.dumps({"scores": {str(n): (9 if about_memory and "памят" in f.lower() else 1) for n, f in enumerate(fragments, start=1)}})
+        elif system == ANSWER_PROMPT:
+            self.calls["answer"] += 1
+            # Первый фрагмент: «Фрагменты:», пустая строка, заголовок [1] …, дальше текст куска.
+            lines = user.split("\n\n---\n\n")[0].splitlines()[3:]
+            quote = max(lines, key=len)
+            text = self.answer if self.answer is not None else json.dumps(
+                {"status": "answer", "answer": "Слои chat, task и user [1].", "quotes": [{"n": 1, "text": quote}], "clarify": ""}
+            )
+        elif system == JUDGE_PROMPT:
+            self.calls["judge"] += 1
+            text = json.dumps({"verdict": self.verdict, "unsupported": [], "comment": "цитаты подтверждают ответ"})
+        else:
+            self.calls["clarify"] += 1
+            self.clarify_system = system
+            text = "Уточните вопрос: например, про память агента (день 11)."
+        return {"choices": [{"message": {"content": text}}], "usage": {"prompt_tokens": 2, "completion_tokens": 1}}
+
+
+class GroundedTestCase(unittest.TestCase):
+    def _index(self, directory):
+        index = RagIndex(Path(directory) / "index.sqlite3")
+        index.build(documents(), HashingEmbedder())
+        return index
+
+    def _context(self, directory):
+        return self._index(directory).search("слои памяти", HashingEmbedder(), "structure", k=2)
+
+    def test_quotes_are_checked_against_their_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            context = self._context(directory)
+        own, other = context[0], context[1]
+        line = max(own.text.splitlines(), key=len)
+
+        self.assertEqual(verify_quote({"n": own.rank, "text": line}, context)["status"], "exact")
+        self.assertEqual(verify_quote({"n": own.rank, "text": "  " + line.upper().replace(" ", "   ")}, context)["status"], "near")
+        moved = verify_quote({"n": own.rank, "text": max(other.text.splitlines(), key=len)}, context)
+        self.assertEqual((moved["status"], moved["n"], moved["claimed"]), ("elsewhere", other.rank, own.rank))
+        self.assertEqual(verify_quote({"n": own.rank, "text": line + " Ещё."}, context)["status"], "partial")
+        self.assertEqual(verify_quote({"n": own.rank, "text": "Слоёв памяти у агента семь, все вечные."}, context)["status"], "missing")
+        self.assertEqual(verify_quote({"n": 9, "text": "нет такого куска"}, context)["status"], "missing")
+
+    def test_sources_come_from_code_not_from_the_model(self):
+        with tempfile.TemporaryDirectory() as directory:
+            context = self._context(directory)
+        quotes = [{"n": 2, "status": "exact"}, {"n": 1, "status": "missing"}]
+        sources = sources_of("Ответ [1]. И ещё [7].", quotes, context)
+
+        self.assertEqual([source["n"] for source in sources], [1, 2])
+        self.assertEqual(sources[0]["chunk_id"], context[0].chunk_id)
+        self.assertEqual((sources[0]["cited"], sources[0]["quoted"]), (True, False))
+        self.assertEqual((sources[1]["cited"], sources[1]["quoted"]), (False, True))
+
+    def test_grounded_answer_with_sources_quotes_and_judge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            transport = GroundedTransport()
+            events = []
+            result = ask_grounded(
+                MEMORY_PROBE.question, index=self._index(directory), embedder=HashingEmbedder(), transport=transport,
+                settings=Settings(threshold=0.0, candidates=4, top_k=2), emit=events.append, probe=MEMORY_PROBE,
+            )
+
+        self.assertEqual([event["type"] for event in events], ["retrieved", "answer", "judge", "checks"])
+        self.assertEqual(result["status"], "answer")
+        self.assertEqual(result["relevance"], 9)
+        self.assertEqual(result["quotes"][0]["status"], "exact")
+        self.assertIn("chunk", result["quotes"][0])
+        self.assertEqual(result["sources"][0]["n"], 1)
+        self.assertEqual(result["judge"]["verdict"], "yes")
+        self.assertTrue(result["checks"]["passed"])
+        self.assertEqual(transport.calls, {"rerank": 1, "answer": 1, "judge": 1, "clarify": 0})
+        json.dumps(events)  # всё, что уходит на страницу, сериализуется
+
+    def test_low_relevance_means_i_dont_know_and_a_clarifying_question(self):
+        with tempfile.TemporaryDirectory() as directory:
+            transport = GroundedTransport()
+            result = ask_grounded(
+                NEGATIVE_PROBES[0].question, index=self._index(directory), embedder=HashingEmbedder(), transport=transport,
+                settings=Settings(threshold=0.0, rerank_min=10), emit=lambda event: None, probe=NEGATIVE_PROBES[0],
+            )
+
+        self.assertEqual((result["status"], result["reason"], result["answer"]), ("unknown", "relevance", UNKNOWN))
+        self.assertIn("Уточните", result["clarify"])
+        self.assertIn("день 11", transport.clarify_system)
+        self.assertEqual(transport.calls["answer"], 0)
+        self.assertIsNone(result["judge"])
+        self.assertTrue(result["checks"]["passed"])
+
+    def test_broken_or_unfounded_answers_fail_the_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            index = self._index(directory)
+            loose = Settings(threshold=0.0, candidates=4, top_k=2)
+            not_json = ask_grounded(
+                MEMORY_PROBE.question, index=index, embedder=HashingEmbedder(), transport=GroundedTransport(answer="просто текст"),
+                settings=loose, emit=lambda event: None, probe=MEMORY_PROBE,
+            )
+            invented = ask_grounded(
+                MEMORY_PROBE.question, index=index, embedder=HashingEmbedder(),
+                transport=GroundedTransport(answer=json.dumps({"status": "answer", "answer": "Семь слоёв [1].", "quotes": [{"n": 1, "text": "семь вечных слоёв"}]})),
+                settings=loose, emit=lambda event: None, probe=MEMORY_PROBE,
+            )
+            partial = ask_grounded(
+                MEMORY_PROBE.question, index=index, embedder=HashingEmbedder(), transport=GroundedTransport(verdict="partial"),
+                settings=loose, emit=lambda event: None, probe=MEMORY_PROBE,
+            )
+
+        self.assertFalse(not_json["parsed"])
+        self.assertFalse(not_json["checks"]["has_quotes"])
+        self.assertFalse(not_json["checks"]["passed"])
+        self.assertEqual(invented["quotes"][0]["status"], "missing")
+        self.assertFalse(invented["checks"]["passed"])
+        self.assertEqual(partial["checks"]["meaning"], "partial")
+        self.assertFalse(partial["checks"]["passed"])
+
+    def test_answering_an_off_topic_question_is_a_miss(self):
+        verdict = check_grounded({"status": "answer", "quotes": [], "sources": []}, None, NEGATIVE_PROBES[1])
+        self.assertFalse(verdict["passed"])
+        self.assertTrue(verdict["negative"])
+        self.assertIsNone(check_grounded({"status": "unknown", "quotes": [], "sources": []}, None, None)["passed"])
+
+    def test_compare_sums_up_the_three_checks(self):
+        probes = (MEMORY_PROBE, Probe("Что такое Kubernetes?", (), "нет", (REFUSAL,)))
+        transport = GroundedTransport()
+        with tempfile.TemporaryDirectory() as directory:
+            index = self._index(directory)
+            # Вопрос про Kubernetes реранкер оценит на 1 — ниже порога 5: «не знаю».
+            events = list(iter_grounded_compare(index=index, embedder=HashingEmbedder(), transport=transport, settings=Settings(threshold=0.0, candidates=4, top_k=2), probes=probes))
+
+        rows = {event["index"]: event for event in events if event["type"] == "compare_row"}
+        self.assertEqual(rows[1]["checks"]["passed"], True)
+        self.assertEqual(rows[2]["status"], "unknown")
+        summary = events[-1]
+        self.assertEqual(summary["type"], "compare_summary")
+        self.assertEqual((summary["answered"], summary["with_sources"], summary["with_quotes"]), (1, 1, 1))
+        self.assertEqual((summary["quotes_verified"], summary["quotes_total"]), (1, 1))
+        self.assertEqual(summary["meaning"], {"yes": 1, "partial": 0, "no": 0})
+        self.assertEqual((summary["passed"], summary["false_unknown"], summary["unknown_off_topic"]), (1, 0, 1))
+        json.dumps(events)
 
 
 if __name__ == "__main__":

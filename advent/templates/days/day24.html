@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}День 24. Цитаты и источники · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day24.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 24</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Sources · Quotes · «I don't know»</span>
+    </div>
+    <h1>День 24.<br><span>Цитаты, источники и анти-галлюцинации</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать четвёртого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Доработайте RAG так, чтобы модель обязательно возвращала: ответ, список источников (source + section/chunk_id) и цитаты (фрагменты из найденных чанков).</p>
+      <ul class="homework-brief__steps">
+        <li>Проверьте на 10 вопросах: есть ли источники в каждом ответе.</li>
+        <li>Есть ли цитаты в каждом ответе.</li>
+        <li>Совпадает ли смысл ответа с цитатами.</li>
+        <li>Усиление: добавьте правило — если релевантность ниже порога, ассистент обязан сказать «не знаю» и попросить уточнение.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Ответы с обязательными источниками и цитатами + режим «не знаю» при слабом контексте.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day24-lab" aria-labelledby="day24-lab-title">
+    <div class="day24-lab__intro">
+      <p class="day24-kicker">Практика</p>
+      <h2 id="day24-lab-title">Ответ с доказательствами — или честное «не знаю»</h2>
+      <p>В днях 22–23 ответ ссылался на куски номерами [n]. Но номер — ещё не доказательство: модель может сослаться на кусок и написать то, чего в нём нет. Сегодня ответ обязан приложить источники и дословные цитаты из найденных кусков, а код проверяет, что цитаты действительно там есть и ответ на них опирается. Если поиск не нашёл ничего уверенного — ассистент не сочиняет, а говорит «не знаю» и просит уточнить вопрос.</p>
+    </div>
+
+    <blockquote class="day24-curator">
+      <p>А где он этот взял кусок диалога? Вообще это называется чёрный ящик.</p>
+      <p>Просто мне интересно, откуда кусок этот.</p>
+      <cite>Алексей Гладков, 30.09 — о том, как Claude вытащил кусок старого диалога неизвестно откуда</cite>
+    </blockquote>
+
+    <ol class="day24-rules">
+      <li class="day24-rule">
+        <span class="day24-rule__rank">01</span>
+        <h3>Источники</h3>
+        <p>К каждому ответу — список, откуда он взят: файл, раздел и chunk_id куска. Не «по документации», а конкретное место, которое можно открыть.</p>
+        <p class="day24-rule__formula">source · section · chunk_id</p>
+      </li>
+      <li class="day24-rule">
+        <span class="day24-rule__rank">02</span>
+        <h3>Цитаты</h3>
+        <p>Дословные фрагменты из найденных кусков, на которых держится ответ. Код сверяет: цитата действительно есть в куске, а не придумана.</p>
+        <p class="day24-rule__formula">цитата ⊂ кусок</p>
+      </li>
+      <li class="day24-rule">
+        <span class="day24-rule__rank">03</span>
+        <h3>Проверка на 10 вопросах</h3>
+        <p>По каждому ответу: есть ли источники, есть ли цитаты, совпадает ли смысл ответа с цитатами. Итог — таблица, а не впечатление.</p>
+        <p class="day24-rule__formula">источники · цитаты · смысл</p>
+      </li>
+      <li class="day24-rule">
+        <span class="day24-rule__rank">04</span>
+        <h3>«Не знаю»</h3>
+        <p>Если релевантность найденного ниже порога, ассистент обязан сказать «не знаю» и попросить уточнить вопрос, а не собирать ответ из случайных соседей.</p>
+        <p class="day24-rule__formula">релевантность &lt; порога → «не знаю»</p>
+      </li>
+    </ol>
+
+    <section class="day24-panel" aria-labelledby="day24-settings-title">
+      <header class="day24-panel__head">
+        <h3 id="day24-settings-title">Порог «не знаю»</h3>
+        <span class="day24-panel__meta">
+          {% if state.ready %}поиск дня 23: top-{{ settings.candidates }} → порог → реранк → top-{{ settings.top_k }} · {{ state.chunks }} кусков {{ strategy }} · ответы {{ model }}{% else %}индекс не готов{% endif %}
+        </span>
+      </header>
+      {% if not state.ready %}
+        <p class="day24-warning">{{ state.reason }} <a href="{{ url_for('day21.index') }}">Открыть день 21 →</a></p>
+      {% endif %}
+      <form class="day24-settings" data-settings>
+        <label class="day24-setting">
+          <span>порог похожести</span>
+          <input type="number" name="threshold" value="{{ settings.threshold }}" min="{{ limits.threshold[0] }}" max="{{ limits.threshold[1] }}" step="0.01" required>
+          <small>грубое сито: ниже — кусок даже не оценивается</small>
+        </label>
+        <label class="day24-setting">
+          <span>порог релевантности</span>
+          <input type="number" name="rerank_min" value="{{ settings.rerank_min }}" min="{{ limits.rerank_min[0] }}" max="{{ limits.rerank_min[1] }}" step="1" required>
+          <small>оценка реранкера 0–10: если ни один кусок не дотянул — «не знаю»</small>
+        </label>
+      </form>
+    </section>
+
+    <section class="day24-panel" aria-labelledby="day24-ask-title">
+      <header class="day24-panel__head">
+        <h3 id="day24-ask-title">Вопрос · ответ с доказательствами</h3>
+        <span class="day24-panel__meta">ответ → источники → цитаты → проверка</span>
+      </header>
+      <div class="day24-picks" data-picks>
+        {% for probe in probes %}
+          <button type="button" class="day24-pick" data-question="{{ probe.question }}"><span>{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em>вне базы</em>{% endif %}</button>
+        {% endfor %}
+      </div>
+      <form id="day24-ask" class="day24-ask" data-ask-url="{{ url_for('day24.ask_question') }}">
+        <label class="sr-only" for="day24-question">Вопрос</label>
+        <input id="day24-question" name="question" type="search" maxlength="500" required placeholder="Спросите что-нибудь о проекте или выберите контрольный вопрос" {% if not state.ready %}disabled{% endif %}>
+        <button class="day24-btn day24-btn--go" type="submit" {% if not state.ready %}disabled{% endif %}>Спросить</button>
+      </form>
+      <p id="day24-error" class="day24-error" role="alert" hidden></p>
+
+      <div class="day24-run" data-run hidden>
+        <p class="day24-retrieved" data-retrieved></p>
+
+        <article class="day24-answer" data-answer>
+          <header class="day24-answer__head">
+            <h4>Ответ</h4>
+            <span class="day24-badge" data-status></span>
+          </header>
+          <div class="day24-answer__body markdown-body" data-answer-body></div>
+          <p class="day24-clarify" data-clarify hidden></p>
+        </article>
+
+        <div class="day24-proof">
+          <section class="day24-block">
+            <p class="day24-label">Источники</p>
+            <ol class="day24-sources" data-sources></ol>
+          </section>
+          <section class="day24-block">
+            <p class="day24-label">Цитаты · проверка кодом</p>
+            <ol class="day24-quotes" data-quotes></ol>
+          </section>
+          <section class="day24-block">
+            <p class="day24-label">Смысл ответа и цитат · судья</p>
+            <div data-judge></div>
+          </section>
+        </div>
+
+        <ul class="day24-checks" data-checks hidden></ul>
+      </div>
+    </section>
+
+    <section class="day24-panel" aria-labelledby="day24-compare-title">
+      <header class="day24-panel__head">
+        <h3 id="day24-compare-title">Проверка на контрольных вопросах · 10 по базе и 3 вне её</h3>
+        <button id="day24-compare" class="day24-btn" type="button" data-compare-url="{{ url_for('day24.compare') }}" {% if not state.ready %}disabled{% endif %}>[▶] Прогнать 13 вопросов</button>
+      </header>
+      <p class="day24-compare__note">Вопрос по базе засчитан ✓, если в ответе есть источники и цитаты, все цитаты нашлись в кусках, а судья подтвердил смысл. Вопрос вне базы — если ассистент сказал «не знаю». <span id="day24-compare-status" aria-live="polite"></span></p>
+      <div class="day24-table-wrap">
+        <table class="day24-table" data-compare-table>
+          <thead>
+            <tr>
+              <th scope="col">Вопрос</th>
+              <th scope="col">Источники</th>
+              <th scope="col">Цитаты</th>
+              <th scope="col">Смысл</th>
+              <th scope="col">Итог</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for probe in probes %}
+              <tr data-probe-row="{{ probe.index }}">
+                <td><span class="day24-num">{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em class="day24-tag">вне базы</em>{% endif %}</td>
+                <td data-cell="sources">—</td>
+                <td data-cell="quotes">—</td>
+                <td data-cell="meaning">—</td>
+                <td data-cell="passed">—</td>
+              </tr>
+              <tr class="day24-detail" data-probe-detail="{{ probe.index }}" hidden>
+                <td colspan="5"><div data-detail></div></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot data-compare-summary hidden>
+            {% for key, label in [
+              ("with_sources", "ответы с источниками"),
+              ("with_quotes", "ответы с цитатами"),
+              ("quotes", "цитат нашлось в кусках"),
+              ("meaning", "смысл совпадает с цитатами · да / частично / нет"),
+              ("passed", "засчитано · 10 по базе"),
+              ("false_unknown", "ложных «не знаю» на вопросах по базе"),
+              ("unknown_off_topic", "«не знаю» · 3 вне базы"),
+              ("tokens", "токенов на прогон"),
+            ] %}
+              <tr data-summary-row="{{ key }}">
+                <th scope="row" colspan="4">{{ label }}</th>
+                <td data-summary-cell>—</td>
+              </tr>
+            {% endfor %}
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <script id="day24-quote-titles" type="application/json">{{ quote_titles | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day24.js') }}"></script>
+{% endblock %}
