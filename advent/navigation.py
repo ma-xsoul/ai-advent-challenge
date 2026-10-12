@@ -211,6 +211,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=26,
+        title="Локальная LLM",
+        description="Модель на маке, без облака",
+        endpoint="day26.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

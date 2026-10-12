@@ -1,0 +1,551 @@
+/* День 26: запуск локальной LLM. */
+
+.day26-lab {
+  margin-top: 36px;
+}
+
+.day26-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day26-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day26-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day26-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day26-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day26-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day26-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day26-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day26-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day26-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day26-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day26-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day26-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day26-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day26-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day26-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day26-rule__formula::before {
+  content: "> ";
+}
+
+.day26-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: панели, кнопки, раскрывашки, таблица ─────────────────── */
+
+.day26-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day26-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day26-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day26-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day26-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day26-warning a {
+  color: var(--text-bright);
+}
+
+.day26-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day26-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day26-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day26-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day26-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day26-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day26-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day26-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day26-fold summary {
+  padding: 7px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day26-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day26-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day26-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day26-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day26-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day26-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day26-table th,
+.day26-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day26-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day26-table tbody td:first-child {
+  width: 30%;
+  color: var(--text);
+}
+
+.day26-table tfoot th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day26-table tfoot td {
+  color: var(--text-bright);
+}
+
+.day26-table tfoot[hidden] {
+  display: none;
+}
+
+/* ── День 26: статус Ollama, три запроса, замеры, терминал ──────────── */
+
+.day26-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day26-memory,
+.day26-loaded {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--muted-bright);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.day26-memory b {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day26-loaded {
+  border-top: 1px solid var(--line);
+}
+
+.day26-lab .day26-loaded code,
+.day26-lab .day26-table code {
+  border: 0;
+  padding: 0;
+  color: var(--text-bright);
+}
+
+.day26-table td.day26-num,
+.day26-table[data-runs] td {
+  white-space: nowrap;
+}
+
+.day26-table td.is-ok {
+  color: var(--ok);
+}
+
+.day26-table td.is-bad {
+  color: var(--error);
+}
+
+.day26-table tr.is-muted td {
+  color: var(--muted);
+}
+
+.day26-table tbody td:first-child {
+  width: auto;
+}
+
+.day26-runs__empty td {
+  color: var(--muted);
+}
+
+.day26-table tr.is-new {
+  animation: day26-flash 1200ms var(--ease);
+}
+
+@keyframes day26-flash {
+  from {
+    background: var(--accent-soft);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day26-table tr.is-new {
+    animation: none;
+  }
+}
+
+.day26-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px 18px;
+  padding: 12px 16px;
+}
+
+.day26-field {
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+}
+
+.day26-field > span {
+  color: var(--muted-bright);
+}
+
+.day26-field > span::before {
+  color: var(--accent);
+  content: "> ";
+}
+
+.day26-select {
+  min-width: 300px;
+}
+
+.day26-check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding-bottom: 6px;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day26-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 16px 12px;
+}
+
+.day26-preset {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 10px 12px;
+}
+
+.day26-preset.is-running {
+  border-color: var(--accent);
+}
+
+.day26-preset__head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.day26-preset__rank {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.day26-preset__head h4 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.day26-preset__head .day26-btn {
+  margin-left: auto;
+}
+
+.day26-preset__prompt {
+  margin: 8px 0 4px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.day26-preset__expected {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day26-thinking[hidden] {
+  display: none;
+}
+
+.day26-thinking summary {
+  padding: 4px 0;
+}
+
+.day26-thinking pre {
+  max-height: 200px;
+  margin: 4px 0 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day26-answer {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.day26-answer:empty {
+  display: none;
+}
+
+.day26-answer .day26-error {
+  margin: 0;
+}
+
+.day26-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day26-metrics {
+  margin: auto 0 0;
+  padding-top: 8px;
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.day26-metrics:empty {
+  display: none;
+}
+
+.day26-cli {
+  margin: 0;
+  overflow-x: auto;
+  padding: 12px 16px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+.day26-cli span {
+  color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .day26-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day26-presets {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .day26-rules {
+    grid-template-columns: 1fr;
+  }
+}

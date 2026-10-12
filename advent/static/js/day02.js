@@ -25,15 +25,17 @@
   const streamUrl = `${compareUrl}/stream`;
   const metaAnalysisUrl = `${compareUrl}/meta-analysis`;
 
+  // Выпадающие списки — общий компонент static/js/custom-select.js.
+  const {
+    init: initializeCustomSelect,
+    reset: resetCustomSelect,
+    select: selectCustomOption,
+    setDisabled: setCustomSelectDisabled,
+  } = window.CustomSelect;
+
   customSelects.forEach(initializeCustomSelect);
   formatInput.addEventListener("change", updateStopControl);
   updateStopControl();
-
-  document.addEventListener("click", (event) => {
-    customSelects.forEach((control) => {
-      if (!control.contains(event.target)) closeCustomSelect(control);
-    });
-  });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -122,107 +124,6 @@
       form.requestSubmit();
     }
   });
-
-  function initializeCustomSelect(control) {
-    const trigger = control.querySelector(".custom-select__trigger");
-    const menu = control.querySelector(".custom-select__menu");
-    const options = [...control.querySelectorAll(".custom-select__option")];
-
-    trigger.addEventListener("click", () => {
-      if (trigger.disabled) return;
-      const shouldOpen = menu.hidden;
-      customSelects.forEach(closeCustomSelect);
-      if (shouldOpen) openCustomSelect(control);
-    });
-
-    options.forEach((option) => {
-      option.addEventListener("click", () => {
-        selectCustomOption(control, option.dataset.value);
-        trigger.focus();
-      });
-    });
-
-    control.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        closeCustomSelect(control);
-        trigger.focus();
-        return;
-      }
-
-      if (event.target === trigger && ["ArrowDown", "ArrowUp"].includes(event.key)) {
-        event.preventDefault();
-        openCustomSelect(control);
-        const selected = options.find((option) => option.getAttribute("aria-selected") === "true");
-        selected?.focus();
-        return;
-      }
-
-      if (!menu.hidden && ["ArrowDown", "ArrowUp"].includes(event.key)) {
-        event.preventDefault();
-        const currentIndex = options.indexOf(document.activeElement);
-        const direction = event.key === "ArrowDown" ? 1 : -1;
-        const nextIndex = (currentIndex + direction + options.length) % options.length;
-        options[nextIndex].focus();
-      }
-    });
-  }
-
-  function openCustomSelect(control) {
-    const trigger = control.querySelector(".custom-select__trigger");
-    const menu = control.querySelector(".custom-select__menu");
-    if (trigger.disabled) return;
-    menu.hidden = false;
-    control.classList.add("is-open");
-    trigger.setAttribute("aria-expanded", "true");
-  }
-
-  function closeCustomSelect(control) {
-    const trigger = control.querySelector(".custom-select__trigger");
-    const menu = control.querySelector(".custom-select__menu");
-    menu.hidden = true;
-    control.classList.remove("is-open");
-    trigger.setAttribute("aria-expanded", "false");
-  }
-
-  function selectCustomOption(control, value, dispatch = true) {
-    const input = control.querySelector('input[type="hidden"]');
-    const display = control.querySelector(".custom-select__trigger > span:first-child");
-    const options = [...control.querySelectorAll(".custom-select__option")];
-    const option = options.find((item) => item.dataset.value === value) || options[0];
-
-    input.value = option.dataset.value;
-    display.textContent = option.dataset.label;
-    options.forEach((item) => {
-      item.setAttribute("aria-selected", String(item === option));
-    });
-    closeCustomSelect(control);
-
-    if (dispatch) input.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-
-  function resetCustomSelect(control) {
-    const input = control.querySelector('input[type="hidden"]');
-    input.value = input.defaultValue;
-    selectCustomOption(control, input.value, false);
-  }
-
-  function setCustomSelectDisabled(control, disabled, disabledLabel = "") {
-    const input = control.querySelector('input[type="hidden"]');
-    const trigger = control.querySelector(".custom-select__trigger");
-    const display = trigger.querySelector("span:first-child");
-
-    input.disabled = disabled;
-    trigger.disabled = disabled;
-    trigger.setAttribute("aria-disabled", String(disabled));
-    control.classList.toggle("is-disabled", disabled);
-    closeCustomSelect(control);
-
-    if (disabled && disabledLabel) {
-      display.textContent = disabledLabel;
-    } else if (!disabled) {
-      selectCustomOption(control, input.value, false);
-    }
-  }
 
   function updateStopControl() {
     const isJson = formatInput.value === "json";

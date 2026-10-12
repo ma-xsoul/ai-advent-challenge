@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}День 26. Локальная LLM · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/custom-select.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day26.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 26</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Ollama · localhost · No cloud</span>
+    </div>
+    <h1>День 26.<br><span>Запуск локальной LLM</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать шестого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Установите и запустите любую локальную LLM (Ollama, LM Studio, llama.cpp, Mistral, Qwen, Phi и т.п.).</p>
+      <ul class="homework-brief__steps">
+        <li>Проверьте: модель запускается локально.</li>
+        <li>К ней можно обратиться через CLI или HTTP API.</li>
+        <li>Модель отвечает на простой запрос.</li>
+        <li>Сделайте минимум 3 запроса разной сложности.</li>
+      </ul>
+
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Локальная LLM запущена и отвечает на запросы.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day26-lab" aria-labelledby="day26-lab-title">
+    <div class="day26-lab__intro">
+      <p class="day26-kicker">Практика</p>
+      <h2 id="day26-lab-title">Модель на своём маке</h2>
+      <p>Двадцать пять дней модель жила в облаке: запрос уходил в DeepSeek, ответ приходил обратно, за каждый токен платили. Сегодня модель запускается прямо на маке: Ollama держит её в памяти и отвечает на localhost — без ключа, без интернета, данные никуда не уходят. Цена — скорость и качество теперь зависят от нашего железа.</p>
+    </div>
+
+    <blockquote class="day26-curator">
+      <p>Пока просто можно дёрнуть и проверить в любом клиенте.</p>
+      <cite>Алексей Гладков, 5.10 — на вопрос, надо ли сразу подключать локальную модель к своему приложению</cite>
+    </blockquote>
+
+    <ol class="day26-rules">
+      <li class="day26-rule">
+        <span class="day26-rule__rank">01</span>
+        <h3>Запуск</h3>
+        <p>Ollama — сервер на маке: скачивает модель, держит её в памяти и отвечает на localhost:11434. Модель выбираем под железо — она должна целиком влезть в память.</p>
+        <p class="day26-rule__formula">ollama pull · ollama serve</p>
+      </li>
+      <li class="day26-rule">
+        <span class="day26-rule__rank">02</span>
+        <h3>CLI и HTTP API</h3>
+        <p>Два способа спросить: из терминала командой ollama run и по HTTP — запросом с сообщениями, почти как к облачному API. Второй нужен, чтобы подключить модель к приложению.</p>
+        <p class="day26-rule__formula">ollama run · POST /api/chat</p>
+      </li>
+      <li class="day26-rule">
+        <span class="day26-rule__rank">03</span>
+        <h3>Три запроса</h3>
+        <p>Простой, средний и сложный: факт, рассуждение, задача посложнее. Смотрим не только на ответ, но и на время, скорость в токенах в секунду и прогрев модели.</p>
+        <p class="day26-rule__formula">просто · средне · сложно</p>
+      </li>
+      <li class="day26-rule">
+        <span class="day26-rule__rank">04</span>
+        <h3>Без облака</h3>
+        <p>Нет ключа, нет счёта за токены, работает без интернета, данные остаются на машине. Взамен — скорость и ум модели ограничены памятью и чипом.</p>
+        <p class="day26-rule__formula">localhost, без ключа</p>
+      </li>
+    </ol>
+
+    {# Вес — в десятичных гигабайтах, как в ollama list; память — как её называет Apple. #}
+    {% set gb = 1000 ** 3 %}
+    <section class="day26-panel" aria-labelledby="day26-status-title">
+      <header class="day26-panel__head">
+        <h3 id="day26-status-title">Ollama на этом маке</h3>
+        <span class="day26-panel__meta">
+          {% if status.ok %}работает · версия {{ status.version }} · {{ status.url }}{% else %}не отвечает · {{ status.url }}{% endif %}
+        </span>
+      </header>
+      {% if not status.ok %}
+        <p class="day26-warning">{{ status.error }}</p>
+      {% else %}
+        {% if memory.ram %}
+          <p class="day26-memory">Оперативной памяти {{ "%.0f"|format(memory.ram / 1024 ** 3) }} ГБ. Видеочипу macOS по умолчанию отдаёт ≈ ¾ — около <b>{{ "%.0f"|format(memory.gpu_budget / gb) }} ГБ</b> в единицах ollama list. Модель вместе с контекстом должна влезть сюда.</p>
+        {% endif %}
+        <div class="day26-table-wrap">
+          <table class="day26-table">
+            <thead><tr><th scope="col">Модель</th><th scope="col">Параметры</th><th scope="col">Квантование</th><th scope="col">Вес</th><th scope="col">Умеет</th><th scope="col">Влезет</th></tr></thead>
+            <tbody>
+              {% for model in status.models %}
+                <tr{% if not model.chat %} class="is-muted"{% endif %}>
+                  <td><code>{{ model.name }}</code></td>
+                  <td class="day26-num">{{ model.parameters }}</td>
+                  <td class="day26-num">{{ model.quantization }}</td>
+                  <td class="day26-num">{{ "%.1f"|format(model.size / gb) }} ГБ</td>
+                  <td>{{ model.capabilities | join(", ") }}</td>
+                  <td class="day26-num {{ 'is-ok' if model.fits else 'is-bad' }}">{{ "✓ да" if model.fits else "✗ нет" }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="day26-loaded" data-loaded>
+          {% if status.loaded %}В памяти сейчас: {% for item in status.loaded %}<code>{{ item.name }}</code> — {{ "%.1f"|format(item.size / gb) }} ГБ{% if item.vram < item.size %}, на видеочипе {{ "%.1f"|format(item.vram / gb) }}{% else %}, всё на видеочипе{% endif %}, контекст {{ item.context }}{% if not loop.last %}; {% endif %}{% endfor %}.{% else %}В памяти сейчас ничего: первая модель прогреется при первом запросе.{% endif %}
+        </p>
+      {% endif %}
+    </section>
+
+    <section class="day26-panel" aria-labelledby="day26-ask-title">
+      <header class="day26-panel__head">
+        <h3 id="day26-ask-title">Три запроса разной сложности · HTTP API</h3>
+        <span class="day26-panel__meta">страница шлёт POST {{ status.url }}/api/chat и показывает ответ потоком</span>
+      </header>
+      <form class="day26-controls" data-controls data-ask-url="{{ url_for('day26.ask') }}" data-status-url="{{ url_for('day26.status') }}">
+        <div class="day26-field">
+          <span id="day26-model-label">модель</span>
+          {# Общий выпадающий список дней 2 и 26 — static/js/custom-select.js. #}
+          <div class="custom-select day26-select" data-custom-select data-model>
+            <input type="hidden" name="model" value="{{ default_model or '' }}">
+            <button class="custom-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="day26-model-label day26-model-value" {% if not default_model %}disabled{% endif %}>
+              <span id="day26-model-value">{{ default_model or "нет чат-моделей" }}</span>
+              <span class="custom-select__chevron" aria-hidden="true"></span>
+            </button>
+            <div class="custom-select__menu" role="listbox" aria-labelledby="day26-model-label" hidden>
+              {% for model in status.models if model.chat %}
+                <button class="custom-select__option" type="button" role="option" data-value="{{ model.name }}" data-label="{{ model.name }}" aria-selected="{{ 'true' if model.name == default_model else 'false' }}">
+                  <strong>{{ model.name }}</strong>
+                  <small>{{ model.parameters }} · {{ model.quantization }} · {{ "%.1f"|format(model.size / gb) }} ГБ{% if not model.fits %} · не влезет в память видеочипа{% endif %}</small>
+                </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <label class="day26-check">
+          <input type="checkbox" name="think" data-think>
+          <span>размышления перед ответом</span>
+        </label>
+        <button class="day26-btn day26-btn--go" type="button" data-run-all {% if not default_model %}disabled{% endif %}>[▶] Прогнать все три</button>
+      </form>
+      <p id="day26-error" class="day26-error" role="alert" hidden></p>
+
+      <div class="day26-presets">
+        {% for preset in presets %}
+          <article class="day26-preset" data-preset="{{ preset.key }}">
+            <header class="day26-preset__head">
+              <span class="day26-preset__rank">{{ "%02d"|format(loop.index) }}</span>
+              <h4>{{ preset.title }}</h4>
+              <button class="day26-btn" type="button" data-ask="{{ preset.key }}" {% if not default_model %}disabled{% endif %}>Спросить</button>
+            </header>
+            <p class="day26-preset__prompt" data-prompt>{{ preset.prompt }}</p>
+            <p class="day26-preset__expected">ожидаем: {{ preset.expected }}</p>
+            <details class="day26-fold day26-thinking" data-thinking hidden>
+              <summary>размышления</summary>
+              <pre data-thinking-text></pre>
+            </details>
+            <div class="day26-answer markdown-body" data-answer></div>
+            <p class="day26-metrics" data-metrics></p>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="day26-panel" aria-labelledby="day26-runs-title">
+      <header class="day26-panel__head">
+        <h3 id="day26-runs-title">Замеры</h3>
+        <span class="day26-panel__meta">копятся, пока открыта страница — удобно сравнить модели</span>
+      </header>
+      <div class="day26-table-wrap">
+        <table class="day26-table" data-runs>
+          <thead><tr><th scope="col">Модель</th><th scope="col">Запрос</th><th scope="col">Прогрев</th><th scope="col">Первый токен</th><th scope="col">Скорость</th><th scope="col">Токенов</th><th scope="col">Всего</th></tr></thead>
+          <tbody><tr class="day26-runs__empty"><td colspan="7">Пока пусто — задайте вопрос.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="day26-panel" aria-labelledby="day26-cli-title">
+      <header class="day26-panel__head">
+        <h3 id="day26-cli-title">То же из терминала · CLI и curl</h3>
+        <span class="day26-panel__meta">имя модели подставляется из списка выше</span>
+      </header>
+      <pre class="day26-cli" data-cli>ollama list
+ollama ps
+ollama run <span data-cli-model>{{ default_model or "gemma4:12b" }}</span> "Какая столица Австралии? Ответь одним словом."
+curl -s {{ status.url }}/api/chat -d '{"model": "<span data-cli-model>{{ default_model or "gemma4:12b" }}</span>", "messages": [{"role": "user", "content": "Какая столица Австралии?"}], "stream": false, "think": false}'</pre>
+    </section>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/custom-select.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day26.js') }}"></script>
+{% endblock %}

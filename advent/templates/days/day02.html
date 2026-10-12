@@ -5,6 +5,7 @@
 {% block styles %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/custom-select.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/day02.css') }}">
 {% endblock %}
 
@@ -206,5 +207,6 @@
 {% endblock %}
 
 {% block scripts %}
+  <script src="{{ url_for('static', filename='js/custom-select.js') }}"></script>
   <script src="{{ url_for('static', filename='js/day02.js') }}"></script>
 {% endblock %}

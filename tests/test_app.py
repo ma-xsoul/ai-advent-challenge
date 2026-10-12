@@ -50,6 +50,8 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn("### END ###", html)
         self.assertIn('data-custom-select="format"', html)
         self.assertIn('data-custom-select="model"', html)
+        self.assertIn("css/custom-select.css", html)
+        self.assertIn("js/custom-select.js", html)
         self.assertIn("deepseek-v4-flash", html)
         self.assertIn("deepseek-v4-pro", html)
         self.assertNotIn("<select", html)
@@ -362,7 +364,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3425,6 +3427,106 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(client.post("/days/25/api/chat", json={"message": "x" * 501}).status_code, 400)
             self.assertEqual(client.post("/days/25/api/scenario", json={"key": "нет такого"}).status_code, 404)
             self.assertEqual(client.post("/days/25/api/chat", json={"message": "x", "settings": {"threshold": 3}}).status_code, 400)
+
+    def _day_twenty_six_client(self, ok=True):
+        from advent.local import OllamaError
+
+        class FakeOllama:
+            url = "http://ollama.test"
+
+            def __init__(self):
+                self.calls = []
+
+            def version(self):
+                if not ok:
+                    raise OllamaError("Ollama недоступна по http://ollama.test. Запустите её: ollama serve")
+                return "0.32.1"
+
+            def models(self):
+                self.version()
+                return [
+                    {"name": "gemma4:12b", "size": 8_000_000_000, "parameters": "11.9B", "quantization": "Q4_K_M", "family": "gemma4", "capabilities": ["completion", "thinking"], "chat": True},
+                    {"name": "qwen3.6:latest", "size": 23_900_000_000, "parameters": "36.0B", "quantization": "Q4_K_M", "family": "qwen35moe", "capabilities": ["completion"], "chat": True},
+                    {"name": "bge-m3:latest", "size": 1_200_000_000, "parameters": "567M", "quantization": "F16", "family": "bert", "capabilities": ["embedding"], "chat": False},
+                ]
+
+            def loaded(self):
+                return [{"name": "gemma4:12b", "size": 8_000_000_000, "vram": 8_000_000_000, "context": 4096, "expires_at": None}]
+
+            def chat_stream(self, model, messages, *, think=False, options=None):
+                self.calls.append((model, messages, think))
+                yield {"type": "thinking", "text": "думаю"}
+                yield {"type": "delta", "text": "Канберра"}
+                yield {"type": "done", "load_s": 2.5, "first_token_s": 2.6, "output_tps": 37.1, "prompt_tokens": 20, "output_tokens": 4, "total_s": 2.8}
+
+        fake = FakeOllama()
+        app = create_app({"TESTING": True, "OLLAMA_CLIENT": fake, "SYSTEM_RAM": 24 * 1024**3})
+        return app.test_client(), fake
+
+    def test_day_twenty_six_renders_the_local_llm_homework(self):
+        client, _ = self._day_twenty_six_client()
+        response = client.get("/days/26/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 26.", html)
+        self.assertIn("Запуск локальной LLM", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Установите и запустите любую локальную LLM (Ollama, LM Studio, llama.cpp, Mistral, Qwen, Phi и т.п.)", html)
+        self.assertIn("модель запускается локально", html)
+        self.assertIn("через CLI или HTTP API", html)
+        self.assertIn("Модель отвечает на простой запрос", html)
+        self.assertIn("минимум 3 запроса разной сложности", html)
+        self.assertIn("Локальная LLM запущена и отвечает на запросы", html)
+        self.assertIn("можно дёрнуть и проверить в любом клиенте", html)
+        self.assertEqual(html.count('class="day26-rule"'), 4)
+        self.assertIn("работает · версия 0.32.1", html)
+        self.assertIn("<code>gemma4:12b</code>", html)
+        self.assertIn("✗ нет", html)
+        self.assertIn("Оперативной памяти 24 ГБ", html)
+        self.assertIn("около <b>19 ГБ</b>", html)
+        self.assertIn('<input type="hidden" name="model" value="gemma4:12b">', html)
+        self.assertIn('data-value="gemma4:12b" data-label="gemma4:12b" aria-selected="true"', html)
+        self.assertIn("не влезет в память видеочипа", html)
+        self.assertNotIn('data-value="bge-m3:latest"', html)
+        self.assertIn("css/custom-select.css", html)
+        self.assertIn("js/custom-select.js", html)
+        self.assertEqual(html.count('class="day26-preset"'), 3)
+        self.assertIn("Какая столица Австралии? Ответь одним словом.", html)
+        self.assertIn("ollama run <span data-cli-model>gemma4:12b</span>", html)
+        self.assertIn("http://ollama.test/api/chat", html)
+        self.assertIn('data-ask-url="/days/26/api/ask"', html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day26.css", html)
+        self.assertIn("js/day26.js", html)
+        self.assertIn('href="/days/26/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_six_asks_the_local_model_and_reports_metrics(self):
+        client, fake = self._day_twenty_six_client()
+        response = client.post("/days/26/api/ask", json={"model": "gemma4:12b", "prompt": "Какая столица Австралии?", "think": False})
+        events = [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+        self.assertEqual(response.mimetype, "application/x-ndjson")
+        self.assertEqual([event["type"] for event in events], ["start", "thinking", "delta", "done"])
+        self.assertEqual(events[-1]["output_tps"], 37.1)
+        self.assertEqual(events[-1]["loaded"][0]["name"], "gemma4:12b")
+        self.assertEqual(fake.calls, [("gemma4:12b", [{"role": "user", "content": "Какая столица Австралии?"}], False)])
+        self.assertEqual(client.get("/days/26/api/status").get_json()["version"], "0.32.1")
+
+        self.assertEqual(client.post("/days/26/api/ask", json={"model": "gemma4:12b", "prompt": " "}).status_code, 400)
+        self.assertEqual(client.post("/days/26/api/ask", json={"model": "bge-m3:latest", "prompt": "x"}).status_code, 400)
+        self.assertEqual(client.post("/days/26/api/ask", json=["x"]).status_code, 400)
+        self.assertEqual(client.post("/days/26/api/ask", json={"model": "gemma4:12b", "prompt": "x" * 2001}).status_code, 400)
+
+    def test_day_twenty_six_explains_when_ollama_is_down(self):
+        client, _ = self._day_twenty_six_client(ok=False)
+        html = client.get("/days/26/").get_data(as_text=True)
+        self.assertIn("не отвечает", html)
+        self.assertIn("ollama serve", html)
+        self.assertEqual(client.post("/days/26/api/ask", json={"model": "gemma4:12b", "prompt": "x"}).status_code, 502)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})
