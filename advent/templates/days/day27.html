@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}День 27. Локальная LLM в приложении · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/agent-chat.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day27.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 27</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Local LLM · Application · Chat</span>
+    </div>
+    <h1>День 27.<br><span>Интеграция локальной LLM в приложение</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать седьмого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Интегрируйте локальную модель в реальное приложение:</p>
+      <ul class="homework-brief__steps">
+        <li>CLI-утилита</li>
+        <li>телеграм-бот</li>
+        <li>веб-приложение</li>
+        <li>или другое приложение на ваш выбор</li>
+      </ul>
+      <p class="homework-brief__lead">Сделайте так, чтобы:</p>
+      <ul class="homework-brief__steps">
+        <li>приложение отправляло запросы в локальную LLM</li>
+        <li>получало и отображало ответы</li>
+        <li>работало без облачных моделей</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Приложение, использующее локальную LLM</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + Код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day27-lab" aria-labelledby="day27-lab-title">
+    <div class="day27-lab__intro">
+      <p class="day27-kicker">Практика</p>
+      <h2 id="day27-lab-title">Локальная модель становится собеседником</h2>
+      <p>В дне 26 мы запустили модель и проверили её на трёх запросах. Теперь она отвечает в нашем чате: сообщения появляются по мере генерации, а прошлые реплики помогают продолжать разговор. История сохраняется на компьютере. За ответы отвечает gpt-oss:20b в Ollama.</p>
+    </div>
+
+    <blockquote class="day27-curator">
+      <p>Ничего страшного</p>
+      <cite>Алексей Гладков, 7.10 — на вопрос об одинаковой реализации дней 26–27 и похожем коде дня 28</cite>
+    </blockquote>
+
+    <ol class="day27-rules">
+      <li class="day27-rule">
+        <span class="day27-rule__rank">01</span>
+        <h3>Свой интерфейс</h3>
+        <p>Сообщение отправляется из веб-чата, а ответ появляется по мере генерации. Во время ожидания чат показывает состояние запроса.</p>
+        <p class="day27-rule__formula">сообщение → модель → ответ</p>
+      </li>
+      <li class="day27-rule">
+        <span class="day27-rule__rank">02</span>
+        <h3>История разговора</h3>
+        <p>Модель получает прошлые реплики вместе с новым вопросом. Диалог сохраняется и восстанавливается после перезагрузки страницы.</p>
+        <p class="day27-rule__formula">история + новый вопрос</p>
+      </li>
+      <li class="day27-rule">
+        <span class="day27-rule__rank">03</span>
+        <h3>Модель на компьютере</h3>
+        <p>Уже установленная gpt-oss:20b отвечает через Ollama. Запросы и ответы обрабатываются на нашем маке.</p>
+        <p class="day27-rule__formula">веб-чат ↔ Ollama</p>
+      </li>
+      <li class="day27-rule">
+        <span class="day27-rule__rank">04</span>
+        <h3>Работа без облака</h3>
+        <p>Для ответа нужен запущенный Ollama. Если модель недоступна, чат показывает причину ошибки и сохраняет сообщение для повторной отправки.</p>
+        <p class="day27-rule__formula">локальный запрос → локальный ответ</p>
+      </li>
+    </ol>
+
+
+    <section class="day27-workspace" aria-labelledby="day27-chat-title">
+      <div class="day27-service">
+        <div class="day27-service__model">
+          <p class="day27-kicker">Модель на компьютере</p>
+          <strong>{{ model }}</strong>
+          <span data-service-url>http://localhost:11434</span>
+        </div>
+        <div class="day27-service__connection">
+          <p class="day27-service__state" data-service-status data-state="checking" role="status">Проверяю Ollama…</p>
+          <p class="day27-service__detail" data-service-detail></p>
+          <button class="day27-button" type="button" data-service-check>Проверить связь</button>
+        </div>
+      </div>
+
+      <p id="day27-storage-error" class="day27-warning" role="alert"{% if not store_error %} hidden{% endif %}>{% if store_error %}Историю не удалось открыть: {{ store_error }}. Начните новый диалог.{% endif %}</p>
+
+      <section class="agent-chat day27-chat" aria-labelledby="day27-chat-title">
+        <header class="agent-chat__head">
+          <div>
+            <h3 id="day27-chat-title">Локальный чат</h3>
+            <p class="day27-history" data-history-status>История сохраняется на компьютере</p>
+          </div>
+          <button id="agent-reset" class="agent-chat__reset" type="button">Новый диалог</button>
+        </header>
+
+        <div id="agent-log" class="agent-log" role="log" aria-live="polite" aria-relevant="additions text">
+          <p class="agent-log__empty" data-log-empty>Начните разговор с моделью. Чтобы проверить память, отправьте контекст, а затем спросите о нём следующим сообщением.</p>
+        </div>
+
+        <div class="day27-presets" aria-label="Примеры сообщений">
+          <span>Проверка памяти:</span>
+          <button class="day27-button" type="button" data-preset="context">1. Задать контекст</button>
+          <button class="day27-button" type="button" data-preset="memory">2. Спросить о нём</button>
+          <button class="day27-button" type="button" data-preset="explain">Объяснить термин</button>
+        </div>
+
+        <form
+          id="agent-form"
+          class="agent-composer"
+          data-chat-url="/days/27/api/chat/stream"
+          data-reset-url="/days/27/api/reset"
+          data-state-url="/days/27/api/state"
+          data-status-url="/days/27/api/status"
+        >
+          <label for="agent-message">Сообщение</label>
+          <textarea id="agent-message" name="message" rows="3" maxlength="10000" required placeholder="Напишите сообщение для gpt-oss:20b…"></textarea>
+          <div class="agent-composer__actions">
+            <span id="agent-status" class="agent-status" role="status"></span>
+            <button id="agent-submit" class="agent-submit" type="submit">Отправить <span aria-hidden="true">→</span></button>
+          </div>
+          <p class="day27-composer-hint">Enter — отправить · Shift + Enter — новая строка</p>
+        </form>
+      </section>
+      <p class="day27-local-note">Модель и история работают локально. Этот чат не обращается к облачным моделям.</p>
+    </section>
+
+    <script id="agent-initial" type="application/json">{{ snapshot | tojson }}</script>
+    <template id="agent-turn-template">
+      <article class="agent-turn" data-turn>
+        <header><span data-turn-role>—</span><small data-turn-meta></small></header>
+        <div class="agent-turn__body md-body" data-turn-body></div>
+      </article>
+    </template>
+  </section>
+{% endblock %}
+
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day27.js') }}"></script>
+{% endblock %}

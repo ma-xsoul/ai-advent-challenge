@@ -307,6 +307,15 @@ class AgentStreamTestCase(unittest.TestCase):
 
         self.assertEqual(agent.history, ())
 
+    def test_closing_partial_stream_preserves_previous_history_and_usage(self):
+        agent = Agent(AgentConfig(), FakeTransport(replies=["Сохранённый ответ", "Незавершённый ответ"]))
+        agent.ask("Первый вопрос")
+        before = agent.snapshot()
+        generator = agent.stream("Второй вопрос")
+        next(generator)
+        generator.close()
+        self.assertEqual(agent.snapshot(), before)
+
     def test_rolls_back_when_the_stream_carries_no_text(self):
         class SilentTransport:
             def stream(self, payload):

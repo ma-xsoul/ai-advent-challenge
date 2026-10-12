@@ -156,12 +156,16 @@ def stream_chat(
 
 def _stream_reply(agent: Agent, text: str):
     generator = agent.stream(text)
-    while True:
-        try:
-            chunk = next(generator)
-        except StopIteration as stop:
-            return stop.value
-        yield _event(_stream_event(chunk))
+    try:
+        while True:
+            try:
+                chunk = next(generator)
+            except StopIteration as stop:
+                return stop.value
+            yield _event(_stream_event(chunk))
+    finally:
+        # Закрытие HTTP-потока должно дойти до агента и откатить незавершённый ход.
+        generator.close()
 
 
 def _stream_event(chunk: Any) -> dict[str, Any]:
@@ -221,7 +225,7 @@ def reset_everything() -> dict[str, Any]:
             except OSError:
                 pass
     agents = 0
-    for name in ("agent_registry", "persistent_agent_registry"):
+    for name in ("agent_registry", "persistent_agent_registry", "local_agent_registry"):
         reg = current_app.extensions.get(name)
         if reg is not None:
             agents += reg.clear()

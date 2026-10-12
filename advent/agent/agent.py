@@ -650,7 +650,8 @@ class Agent:
         try:
             chunks = self._transport.stream(self._build_payload(stream=True))
             reply = yield from self._consume_stream(chunks)
-        except Exception:
+        except BaseException:
+            # GeneratorExit при закрытии браузером потока тоже откатывает вопрос.
             self._messages.pop()
             raise
 
@@ -1048,7 +1049,7 @@ class Agent:
 
         content = "".join(parts)
         if not content.strip():
-            raise TransportError("DeepSeek не вернул текст ответа")
+            raise TransportError("Модель не вернула текст ответа")
 
         return AgentReply(
             content=content,
@@ -1062,16 +1063,16 @@ class Agent:
     def _parse(self, response: dict[str, Any]) -> AgentReply:
         choices = response.get("choices")
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
-            raise TransportError("DeepSeek не вернул вариант ответа")
+            raise TransportError("Модель не вернула вариант ответа")
 
         choice = choices[0]
         message = choice.get("message")
         if not isinstance(message, dict):
-            raise TransportError("DeepSeek не вернул сообщение ответа")
+            raise TransportError("Модель не вернула сообщение ответа")
 
         content = message.get("content")
         if not isinstance(content, str) or not content.strip():
-            raise TransportError("DeepSeek не вернул текст ответа")
+            raise TransportError("Модель не вернула текст ответа")
 
         usage = response.get("usage")
         usage = usage if isinstance(usage, dict) else {}

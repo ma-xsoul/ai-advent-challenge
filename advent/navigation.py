@@ -219,6 +219,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=27,
+        title="Локальная LLM в приложении",
+        description="Чат с моделью на своём компьютере",
+        endpoint="day27.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

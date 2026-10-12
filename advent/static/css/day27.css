@@ -1,0 +1,385 @@
+/* День 27: интеграция локальной LLM в приложение. */
+
+.day27-lab {
+  margin-top: 36px;
+}
+
+.day27-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day27-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day27-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day27-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day27-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day27-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day27-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day27-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day27-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day27-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day27-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day27-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day27-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day27-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day27-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day27-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day27-rule__formula::before {
+  content: "> ";
+}
+
+.day27-curator p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .day27-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day27-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Чат занимает ширину страницы; вся беседа прокручивается вместе с ней. */
+.day27-workspace {
+  margin-top: 22px;
+  min-width: 0;
+}
+
+.day27-service {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 14px 18px;
+}
+
+.day27-service__model,
+.day27-service__connection {
+  min-width: 0;
+}
+
+.day27-service__model strong {
+  display: block;
+  color: var(--text-bright);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.day27-service__model > span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day27-service__connection {
+  text-align: right;
+}
+
+.day27-service__state {
+  margin: 0 0 3px;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day27-service__state::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  background: currentColor;
+  content: "";
+  vertical-align: 1px;
+}
+
+.day27-service__state[data-state="ready"] {
+  color: var(--ok);
+}
+
+.day27-service__state[data-state="unavailable"] {
+  color: var(--error);
+}
+
+.day27-service__detail {
+  max-width: 440px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day27-button {
+  min-height: 32px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 5px 10px;
+  color: var(--muted-bright);
+  font-size: 11px;
+}
+
+.day27-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day27-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.day27-history {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.day27-chat .agent-chat__head {
+  padding: 12px 16px;
+}
+
+.day27-chat .agent-log {
+  min-height: 180px;
+  padding: 16px;
+}
+
+.day27-chat .agent-turn__body {
+  overflow-wrap: anywhere;
+}
+
+.day27-chat .md-body pre.md-code {
+  max-height: none;
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day27-chat .md-body pre.md-code code {
+  white-space: inherit;
+}
+
+.day27-chat .agent-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  border: 0;
+  background: var(--surface-deep);
+  color: var(--text-bright);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.day27-chat .agent-composer label {
+  display: block;
+  background: var(--surface-deep);
+}
+
+.day27-chat .agent-composer textarea::placeholder {
+  color: var(--muted);
+}
+
+.day27-chat .agent-composer textarea:focus-visible {
+  outline-offset: -2px;
+}
+
+.day27-chat .agent-chat__reset {
+  flex-shrink: 0;
+  min-height: 34px;
+}
+
+.day27-chat .agent-status {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.day27-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  border-top: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.day27-presets > span {
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day27-composer-hint,
+.day27-local-note {
+  margin: 0;
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.day27-local-note {
+  padding-left: 0;
+}
+
+.day27-warning {
+  margin: 0 0 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 14px;
+  color: var(--error);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.day27-warning[hidden] {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .day27-service {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+
+  .day27-service__connection {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    text-align: left;
+  }
+
+  .day27-chat .agent-chat__head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .day27-chat .agent-log {
+    padding: 10px;
+  }
+
+  .day27-chat .agent-composer__actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .day27-chat .agent-status {
+    flex: 1 0 100%;
+  }
+
+  .day27-chat .agent-submit {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .day27-presets > span {
+    flex-basis: 100%;
+  }
+}

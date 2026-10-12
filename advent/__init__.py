@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Lock
 
 from flask import Flask, redirect, url_for
 from dotenv import load_dotenv
@@ -32,8 +33,10 @@ from .days.day23.routes import bp as day23_blueprint
 from .days.day24.routes import bp as day24_blueprint
 from .days.day25.routes import bp as day25_blueprint
 from .days.day26.routes import bp as day26_blueprint
+from .days.day27.routes import bp as day27_blueprint
 from .agent import Agent, AgentConfig, AgentRegistry, JsonStore
 from .navigation import DAYS
+from .local import OllamaTransport
 
 
 # Конфиг агента по умолчанию для чата дней 6+. Всё, что раньше уходило
@@ -76,6 +79,32 @@ def create_app(test_config: dict | None = None) -> Flask:
         store=JsonStore(app.config["AGENT_STORE_DIR"]),
     )
 
+    # Локальный чат использует собственный транспорт и отдельные файлы сессий.
+    # При восстановлении транспорт подставляется снова: облачного fallback нет.
+    local_transport = app.config.get("LOCAL_AGENT_TRANSPORT") or OllamaTransport()
+    local_config = AgentConfig(
+        name="local",
+        model=app.config.get("DAY27_MODEL", "gpt-oss:20b"),
+        system_prompt=(
+            "Ты помощник в локальном чате. Отвечай по-русски, коротко и по делу. "
+            "Учитывай предыдущие реплики и уточнения пользователя."
+        ),
+        temperature=0.7,
+        max_tokens=2048,
+        context_limit=4096,
+    )
+
+    def make_local_agent(saved=None):
+        if saved:
+            return Agent.restore(saved, transport=local_transport)
+        return Agent(local_config, transport=local_transport)
+
+    app.extensions["local_agent_registry"] = AgentRegistry(
+        make_local_agent, store=JsonStore(app.config["AGENT_STORE_DIR"])
+    )
+    app.extensions["local_agent_locks"] = {}
+    app.extensions["local_agent_locks_guard"] = Lock()
+
     app.register_blueprint(day01_blueprint)
     app.register_blueprint(day02_blueprint)
     app.register_blueprint(day03_blueprint)
@@ -102,6 +131,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(day24_blueprint)
     app.register_blueprint(day25_blueprint)
     app.register_blueprint(day26_blueprint)
+    app.register_blueprint(day27_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(

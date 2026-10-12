@@ -8,7 +8,30 @@ from advent import create_app
 
 class AdventAppTestCase(unittest.TestCase):
     def setUp(self):
-        app = create_app({"TESTING": True})
+        import tempfile
+        from advent.local import OllamaError
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        folder = pathlib.Path(directory.name)
+
+        class OfflineOllama:
+            url = "http://ollama.test"
+
+            def version(self):
+                raise OllamaError("Ollama отключена в тесте")
+
+            def models(self):
+                raise OllamaError("Ollama отключена в тесте")
+
+        app = create_app({
+            "TESTING": True, "OLLAMA_CLIENT": OfflineOllama(),
+            "AGENT_STORE_DIR": str(folder / "agents"),
+            "DAY21_INDEX_PATH": str(folder / "index.sqlite3"),
+            "DAY18_DIR": str(folder / "day18"),
+            "DAY19_REPORTS_DIR": str(folder / "day19"),
+            "DAY20_REPORTS_DIR": str(folder / "day20"),
+        })
         self.client = app.test_client()
 
     def test_root_redirects_to_day_one(self):
@@ -364,7 +387,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3708,6 +3731,177 @@ class AdventAppTestCase(unittest.TestCase):
         response = self.client.post("/api/chat", json={"prompt": ""})
 
         self.assertEqual(response.status_code, 400)
+
+
+class LocalChatDay27TestCase(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from unittest.mock import Mock
+
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.folder = pathlib.Path(self.directory.name)
+
+        class LocalModel:
+            def __init__(self):
+                self.calls = []
+                self.fail = False
+
+            def stream(self, payload):
+                from advent.agent import TransportError
+                self.calls.append(json.loads(json.dumps(payload)))
+                yield {"choices": [{"delta": {"content": "Локальный "}}]}
+                if self.fail:
+                    raise TransportError("Ollama недоступна. Запустите её: ollama serve")
+                yield {"choices": [{"delta": {"content": "ответ"}}]}
+                yield {"model": "gpt-oss:20b", "choices": [{"delta": {}, "finish_reason": "stop"}],
+                       "usage": {"prompt_tokens": 15, "completion_tokens": 3}}
+
+        class LocalStatus:
+            url = "http://ollama.test"
+            available = True
+
+            def version(self):
+                from advent.local import OllamaError
+                if not self.available:
+                    raise OllamaError("Ollama недоступна")
+                return "0.32.1"
+
+            def models(self):
+                return [{"name": "gpt-oss:20b", "chat": True}]
+
+        self.local = LocalModel()
+        self.ollama = LocalStatus()
+        self.cloud = Mock()
+        self.cloud.stream.side_effect = AssertionError("Cloud transport must not be called")
+        self.cloud.send.side_effect = AssertionError("Cloud transport must not be called")
+        self.config = {
+            "TESTING": True, "LOCAL_AGENT_TRANSPORT": self.local,
+            "AGENT_TRANSPORT": self.cloud, "OLLAMA_CLIENT": self.ollama,
+            "AGENT_STORE_DIR": str(self.folder / "agents"),
+            "DAY21_INDEX_PATH": str(self.folder / "index.sqlite3"),
+            "DAY18_DIR": str(self.folder / "day18"),
+            "DAY19_REPORTS_DIR": str(self.folder / "day19"),
+            "DAY20_REPORTS_DIR": str(self.folder / "day20"),
+        }
+        self.client = create_app(self.config).test_client()
+        network = patch("requests.sessions.Session.request", side_effect=AssertionError("Unexpected network"))
+        network.start()
+        self.addCleanup(network.stop)
+
+    def chat(self, message="Вопрос", client=None):
+        response = (client or self.client).post("/days/27/api/chat/stream", json={"message": message})
+        self.assertEqual(response.status_code, 200)
+        events = [json.loads(line) for line in response.get_data(as_text=True).splitlines()]
+        response.close()
+        return events
+
+    def test_stream_uses_local_model_with_full_history_and_restores_from_disk(self):
+        import os
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "", "OPENROUTER_API_KEY": ""}):
+            first = self.chat("Запомни название проекта")
+            second = self.chat("Как он называется?")
+            self.assertEqual(second[-1]["type"], "done")
+            self.assertEqual(second[-1]["snapshot"]["usage"]["requests"], 2)
+            self.assertEqual([x["role"] for x in self.local.calls[-1]["messages"]],
+                             ["system", "user", "assistant", "user"])
+            self.assertEqual(self.local.calls[-1]["model"], "gpt-oss:20b")
+            cookie = self.client.get_cookie("agent_session").value
+            self.assertFalse(cookie.endswith("-d27"))
+            file = self.folder / "agents" / f"{cookie}-d27.json"
+            self.assertTrue(file.exists())
+            restored = create_app(self.config).test_client()
+            restored.set_cookie("agent_session", cookie)
+            state = restored.get("/days/27/api/state").get_json()
+            self.assertEqual(state["messages"], second[-1]["snapshot"]["messages"])
+            third = self.chat("Продолжим", restored)
+            self.assertEqual(third[-1]["type"], "done")
+            self.assertEqual(len(self.local.calls[-1]["messages"]), 6)
+        self.cloud.stream.assert_not_called()
+        self.cloud.send.assert_not_called()
+
+    def test_local_reset_preserves_other_days_and_global_reset_clears_local_registry(self):
+        from tests.test_agent import FakeTransport
+        self.config["AGENT_TRANSPORT"] = FakeTransport(replies=["Облачный диалог"])
+        client = create_app(self.config).test_client()
+        response = client.post("/days/7/api/chat/stream", json={"message": "Другой день"})
+        response.get_data()
+        response.close()
+        cookie = client.get_cookie("agent_session").value
+        cloud_file = self.folder / "agents" / f"{cookie}.json"
+        before = cloud_file.read_bytes()
+        self.chat(client=client)
+        self.assertEqual(client.post("/days/27/api/reset").get_json()["messages"], [])
+        self.assertEqual(cloud_file.read_bytes(), before)
+        self.chat(client=client)
+        self.assertEqual(client.post("/api/reset-all").status_code, 200)
+        self.assertEqual(client.get("/days/27/api/state").get_json()["messages"], [])
+        restored = create_app(self.config).test_client()
+        restored.set_cookie("agent_session", cookie)
+        self.assertEqual(restored.get("/days/27/api/state").get_json()["messages"], [])
+
+    def test_failed_partial_answer_rolls_back_history_and_can_be_retried(self):
+        self.chat("Сохранённый вопрос")
+        before = self.client.get("/days/27/api/state").get_json()
+        self.local.fail = True
+        events = self.chat("Новый вопрос")
+        self.assertEqual(events[-1]["type"], "error")
+        self.assertIn("Ollama", events[-1]["error"])
+        self.assertEqual(events[-1]["snapshot"]["messages"], before["messages"])
+        self.assertEqual(events[-1]["snapshot"]["usage"], before["usage"])
+        self.local.fail = False
+        self.assertEqual(self.chat("Повтор")[-1]["type"], "done")
+        self.cloud.stream.assert_not_called()
+
+    def test_busy_session_rejects_second_request_and_reset_then_releases_on_close(self):
+        self.client.get("/days/27/")
+        response = self.client.post("/days/27/api/chat/stream", json={"message": "Длинный вопрос"}, buffered=False)
+        self.assertEqual(self.client.post("/days/27/api/chat/stream", json={"message": "Ещё"}).status_code, 409)
+        self.assertEqual(self.client.post("/days/27/api/reset").status_code, 409)
+        response.close()
+        state = self.client.get("/days/27/api/state").get_json()
+        self.assertEqual(state["messages"], [])
+        self.assertEqual(self.chat("Повтор")[-1]["type"], "done")
+
+    def test_validation_and_bad_cookie_do_not_send_requests(self):
+        for payload in ({"message": " "}, {"message": "x" * 10001}, ["x"], {"message": 7}):
+            self.assertEqual(self.client.post("/days/27/api/chat/stream", json=payload).status_code, 400)
+        self.client.set_cookie("agent_session", "../bad")
+        self.assertEqual(self.client.get("/days/27/api/state").status_code, 400)
+        self.assertEqual(self.client.post("/days/27/api/reset").status_code, 400)
+        self.assertEqual(self.local.calls, [])
+
+    def test_status_checks_the_restored_model_not_a_new_default(self):
+        self.chat()
+        self.client.application.config["DAY27_MODEL"] = "another-model"
+        state = self.client.get("/days/27/api/status").get_json()
+        self.assertEqual(state["model"], "gpt-oss:20b")
+        self.assertTrue(state["ok"])
+
+    def test_service_unavailable_and_save_error_are_reported(self):
+        self.ollama.available = False
+        state = self.client.get("/days/27/api/status").get_json()
+        self.assertFalse(state["ok"])
+        self.assertIn("Ollama", state["error"])
+        with patch("advent.agent.store.JsonStore.save", side_effect=OSError("disk full")):
+            events = self.chat()
+        self.assertEqual(events[-1]["type"], "done")
+        self.assertIn("disk full", events[-1]["save_error"])
+        self.cloud.stream.assert_not_called()
+
+    def test_rendered_page_restores_history_and_has_local_controls(self):
+        self.chat()
+        response = self.client.get("/days/27/")
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        snapshot = json.loads(html.split('<script id="agent-initial" type="application/json">')[1].split('</script>')[0])
+        self.assertEqual(len(snapshot["messages"]), 2)
+        self.assertIn('data-chat-url="/days/27/api/chat/stream"', html)
+        self.assertIn('data-status-url="/days/27/api/status"', html)
+        self.assertIn('id="agent-reset"', html)
+        self.assertIn('js/day27.js', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertNotIn('<details class="homework-brief" open', html)
 
 
 if __name__ == "__main__":
