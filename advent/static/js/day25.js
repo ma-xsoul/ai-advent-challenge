@@ -21,7 +21,7 @@
   const scenarios = document.querySelector("[data-scenarios]");
   const summaryBox = document.querySelector("[data-summary]");
   const initial = JSON.parse(document.querySelector("#day25-initial").textContent);
-  const QUOTE_MARKS = { exact: "✓", near: "✓", elsewhere: "≈", partial: "≈", missing: "✗" };
+  const QUOTE_MARKS = { exact: "✓", near: "✓", elsewhere: "≈", partial: "≈", stitched: "≈", missing: "✗" };
 
   const el = (tag, className, text) => {
     const node = document.createElement(tag);

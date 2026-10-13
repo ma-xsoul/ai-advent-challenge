@@ -387,7 +387,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3550,6 +3550,111 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn("не отвечает", html)
         self.assertIn("ollama serve", html)
         self.assertEqual(client.post("/days/26/api/ask", json={"model": "gemma4:12b", "prompt": "x"}).status_code, 502)
+
+    def _day_twenty_eight_client(self, directory):
+        from advent.rag import HashingEmbedder
+        from tests.test_local import RagBackendTransport
+
+        class FakeOllama:
+            url = "http://ollama.test"
+
+            def version(self):
+                return "0.32.1"
+
+            def models(self):
+                return [{"name": "gpt-oss:20b", "chat": True}]
+
+        app = create_app(
+            {
+                "TESTING": True,
+                "DAY21_INDEX_PATH": str(pathlib.Path(directory) / "index.sqlite3"),
+                "RAG_EMBEDDER": HashingEmbedder(),
+                "AGENT_STORE_DIR": str(pathlib.Path(directory) / "agents"),
+                "DAY28_RUNS_PATH": str(pathlib.Path(directory) / "day28" / "runs.json"),
+                "OLLAMA_CLIENT": FakeOllama(),
+                "LOCAL_AGENT_TRANSPORT": RagBackendTransport(),
+                "AGENT_TRANSPORT": RagBackendTransport(mode="broken"),
+            }
+        )
+        return app.test_client()
+
+    def test_day_twenty_eight_renders_the_local_rag_homework(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            response = self._day_twenty_eight_client(directory).get("/days/28/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 28.", html)
+        self.assertIn("Локальная LLM + RAG", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Подключите локальную LLM к вашему RAG-пайплайну", html)
+        self.assertIn("используйте индекс из Недели 6", html)
+        self.assertIn("retrieval выполняется локально", html)
+        self.assertIn("генерация ответа — через локальную модель", html)
+        self.assertIn("ответы облачной модели (если есть)", html)
+        self.assertIn("стабильность", html)
+        self.assertIn("RAG-система, полностью работающая локально", html)
+        self.assertIn("можешь заново собрать", html)
+        self.assertEqual(html.count('class="day28-rule"'), 4)
+        self.assertIn("Индекс ещё не собран", html)
+        self.assertIn("gpt-oss:20b · Ollama 0.32.1", html)
+        self.assertEqual(html.count("data-probe-row="), 13)
+        self.assertIn('data-compare-url="/days/28/api/compare"', html)
+        for label in ("Качество", "Скорость", "Стабильность", "сломанный JSON"):
+            self.assertIn(label, html)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day28.css", html)
+        self.assertIn("js/day28.js", html)
+        self.assertIn('href="/days/28/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_twenty_eight_answers_locally_and_compares_with_the_cloud(self):
+        import tempfile
+
+        from advent.rag import HashingEmbedder, RagIndex, collect
+
+        def events(response):
+            return [json.loads(line) for line in response.get_data(as_text=True).splitlines() if line.strip()]
+
+        with tempfile.TemporaryDirectory() as directory:
+            client = self._day_twenty_eight_client(directory)
+            self.assertEqual(client.post("/days/28/api/ask", json={"question": "Слои?"}).status_code, 409)
+            RagIndex(pathlib.Path(directory) / "index.sqlite3").build(collect(), HashingEmbedder())
+
+            got = events(client.post("/days/28/api/ask", json={"question": "Какие слои памяти есть у агента и сколько живёт каждый?"}))
+            self.assertEqual([event["type"] for event in got][:2], ["probe", "retrieved"])
+            answers = {event["mode"]: event for event in got if event["type"] == "answer"}
+            self.assertEqual(set(answers), {"local", "cloud"})
+            self.assertTrue(answers["local"]["parsed"])
+            self.assertFalse(answers["cloud"]["parsed"])
+            self.assertEqual(got[-1]["type"], "done")
+
+            only_local = events(client.post("/days/28/api/ask", json={"question": "Что угодно", "modes": ["local"]}))
+            self.assertEqual([event["mode"] for event in only_local if event["type"] == "answer"], ["local"])
+
+            run = events(client.post("/days/28/api/compare", json={}))
+            self.assertEqual(sum(event["type"] == "compare_row" for event in run), 13)
+            summary = run[-1]
+            self.assertEqual(summary["type"], "compare_summary")
+            self.assertEqual((summary["summary"]["local"]["on_topic"], summary["summary"]["local"]["off_topic"]), (10, 3))
+            self.assertEqual(summary["summary"]["cloud"]["broken_json"], 13)
+            self.assertEqual(len(summary["runs"]), 1)
+
+            runs = client.get("/days/28/api/runs").get_json()
+            detail = client.get(f"/days/28/api/runs/{runs[0]['id']}").get_json()
+            self.assertEqual(len(detail["rows"]), 13)
+            self.assertEqual(client.get("/days/28/api/runs/nope").status_code, 404)
+            initial = client.get("/days/28/").get_data(as_text=True)
+            self.assertIn(runs[0]["id"], initial)
+
+            self.assertEqual(client.post("/days/28/api/ask", json={"question": "x", "modes": ["mars"]}).status_code, 400)
+            self.assertEqual(client.post("/days/28/api/ask", json={"question": "x", "modes": []}).status_code, 400)
+            self.assertEqual(client.post("/days/28/api/ask", json={"question": " "}).status_code, 400)
+            self.assertEqual(client.post("/days/28/api/compare", json={"modes": "local"}).status_code, 400)
 
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})

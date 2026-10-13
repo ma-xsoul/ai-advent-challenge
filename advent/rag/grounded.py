@@ -80,6 +80,7 @@ QUOTE_TITLES = {
     "near": "с точностью до кавычек и пробелов",
     "elsewhere": "есть, но в другом куске",
     "partial": "совпала только часть",
+    "stitched": "склеена с пропуском",
     "missing": "в найденных кусках нет",
 }
 
@@ -207,7 +208,12 @@ def verify_quote(quote: dict[str, Any], context: list[Hit]) -> dict[str, Any]:
     near      — есть после нормализации кавычек, тире, регистра, пробелов;
     elsewhere — есть, но в другом куске: номер исправлен;
     partial   — ≥ 80% цитаты совпало подряд: модель подправила текст;
+    stitched  — все строки цитаты есть в куске по порядку, но между ними
+                молча выброшен текст: слова настоящие, цитата — нет;
     missing   — в найденных кусках нет — выдумана.
+
+    Засчитываются только exact, near и elsewhere: цитата — это сплошной
+    текст источника, а не пересказ и не склейка.
     """
     by_rank = {hit.rank: hit for hit in context}
     own = by_rank.get(quote["n"])
@@ -225,7 +231,24 @@ def verify_quote(quote: dict[str, Any], context: list[Hit]) -> dict[str, Any]:
         share = match.size / len(needle) if needle else 0.0
         if share >= 0.8:
             return {**result, "status": "partial", "share": round(share, 2), "hit": own}
+        if _stitched(quote["text"], own.text):
+            return {**result, "status": "stitched", "hit": own}
     return {**result, "status": "missing", "hit": own}
+
+
+def _stitched(quote: str, text: str) -> bool:
+    """Цитата из нескольких строк, каждая из которых есть в куске — по порядку, но не подряд."""
+    lines = [_norm(line) for line in quote.splitlines()]
+    lines = [line for line in lines if len(line) >= 8]
+    if len(lines) < 2:
+        return False
+    haystack, position = _norm(text), 0
+    for line in lines:
+        found = haystack.find(line, position)
+        if found < 0:
+            return False
+        position = found + len(line)
+    return True
 
 
 def sources_of(answer: str, quotes: list[dict[str, Any]], context: list[Hit]) -> list[dict[str, Any]]:

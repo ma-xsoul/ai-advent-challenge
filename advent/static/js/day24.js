@@ -22,7 +22,7 @@
   const compareStatus = document.querySelector("#day24-compare-status");
   const table = document.querySelector("[data-compare-table]");
   const QUOTE_TITLES = JSON.parse(document.querySelector("#day24-quote-titles").textContent);
-  const QUOTE_MARKS = { exact: "✓", near: "✓", elsewhere: "≈", partial: "≈", missing: "✗" };
+  const QUOTE_MARKS = { exact: "✓", near: "✓", elsewhere: "≈", partial: "≈", stitched: "≈", missing: "✗" };
   const VERDICTS = { yes: "✓ да", partial: "≈ частично", no: "✗ нет" };
 
   const el = (tag, className, text) => {

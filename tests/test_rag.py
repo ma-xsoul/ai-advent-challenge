@@ -601,6 +601,11 @@ class GroundedTestCase(unittest.TestCase):
         self.assertEqual((moved["status"], moved["n"], moved["claimed"]), ("elsewhere", other.rank, own.rank))
         self.assertEqual(verify_quote({"n": own.rank, "text": line + " Ещё."}, context)["status"], "partial")
         self.assertEqual(verify_quote({"n": own.rank, "text": "Слоёв памяти у агента семь, все вечные."}, context)["status"], "missing")
+        # Первая и третья строки куска без второй — слова настоящие, но цитата склеена.
+        lines = [line for line in own.text.splitlines() if len(line.strip()) >= 8]
+        stitched = verify_quote({"n": own.rank, "text": lines[0] + "\n" + lines[2]}, context)
+        self.assertEqual(stitched["status"], "stitched")
+        self.assertEqual(verify_quote({"n": own.rank, "text": lines[2] + "\n" + lines[0]}, context)["status"], "missing")
         self.assertEqual(verify_quote({"n": 9, "text": "нет такого куска"}, context)["status"], "missing")
 
     def test_sources_come_from_code_not_from_the_model(self):

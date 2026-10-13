@@ -257,5 +257,124 @@ class OllamaTransportTestCase(unittest.TestCase):
         response.close.assert_called_once()
 
 
+class RagBackendTransport:
+    """Отвечает JSON с цитатой — самой длинной строкой первого фрагмента; можно сломать формат или упасть."""
+
+    def __init__(self, mode="ok", refuse_off_topic=True):
+        self.mode = mode
+        self.refuse = refuse_off_topic
+        self.payloads = []
+
+    def send(self, payload):
+        from advent.agent.transport import TransportError
+
+        self.payloads.append(payload)
+        if self.mode == "down":
+            raise TransportError("Ollama недоступна")
+        user = payload["messages"][1]["content"]
+        if self.mode == "broken":
+            text = "Слои памяти: chat, task, user."
+        elif self.refuse and ("Kubernetes" in user or "погода" in user or "Stripe" in user):
+            text = json.dumps({"status": "unknown", "quotes": [], "answer": "Не знаю", "clarify": "Уточните"}, ensure_ascii=False)
+        else:
+            lines = user.split("Фрагменты:\n\n", 1)[1].split("\n\n---\n\n")[0].splitlines()[1:]
+            text = json.dumps({"status": "answer", "quotes": [{"n": 1, "text": max(lines, key=len)}],
+                               "answer": "Три слоя: chat, task и user [1]; chat до «Нового диалога», user — пока не удалят руками."}, ensure_ascii=False)
+        return {"choices": [{"message": {"content": text}, "finish_reason": "stop"}], "usage": {"prompt_tokens": 100, "completion_tokens": 20}}
+
+
+class LocalRagTestCase(unittest.TestCase):
+    def _index(self, directory):
+        from pathlib import Path
+
+        from advent.rag import HashingEmbedder, RagIndex
+        from tests.test_rag import documents
+
+        index = RagIndex(Path(directory) / "index.sqlite3")
+        index.build(documents(), HashingEmbedder())
+        return index
+
+    def _backend(self, key="local", **kwargs):
+        from advent.local.rag import Backend
+
+        return Backend(key, key, "gpt-oss:20b" if key == "local" else "deepseek-v4-flash", "test", RagBackendTransport(**kwargs))
+
+    def test_answer_verifies_quotes_and_measures_speed(self):
+        import tempfile
+
+        from advent.local.rag import answer, check
+        from advent.rag import HashingEmbedder
+        from tests.test_rag import MEMORY_PROBE
+
+        with tempfile.TemporaryDirectory() as directory:
+            hits = self._index(directory).search(MEMORY_PROBE.question, HashingEmbedder(), "structure", k=2)
+        backend = self._backend()
+        result = answer(MEMORY_PROBE.question, hits, backend)
+
+        payload = backend.transport.payloads[0]
+        self.assertEqual((payload["model"], payload["response_format"], payload["thinking"]), ("gpt-oss:20b", {"type": "json_object"}, {"type": "disabled"}))
+        self.assertTrue(result["parsed"])
+        self.assertEqual(result["quotes"][0]["status"], "exact")
+        self.assertEqual(result["sources"][0]["n"], 1)
+        self.assertEqual((result["prompt_tokens"], result["completion_tokens"]), (100, 20))
+        verdict = check(result, MEMORY_PROBE)
+        self.assertTrue(verdict["passed"])
+        self.assertEqual((verdict["quotes_found"], verdict["quotes_total"]), (1, 1))
+
+    def test_broken_format_errors_and_refusals_are_counted(self):
+        from advent.local.rag import answer, check
+        from advent.rag.probes import NEGATIVE_PROBES
+        from tests.test_rag import MEMORY_PROBE
+
+        broken = answer("вопрос", [], self._backend(mode="broken"))
+        self.assertFalse(broken["parsed"])
+        self.assertFalse(check(broken, MEMORY_PROBE)["passed"])
+        down = answer("вопрос", [], self._backend(mode="down"))
+        self.assertEqual(down["error"], "Ollama недоступна")
+        self.assertIsNone(check(down, MEMORY_PROBE))
+        refused = answer(NEGATIVE_PROBES[0].question, [], self._backend())
+        self.assertTrue(check(refused, NEGATIVE_PROBES[0])["passed"])
+        answered = answer(NEGATIVE_PROBES[0].question, [], self._backend(refuse_off_topic=False))
+        self.assertFalse(check({**answered, "quotes": [], "sources": []}, NEGATIVE_PROBES[0])["passed"])
+
+    def test_compare_runs_both_models_on_the_same_chunks_and_sums_up(self):
+        import tempfile
+
+        from advent.local.rag import iter_compare
+        from advent.rag import HashingEmbedder
+        from advent.rag.probes import NEGATIVE_PROBES
+        from tests.test_rag import MEMORY_PROBE
+
+        local, cloud = self._backend("local", mode="broken"), self._backend("cloud")
+        with tempfile.TemporaryDirectory() as directory:
+            events = list(iter_compare(index=self._index(directory), embedder=HashingEmbedder(), backends=[local, cloud], probes=(MEMORY_PROBE, NEGATIVE_PROBES[2])))
+
+        self.assertEqual([event["type"] for event in events], ["compare_start", "compare_question", "compare_row", "compare_question", "compare_row", "compare_summary"])
+        # Обе модели получили одни и те же куски.
+        self.assertEqual(local.transport.payloads[0]["messages"][1]["content"], cloud.transport.payloads[0]["messages"][1]["content"])
+        summary = events[-1]["summary"]
+        self.assertEqual((summary["cloud"]["passed"], summary["cloud"]["refused"], summary["cloud"]["broken_json"]), (1, 1, 0))
+        self.assertEqual((summary["local"]["passed"], summary["local"]["broken_json"], summary["local"]["on_topic"], summary["local"]["off_topic"]), (0, 2, 1, 1))
+        self.assertIsNotNone(summary["local"]["avg_s"])
+        json.dumps(events, ensure_ascii=False)
+
+    def test_run_store_keeps_the_latest_runs(self):
+        import tempfile
+        from pathlib import Path
+
+        from advent.local.rag import RunStore, run_id
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = RunStore(Path(directory) / "day28" / "runs.json")
+            self.assertEqual(store.load(), [])
+            for number in range(RunStore.KEEP + 2):
+                store.add({"id": str(number)})
+            self.assertEqual([run["id"] for run in store.load()][:2], [str(RunStore.KEEP + 1), str(RunStore.KEEP)])
+            self.assertEqual(len(store.load()), RunStore.KEEP)
+            self.assertEqual(store.clear(), RunStore.KEEP)
+            self.assertEqual(store.load(), [])
+        self.assertEqual(run_id("2026-10-13T12:34:56+03:00"), "20261013123456")
+
+
 if __name__ == "__main__":
     unittest.main()

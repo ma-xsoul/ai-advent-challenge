@@ -644,7 +644,8 @@
 }
 
 .day24-quote.is-elsewhere .day24-quote__head,
-.day24-quote.is-partial .day24-quote__head {
+.day24-quote.is-partial .day24-quote__head,
+.day24-quote.is-stitched .day24-quote__head {
   color: var(--accent);
 }
 
@@ -760,6 +761,11 @@
   padding: 0;
   list-style: none;
   color: var(--muted-bright);
+}
+
+.day24-detail__quotes .is-partial,
+.day24-detail__quotes .is-stitched {
+  color: var(--accent);
 }
 
 .day24-detail__quotes .is-missing {

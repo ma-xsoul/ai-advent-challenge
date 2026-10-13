@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}День 28. Локальная LLM + RAG · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day28.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 28</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Local LLM · RAG · No cloud</span>
+    </div>
+    <h1>День 28.<br><span>Локальная LLM + RAG</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать восьмого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Подключите локальную LLM к вашему RAG-пайплайну:</p>
+      <ul class="homework-brief__steps">
+        <li>используйте индекс из Недели 6</li>
+        <li>retrieval выполняется локально</li>
+        <li>генерация ответа — через локальную модель</li>
+      </ul>
+      <p class="homework-brief__lead">Сравните ответы локальной модели и ответы облачной модели (если есть). Оцените:</p>
+      <ul class="homework-brief__steps">
+        <li>качество</li>
+        <li>скорость</li>
+        <li>стабильность</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>RAG-система, полностью работающая локально.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day28-lab" aria-labelledby="day28-lab-title">
+    <div class="day28-lab__intro">
+      <p class="day28-kicker">Практика</p>
+      <h2 id="day28-lab-title">Вся цепочка — на своём маке</h2>
+      <p>В неделю RAG поиск по базе проекта и так шёл на маке — векторы считала локальная bge-m3, — но ответ с цитатами писал DeepSeek в облаке. Сегодня и ответ пишет локальная gpt-oss: поиск, отбор кусков и ответ работают без интернета. А чтобы понять, чего это стоит, тот же прогон контрольных вопросов делаем и с облачной моделью — и сравниваем рядом.</p>
+    </div>
+
+    <blockquote class="day28-curator">
+      <p>Ну он был, но можешь заново собрать.</p>
+      <p>Да, опечатка.</p>
+      <cite>Алексей Гладков, 7–8.10 — какой индекс брать: тот, что собран в неделю RAG; «Неделя 6» в задании — опечатка</cite>
+    </blockquote>
+
+    <ol class="day28-rules">
+      <li class="day28-rule">
+        <span class="day28-rule__rank">01</span>
+        <h3>Индекс недели RAG</h3>
+        <p>Тот же индекс дня 21: куски нашего проекта и их векторы от bge-m3. Поиск по нему и раньше шёл на маке — менять ничего не нужно.</p>
+        <p class="day28-rule__formula">индекс дня 21 · bge-m3</p>
+      </li>
+      <li class="day28-rule">
+        <span class="day28-rule__rank">02</span>
+        <h3>Ответ локальной моделью</h3>
+        <p>Ответ с цитатами и источниками пишет gpt-oss:20b через Ollama — тот же промпт, что у DeepSeek в дне 24. Ни один шаг не выходит в облако.</p>
+        <p class="day28-rule__formula">поиск → куски → gpt-oss</p>
+      </li>
+      <li class="day28-rule">
+        <span class="day28-rule__rank">03</span>
+        <h3>Сравнение с облаком</h3>
+        <p>Те же контрольные вопросы недели RAG, два прогона: локальная модель и DeepSeek. Ответы и проверки — рядом.</p>
+        <p class="day28-rule__formula">gpt-oss · DeepSeek</p>
+      </li>
+      <li class="day28-rule">
+        <span class="day28-rule__rank">04</span>
+        <h3>Качество, скорость, стабильность</h3>
+        <p>Прозвучали ли нужные факты и нашлись ли цитаты; сколько секунд на ответ; как часто модель ломает формат или сбивается между прогонами.</p>
+        <p class="day28-rule__formula">качество · скорость · стабильность</p>
+      </li>
+    </ol>
+
+    <section class="day28-panel" aria-labelledby="day28-chain-title">
+      <header class="day28-panel__head">
+        <h3 id="day28-chain-title">Цепочка · что где работает</h3>
+        <span class="day28-panel__meta">поиск top-{{ top_k }} · нарезка {{ strategy }} · одни и те же куски обеим моделям</span>
+      </header>
+      <ol class="day28-chain">
+        <li class="{{ 'is-ok' if state.ready else 'is-bad' }}">
+          <span class="day28-chain__step">1 · поиск</span>
+          <strong>индекс дня 21 · {{ state.model or "bge-m3" }}</strong>
+          <small>{% if state.ready %}{{ state.chunks }} кусков · на маке{% else %}{{ state.reason }} <a href="{{ url_for('day21.index') }}">день 21 →</a>{% endif %}</small>
+        </li>
+        <li class="{{ 'is-ok' if ollama.ok else 'is-bad' }}">
+          <span class="day28-chain__step">2 · ответ</span>
+          <strong>{{ ollama.model }} · Ollama{% if ollama.version %} {{ ollama.version }}{% endif %}</strong>
+          <small>{% if ollama.ok %}на маке · {{ ollama.url }}{% else %}{{ ollama.error }}{% endif %}</small>
+        </li>
+        <li class="{{ 'is-cloud' if cloud.key else 'is-bad' }}">
+          <span class="day28-chain__step">для сравнения</span>
+          <strong>{{ cloud.model }} · DeepSeek</strong>
+          <small>{% if cloud.key %}в облаке · api.deepseek.com{% else %}нет DEEPSEEK_API_KEY — сравнение только локальное{% endif %}</small>
+        </li>
+      </ol>
+    </section>
+
+    <section class="day28-panel" aria-labelledby="day28-ask-title">
+      <header class="day28-panel__head">
+        <h3 id="day28-ask-title">Вопрос · две модели на одних кусках</h3>
+        <span class="day28-panel__meta">промпт дня 24: сначала цитаты, потом ответ по ним</span>
+      </header>
+      <div class="day28-picks" data-picks>
+        {% for probe in probes %}
+          <button type="button" class="day28-pick" data-question="{{ probe.question }}"><span>{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em>вне базы</em>{% endif %}</button>
+        {% endfor %}
+      </div>
+      <form id="day28-ask" class="day28-ask" data-ask-url="{{ url_for('day28.ask_question') }}">
+        <label class="sr-only" for="day28-question">Вопрос</label>
+        <input id="day28-question" name="question" type="search" maxlength="500" required placeholder="Спросите что-нибудь о проекте или выберите контрольный вопрос" {% if not state.ready %}disabled{% endif %}>
+        <fieldset class="day28-modes" data-modes>
+          <legend class="sr-only">Модели</legend>
+          <label><input type="checkbox" name="mode" value="local" checked> на маке</label>
+          <label><input type="checkbox" name="mode" value="cloud" {% if cloud.key %}checked{% else %}disabled{% endif %}> в облаке</label>
+        </fieldset>
+        <button class="day28-btn day28-btn--go" type="submit" {% if not state.ready %}disabled{% endif %}>Спросить</button>
+      </form>
+      <p id="day28-error" class="day28-error" role="alert" hidden></p>
+
+      <div class="day28-run" data-run hidden>
+        <div class="day28-expect" data-expect hidden>
+          <p class="day28-label">Ожидание</p>
+          <p data-expect-text></p>
+        </div>
+        <details class="day28-fold day28-retrieved">
+          <summary>Найдено в базе · <span data-retrieved-meta>ищем…</span></summary>
+          <ol class="day28-hits" data-hits></ol>
+        </details>
+        <div class="day28-answers">
+          {% for key, title, model in [("local", "на маке", ollama.model), ("cloud", "в облаке", cloud.model)] %}
+            <article class="day28-answer day28-answer--{{ key }}" data-answer="{{ key }}" hidden>
+              <header class="day28-answer__head">
+                <h4>{{ model }} · {{ title }}</h4>
+                <span class="day28-answer__meta" data-answer-meta>думает…</span>
+              </header>
+              <div class="day28-answer__body markdown-body" data-answer-body></div>
+              <ol class="day28-quotes" data-answer-quotes hidden></ol>
+              <p class="day28-checks" data-answer-checks hidden></p>
+            </article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="day28-panel" aria-labelledby="day28-compare-title">
+      <header class="day28-panel__head">
+        <h3 id="day28-compare-title">Прогон · 10 вопросов по базе и 3 вне её</h3>
+        <button id="day28-compare" class="day28-btn" type="button" data-compare-url="{{ url_for('day28.compare') }}" data-runs-url="{{ url_for('day28.runs') }}" {% if not state.ready %}disabled{% endif %}>[▶] Прогнать</button>
+      </header>
+      <p class="day28-note">Вопросы идут по одному: локальная модель одна на весь видеочип, прогон занимает около полутора минут. Засчитано ✓ — прозвучали ⅔ фактов; на вопросе вне базы — честное «не знаю». Модели берутся из галочек выше. <span id="day28-compare-status" aria-live="polite"></span></p>
+      <div class="day28-table-wrap">
+        <table class="day28-table" data-compare-table>
+          <thead><tr><th scope="col">Вопрос</th><th scope="col">{{ ollama.model }} · на маке</th><th scope="col">{{ cloud.model }} · в облаке</th></tr></thead>
+          <tbody>
+            {% for probe in probes %}
+              <tr data-probe-row="{{ probe.index }}">
+                <td><span class="day28-num">{{ "%02d"|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em class="day28-tag">вне базы</em>{% endif %}</td>
+                <td class="day28-verdict" data-verdict="local">—</td>
+                <td class="day28-verdict" data-verdict="cloud">—</td>
+              </tr>
+              <tr class="day28-detail" data-probe-detail="{{ probe.index }}" hidden>
+                <td colspan="3"><div class="day28-answers"><div data-detail="local"></div><div data-detail="cloud"></div></div></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot data-summary hidden>
+            {% for group, rows in [
+              ("Качество", [("passed", "ответов по ожиданию · 10 по базе"), ("facts", "фактов прозвучало"), ("quotes", "цитат нашлось в кусках"), ("refused", "честное «не знаю» · 3 вне базы")]),
+              ("Скорость", [("avg_s", "среднее время ответа"), ("range_s", "быстрее всего · медленнее всего"), ("tps", "ток/с ответа вместе с чтением кусков")]),
+              ("Стабильность", [("broken_json", "сломанный JSON"), ("false_unknown", "ложное «не знаю» на вопросах по базе"), ("errors", "ошибки и обрывы")]),
+            ] %}
+              <tr class="day28-group"><th scope="rowgroup" colspan="3">{{ group }}</th></tr>
+              {% for key, label in rows %}
+                <tr data-summary-row="{{ key }}"><th scope="row">{{ label }}</th><td data-summary-cell="local">—</td><td data-summary-cell="cloud">—</td></tr>
+              {% endfor %}
+            {% endfor %}
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section class="day28-panel" aria-labelledby="day28-runs-title">
+      <header class="day28-panel__head">
+        <h3 id="day28-runs-title">Прогоны · разброс между запусками</h3>
+        <span class="day28-panel__meta">сохраняются на диск · нажмите, чтобы открыть в таблице</span>
+      </header>
+      <ol class="day28-runs" data-runs data-run-url="{{ url_for('day28.runs') }}"></ol>
+    </section>
+
+    <script id="day28-initial" type="application/json">{{ {"runs": runs} | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day28.js') }}"></script>
+{% endblock %}

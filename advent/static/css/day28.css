@@ -1,0 +1,736 @@
+/* День 28: локальная LLM + RAG. */
+
+.day28-lab {
+  margin-top: 36px;
+}
+
+.day28-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day28-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day28-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day28-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day28-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day28-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day28-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day28-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day28-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day28-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day28-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day28-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day28-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day28-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day28-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day28-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day28-rule__formula::before {
+  content: "> ";
+}
+
+.day28-curator p + p {
+  margin-top: 6px;
+}
+
+/* ── Практика: панели, кнопки, раскрывашки, таблица ─────────────────── */
+
+.day28-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day28-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day28-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day28-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day28-warning {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
+
+.day28-warning a {
+  color: var(--text-bright);
+}
+
+.day28-label {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day28-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day28-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day28-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day28-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day28-btn--go:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.day28-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day28-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day28-fold summary {
+  padding: 7px 16px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.day28-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day28-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day28-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day28-fold summary:hover {
+  color: var(--text-bright);
+}
+
+.day28-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day28-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day28-table th,
+.day28-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day28-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day28-table tbody td:first-child {
+  width: 30%;
+  color: var(--text);
+}
+
+.day28-table tfoot th {
+  color: var(--muted-bright);
+  font-weight: 400;
+}
+
+.day28-table tfoot td {
+  color: var(--text-bright);
+}
+
+.day28-table tfoot[hidden] {
+  display: none;
+}
+
+/* ── День 28: цепочка, две модели рядом, прогон, история ───────────── */
+
+.day28-chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+}
+
+.day28-chain li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.day28-chain li.is-ok {
+  border-left-color: var(--ok);
+}
+
+.day28-chain li.is-cloud {
+  border-left-color: var(--info);
+}
+
+.day28-chain li.is-bad {
+  border-left-color: var(--error);
+}
+
+.day28-chain__step {
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day28-chain strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day28-chain small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day28-chain a {
+  color: var(--text-bright);
+}
+
+.day28-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day28-num {
+  margin-right: 6px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.day28-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+  padding: 12px 16px 0;
+}
+
+.day28-pick {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.day28-pick:hover:not(:disabled) {
+  color: var(--text-bright);
+}
+
+.day28-pick:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day28-pick span {
+  margin-right: 6px;
+  color: var(--accent);
+}
+
+.day28-pick em,
+.day28-tag {
+  margin-left: 4px;
+  border: 1px solid var(--info);
+  padding: 0 4px;
+  color: var(--info);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.day28-ask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.day28-ask input[type="search"] {
+  flex: 1;
+  min-width: 260px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 7px 10px;
+  color: var(--text-bright);
+  font-size: 12.5px;
+}
+
+.day28-ask input[type="search"]:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day28-modes {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day28-modes label {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.day28-run {
+  border-top: 1px solid var(--line);
+}
+
+.day28-run[hidden],
+.day28-answer[hidden],
+.day28-quotes[hidden],
+.day28-checks[hidden] {
+  display: none;
+}
+
+.day28-expect {
+  border-bottom: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 8px 16px;
+  font-size: 12.5px;
+}
+
+.day28-expect p {
+  margin: 0;
+  color: var(--text);
+}
+
+.day28-expect .day28-label {
+  color: var(--accent);
+}
+
+.day28-retrieved {
+  border-bottom: 1px solid var(--line);
+}
+
+.day28-retrieved summary {
+  padding: 7px 16px;
+}
+
+.day28-hits {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0 16px 10px 36px;
+  font-size: 11.5px;
+}
+
+.day28-lab .day28-hits code {
+  border: 0;
+  padding: 0;
+  color: var(--text-bright);
+}
+
+.day28-hits small {
+  color: var(--muted);
+}
+
+.day28-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.day28-answer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+}
+
+.day28-answer.is-passed {
+  border-color: var(--ok);
+}
+
+.day28-answer.is-failed {
+  border-color: var(--error);
+}
+
+.day28-answer__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 7px 12px;
+}
+
+.day28-answer__head h4 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.day28-answer--local .day28-answer__head h4 {
+  color: var(--accent);
+}
+
+.day28-answer__meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day28-answer__body {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.day28-answer .day28-error {
+  margin: 0;
+}
+
+.day28-quotes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  font-size: 11.5px;
+  list-style: none;
+}
+
+.day28-quotes blockquote {
+  margin: 2px 0 0;
+  border-left: 2px solid var(--ok);
+  padding-left: 8px;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.day28-quote__mark {
+  color: var(--ok);
+}
+
+/* ≈ — слова настоящие, но это не дословная цитата: в зачёт не идёт. */
+.day28-quotes .is-elsewhere blockquote,
+.day28-quotes .is-partial blockquote,
+.day28-quotes .is-stitched blockquote {
+  border-left-color: var(--accent);
+}
+
+.day28-quotes .is-elsewhere .day28-quote__mark,
+.day28-quotes .is-partial .day28-quote__mark,
+.day28-quotes .is-stitched .day28-quote__mark {
+  color: var(--accent);
+}
+
+.day28-quotes .is-missing blockquote {
+  border-left-color: var(--error);
+}
+
+.day28-quotes .is-missing .day28-quote__mark {
+  color: var(--error);
+}
+
+.day28-checks {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 7px 12px;
+  color: var(--text-bright);
+  font-size: 11.5px;
+}
+
+.day28-note {
+  margin: 0;
+  padding: 10px 16px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+#day28-compare-status {
+  color: var(--accent);
+}
+
+.day28-verdict {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.day28-verdict strong {
+  display: block;
+  font-weight: 500;
+}
+
+.day28-verdict small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day28-verdict.is-passed strong {
+  color: var(--ok);
+}
+
+.day28-verdict.is-failed strong {
+  color: var(--error);
+}
+
+[data-probe-row].is-active {
+  background: var(--accent-soft);
+}
+
+[data-probe-row].is-done {
+  cursor: pointer;
+}
+
+[data-probe-row].is-done:hover {
+  background: var(--surface-soft);
+}
+
+.day28-detail td {
+  background: var(--surface-deep);
+  padding: 0;
+}
+
+.day28-detail .day28-answers > div {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.day28-table tbody td:first-child {
+  width: 40%;
+}
+
+.day28-table tr.day28-group th {
+  border-bottom-color: var(--line-strong);
+  padding-top: 14px;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day28-runs {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+  font-size: 12px;
+}
+
+.day28-run-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 7px 12px;
+  color: var(--muted-bright);
+  text-align: left;
+}
+
+.day28-run-item:hover {
+  border-color: var(--line-strong);
+}
+
+.day28-run-item.is-current {
+  border-color: var(--accent);
+}
+
+.day28-run-item b {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+@media (max-width: 1100px) {
+  .day28-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .day28-chain,
+  .day28-answers {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .day28-rules,
+  .day28-picks {
+    grid-template-columns: 1fr;
+  }
+
+  .day28-table tbody td:first-child {
+    width: auto;
+  }
+}

@@ -431,6 +431,19 @@
   overflow-wrap: anywhere;
 }
 
+/* ≈ — слова настоящие, но это не дословная цитата: в зачёт не идёт. */
+.day25-quotes .is-elsewhere blockquote,
+.day25-quotes .is-partial blockquote,
+.day25-quotes .is-stitched blockquote {
+  border-left-color: var(--accent);
+}
+
+.day25-quotes .is-elsewhere .day25-quote__mark,
+.day25-quotes .is-partial .day25-quote__mark,
+.day25-quotes .is-stitched .day25-quote__mark {
+  color: var(--accent);
+}
+
 .day25-quotes .is-missing blockquote {
   border-left-color: var(--error);
 }
