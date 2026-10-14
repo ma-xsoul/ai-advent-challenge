@@ -1,0 +1,294 @@
+/* День 29: оптимизация локальной LLM. */
+
+.day29-lab {
+  margin-top: 36px;
+}
+
+.day29-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day29-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day29-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day29-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day29-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day29-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day29-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day29-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day29-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day29-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day29-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day29-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day29-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day29-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day29-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day29-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day29-rule__formula::before {
+  content: "> ";
+}
+
+.day29-curator p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .day29-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day29-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Профили, ответы и сравнение остаются в одной прокрутке страницы. */
+.day29-panel {
+  min-width: 0;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.day29-settings-panel { margin-top: 22px; }
+.day29-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px 16px;
+}
+.day29-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12px;
+  font-weight: 500;
+}
+.day29-panel__meta, .day29-muted { color: var(--muted); font-size: 11px; }
+.day29-label { margin: 0 0 9px; color: var(--accent); font-size: 11px; }
+.day29-profiles { display: grid; grid-template-columns: minmax(170px, 0.75fr) minmax(0, 2fr); }
+.day29-baseline, .day29-settings { min-width: 0; padding: 14px 16px; }
+.day29-baseline { border-right: 1px solid var(--line); }
+.day29-baseline dl { display: grid; gap: 6px; margin: 0; }
+.day29-baseline dl > div { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
+.day29-baseline dt { color: var(--muted); }
+.day29-baseline dd { margin: 0; color: var(--muted-bright); }
+.day29-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.day29-fields label, .day29-field { display: grid; gap: 5px; min-width: 0; color: var(--muted); font-size: 11px; }
+.day29-fields input:not([type="hidden"]), .day29-ask input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 6px 10px;
+  color: var(--text-bright);
+}
+.day29-fields input:disabled, .day29-ask input:disabled { opacity: 0.5; }
+.day29-fields .custom-select__trigger { font-size: 12px; }
+.day29-settings-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.day29-settings-foot > span { flex: 1 1 220px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.day29-btn {
+  min-height: 34px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font-size: 11px;
+}
+.day29-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text-bright); }
+.day29-btn--go { border-color: var(--accent); color: var(--accent); }
+.day29-btn:disabled, .day29-pick:disabled, .day29-run-button:disabled { cursor: progress; opacity: 0.5; }
+.day29-note { margin: 0; padding: 8px 16px; color: var(--muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.day29-note:empty { display: none; }
+.day29-settings-panel > .day29-note { border-top: 1px solid var(--line); }
+.day29-warning, .day29-error { margin: 10px 16px; border: 1px solid var(--error); background: var(--error-soft); padding: 10px 12px; color: var(--error); font-size: 12px; overflow-wrap: anywhere; }
+.day29-error[hidden] { display: none; }
+.day29-error-text { color: var(--error); overflow-wrap: anywhere; }
+.day29-ask { display: flex; gap: 8px; padding: 14px 16px 8px; }
+.day29-ask input { flex: 1; font-size: 12px; }
+.day29-ask .day29-btn { flex-shrink: 0; }
+.day29-fold > summary { padding: 8px 16px; color: var(--muted); font-size: 11px; cursor: pointer; list-style: none; }
+.day29-fold > summary::-webkit-details-marker { display: none; }
+.day29-fold > summary::before { content: "[+] "; }
+.day29-fold[open] > summary::before { content: "[−] "; }
+.day29-fold > summary:hover { color: var(--text-bright); }
+.day29-picks [data-picks] { display: grid; gap: 5px; padding: 0 16px 12px; }
+.day29-pick { border: 1px solid var(--line); background: transparent; padding: 7px 10px; color: var(--muted-bright); font-size: 11px; text-align: left; }
+.day29-pick:hover:not(:disabled) { border-color: var(--accent); }
+.day29-pick span { color: var(--accent); }
+.day29-question-title { margin: 12px 16px 0; color: var(--text-bright); font-size: 13px; }
+.day29-expect { margin: 0; padding: 8px 16px; color: var(--muted-bright); font-size: 11px; }
+.day29-hits { margin: 0; padding: 0 16px 12px 36px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.day29-answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px 16px 16px; }
+.day29-answer { min-width: 0; border: 1px solid var(--line); }
+.day29-answer.is-passed { border-color: var(--ok); }
+.day29-answer.is-failed { border-color: var(--error); }
+.day29-answer header { border-bottom: 1px solid var(--line); padding: 10px 12px; background: var(--surface-soft); }
+.day29-answer h4 { margin: 0; color: var(--text-bright); font-size: 12px; font-weight: 500; }
+.day29-answer header p { margin: 5px 0 0; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.day29-answer-body { padding: 12px; font-size: 12px; }
+.day29-format { margin: 0 0 8px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.day29-check { margin: 0; border-top: 1px solid var(--line); padding: 8px 12px; color: var(--muted-bright); font-size: 11px; }
+.day29-check:empty { display: none; }
+.day29-answers > div { min-width: 0; font-size: 12px; }
+.day29-answers .md-body { overflow-wrap: anywhere; }
+.day29-answers .md-body pre.md-code { max-height: none; overflow: visible; white-space: pre-wrap; }
+.day29-answers .md-body pre.md-code code { white-space: inherit; }
+.day29-quotes { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.day29-quotes li { border-top: 1px solid var(--line); padding-top: 8px; }
+.day29-quote-mark { color: var(--ok); font-size: 11px; }
+.day29-quotes .is-missing .day29-quote-mark, .day29-quotes .is-stitched .day29-quote-mark { color: var(--error); }
+.day29-quotes blockquote { margin: 3px 0 0; border-left: 2px solid var(--line-strong); padding-left: 10px; color: var(--muted-bright); font-size: 11px; overflow-wrap: anywhere; }
+.day29-sources { margin-top: 10px; border-top: 1px solid var(--line); }
+.day29-sources > summary { padding: 8px 0; }
+.day29-sources ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.day29-progress { display: flex; align-items: center; gap: 12px; padding: 8px 16px; color: var(--muted-bright); font-size: 11px; }
+.day29-progress progress { flex: 0 0 110px; width: 110px; height: 5px; appearance: none; border: 0; background: var(--line); accent-color: var(--accent); }
+.day29-progress progress::-webkit-progress-bar { background: var(--line); }
+.day29-progress progress::-webkit-progress-value { background: var(--accent); }
+.day29-progress progress::-moz-progress-bar { background: var(--accent); }
+.day29-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; }
+.day29-table th, .day29-table td { border-top: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.day29-table thead th { color: var(--muted); font-weight: 500; }
+.day29-table th:first-child { width: 44%; }
+.day29-table tbody th { color: var(--muted-bright); font-weight: 400; }
+.day29-table [data-verdict] strong { display: block; font-size: 11px; font-weight: 500; }
+.day29-table [data-verdict] small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.day29-table .is-passed strong { color: var(--ok); }
+.day29-table .is-failed strong { color: var(--error); }
+.day29-table .is-active { background: var(--accent-soft); }
+.day29-expand { display: block; width: 100%; border: 0; background: transparent; padding: 0; color: inherit; font-size: inherit; line-height: inherit; text-align: left; }
+.day29-expand span { color: var(--accent); margin-right: 7px; }
+.day29-expand em { display: block; color: var(--muted); font-size: 10px; font-style: normal; }
+.is-done .day29-expand { color: var(--text-bright); }
+.is-done .day29-expand:hover { color: var(--accent); }
+.day29-detail[hidden] { display: none; }
+.day29-detail > td { padding: 0; background: var(--surface-deep); }
+.day29-summary { margin-top: 10px; }
+.day29-summary-table thead th { color: var(--accent); }
+.day29-runs { display: grid; gap: 7px; margin: 0; padding: 12px 16px; list-style: none; }
+.day29-run-button { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; width: 100%; border: 1px solid var(--line); background: transparent; padding: 9px 12px; color: var(--muted-bright); font-size: 11px; text-align: left; }
+.day29-run-button strong { color: var(--text-bright); font-weight: 500; }
+.day29-run-button small { flex: 1 0 100%; color: var(--muted); font-size: 10px; }
+.day29-run-button:hover:not(:disabled), .day29-run-button.is-current { border-color: var(--accent); }
+
+@media (max-width: 720px) {
+  .day29-profiles, .day29-answers { grid-template-columns: 1fr; }
+  .day29-baseline { border-right: 0; border-bottom: 1px solid var(--line); }
+  .day29-ask { flex-direction: column; }
+  .day29-ask .day29-btn { min-height: 40px; }
+  .day29-progress { flex-wrap: wrap; }
+  .day29-table thead { display: none; }
+  .day29-table tbody > tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+  .day29-table tbody > tr > th { grid-column: 1 / -1; width: auto; }
+  .day29-table tbody > tr > td, .day29-table tbody > tr > th { min-width: 0; border-top: 0; }
+  .day29-table td[data-label]::before { display: block; margin-bottom: 5px; color: var(--muted); content: attr(data-label); font-size: 10px; }
+  .day29-table tbody > tr.day29-detail { display: block; }
+  .day29-table tbody > tr.day29-detail > td { display: block; }
+  .day29-table tbody > tr.day29-detail[hidden] { display: none; }
+  .day29-answers { padding: 12px; }
+}

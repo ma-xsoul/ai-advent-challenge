@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}День 29. Оптимизация локальной LLM · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/custom-select.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day29.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 29</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Parameters · Quantization · Prompt</span>
+    </div>
+    <h1>День 29.<br><span>Оптимизация локальной LLM</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание двадцать девятого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Оптимизируйте локальную модель под свою задачу:</p>
+      <ul class="homework-brief__steps">
+        <li>настройте параметры (temperature, max tokens, context window)</li>
+        <li>попробуйте квантование (если доступно)</li>
+        <li>измените prompt-шаблон под конкретный кейс</li>
+      </ul>
+      <p class="homework-brief__lead">Сравните:</p>
+      <ul class="homework-brief__steps">
+        <li>качество ответов до оптимизации</li>
+        <li>качество после</li>
+        <li>скорость и потребление ресурсов</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Оптимизированная локальная LLM под конкретную задачу.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day29-lab" aria-labelledby="day29-lab-title">
+    <div class="day29-lab__intro">
+      <p class="day29-kicker">Практика</p>
+      <h2 id="day29-lab-title">Подогнать модель под свою задачу</h2>
+      <p>В дне 28 локальная gpt-oss отвечала по базе проекта хуже облака: называла меньше фактов и «причёсывала» цитаты — то слово подменит, то середину выбросит. Сегодня настраиваем её под нашу задачу — ответ с дословными цитатами — и на тех же 13 контрольных вопросах меряем, что изменилось: качество, скорость и сколько памяти занимает модель.</p>
+    </div>
+
+    <blockquote class="day29-curator">
+      <p>Ну собственно для задачи супер крутая модель и не нужна.</p>
+      <cite>Алексей Гладков, 9.10 — о модели для приватного сервиса дня 30: важнее, чтобы она подходила задаче</cite>
+    </blockquote>
+
+    <ol class="day29-rules">
+      <li class="day29-rule">
+        <span class="day29-rule__rank">01</span>
+        <h3>Параметры</h3>
+        <p>Температура — насколько свободно модель подбирает слова: для дословных цитат нужна низкая. Лимит ответа — чтобы JSON не обрывался. Окно контекста — чтобы пять кусков базы влезли целиком.</p>
+        <p class="day29-rule__formula">temperature · max tokens · context</p>
+      </li>
+      <li class="day29-rule">
+        <span class="day29-rule__rank">02</span>
+        <h3>Квантование</h3>
+        <p>Используем установленную gpt-oss:20b в MXFP4. Квантование остаётся одинаковым: сравниваем параметры и промпт без загрузки других моделей.</p>
+        <p class="day29-rule__formula">MXFP4 · без смены модели</p>
+      </li>
+      <li class="day29-rule">
+        <span class="day29-rule__rank">03</span>
+        <h3>Промпт и формат</h3>
+        <p>Сравниваем исходный JSON с уточнённым промптом и структурированным форматом. Модель выбирает дословные строки из найденных фрагментов; цитаты проверяются без исправления текста.</p>
+        <p class="day29-rule__formula">промпт + схема цитат</p>
+      </li>
+      <li class="day29-rule">
+        <span class="day29-rule__rank">04</span>
+        <h3>До и после</h3>
+        <p>Те же 13 контрольных вопросов дня 28: прозвучали ли факты, нашлись ли цитаты, сколько секунд на ответ и сколько памяти заняла модель.</p>
+        <p class="day29-rule__formula">качество · скорость · память</p>
+      </li>
+    </ol>
+    {% set cfg = settings | default({'temperature': 0, 'max_tokens': 1400, 'num_ctx': 8192, 'prompt': 'precise'}, true) %}
+    {% set base = baseline | default({'temperature': 0.1, 'max_tokens': 2000, 'num_ctx': 4096, 'prompt': 'baseline'}, true) %}
+    <section class="day29-panel day29-settings-panel" aria-labelledby="day29-settings-title">
+      <header class="day29-panel__head">
+        <h3 id="day29-settings-title">{{ model }} · два профиля</h3>
+        <span class="day29-panel__meta">MXFP4 · одна модель и те же куски базы</span>
+      </header>
+      {% if not state.ready %}<p class="day29-warning">{{ state.reason }} <a href="{{ url_for('day21.index') }}">День 21 →</a></p>{% endif %}
+      {% if not ollama.ok %}<p class="day29-warning">{{ ollama.error }}</p>{% endif %}
+      <div class="day29-profiles">
+        <div class="day29-baseline">
+          <p class="day29-label">До · исходный профиль</p>
+          <dl>
+            <div><dt>Температура</dt><dd>{{ base.temperature }}</dd></div>
+            <div><dt>Лимит ответа</dt><dd>{{ base.max_tokens }}</dd></div>
+            <div><dt>Окно контекста</dt><dd>{{ base.num_ctx }}</dd></div>
+            <div><dt>Промпт и формат</dt><dd>Исходный JSON</dd></div>
+          </dl>
+        </div>
+        <form id="day29-settings" class="day29-settings">
+          <p class="day29-label">После · настройки для следующего сравнения</p>
+          <div class="day29-fields">
+            <label>Температура<input name="temperature" type="number" min="0" max="2" step="0.1" required value="{{ cfg.temperature }}"></label>
+            <label>Лимит ответа<input name="max_tokens" type="number" min="256" max="8192" step="1" required value="{{ cfg.max_tokens }}"></label>
+            <div class="day29-field">
+              <span id="day29-context-label">Окно контекста</span>
+              <div class="custom-select" data-custom-select>
+                <input type="hidden" name="num_ctx" value="{{ cfg.num_ctx }}">
+                <button class="custom-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="day29-context-label day29-context-value"><span id="day29-context-value">{{ cfg.num_ctx }}</span><span class="custom-select__chevron" aria-hidden="true"></span></button>
+                <div class="custom-select__menu" role="listbox" aria-labelledby="day29-context-label" hidden>
+                  {% for value in [4096, 8192, 16384] %}<button class="custom-select__option" type="button" role="option" data-value="{{ value }}" data-label="{{ value }}" aria-selected="{{ 'true' if value == cfg.num_ctx else 'false' }}"><strong>{{ value }}</strong></button>{% endfor %}
+                </div>
+              </div>
+            </div>
+            <div class="day29-field">
+              <span id="day29-prompt-label">Промпт и формат</span>
+              <div class="custom-select" data-custom-select>
+                <input type="hidden" name="prompt" value="{{ cfg.prompt }}">
+                <button class="custom-select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="day29-prompt-label day29-prompt-value"><span id="day29-prompt-value">{{ 'Точный + цитаты по схеме' if cfg.prompt == 'precise' else 'Исходный JSON' }}</span><span class="custom-select__chevron" aria-hidden="true"></span></button>
+                <div class="custom-select__menu" role="listbox" aria-labelledby="day29-prompt-label" hidden>
+                  {% for value, label in [('precise', 'Точный + цитаты по схеме'), ('baseline', 'Исходный JSON')] %}<button class="custom-select__option" type="button" role="option" data-value="{{ value }}" data-label="{{ label }}" aria-selected="{{ 'true' if value == cfg.prompt else 'false' }}"><strong>{{ label }}</strong></button>{% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="day29-settings-foot"><span data-settings-caption></span><button class="day29-btn" type="button" data-reset-settings>Сбросить настройки</button></div>
+        </form>
+      </div>
+      <p class="day29-note">Квантование MXFP4 одинаковое в обоих профилях. Меняются параметры, промпт и формат ответа.</p>
+    </section>
+
+    <section class="day29-panel" aria-labelledby="day29-ask-title">
+      <header class="day29-panel__head"><h3 id="day29-ask-title">Один вопрос · до и после</h3><span id="day29-ask-status" class="day29-panel__meta" role="status"></span></header>
+      <form id="day29-ask" class="day29-ask" data-ask-url="/days/29/api/ask">
+        <label class="sr-only" for="day29-question">Вопрос о проекте</label>
+        <input id="day29-question" name="question" type="search" maxlength="500" required placeholder="Вопрос о проекте" {% if not state.ready or not ollama.ok %}disabled{% endif %}>
+        <button class="day29-btn day29-btn--go" type="submit" {% if not state.ready or not ollama.ok %}disabled{% endif %}>Сравнить ответы</button>
+      </form>
+      <details class="day29-fold day29-picks"><summary>Контрольные вопросы · {{ probes|length }}</summary><div data-picks>{% for probe in probes %}<button class="day29-pick" type="button" data-question="{{ probe.question }}">{{ '%02d'|format(probe.index) }} · {{ probe.question }}{% if probe.negative %} <span>вне базы</span>{% endif %}</button>{% endfor %}</div></details>
+      <p id="day29-error" class="day29-error" role="alert" hidden></p>
+      <div class="day29-question-run" data-question-run hidden>
+        <p class="day29-question-title" data-asked-question></p>
+        <p class="day29-note" data-ask-settings></p>
+        <p class="day29-expect" data-expect hidden>Ожидание: <span data-expect-text></span></p>
+        <details class="day29-fold"><summary>Найдено в базе · <span data-retrieved-meta></span></summary><ol class="day29-hits" data-hits></ol></details>
+        <div class="day29-answers">
+          {% for key, title in [('before', 'До · исходные настройки'), ('after', 'После · выбранные настройки')] %}
+          <article class="day29-answer" data-answer="{{ key }}"><header><h4>{{ title }}</h4><p data-answer-meta></p></header><div class="day29-answer-body" data-answer-body></div><p class="day29-check" data-answer-check></p></article>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="day29-panel" aria-labelledby="day29-compare-title">
+      <header class="day29-panel__head"><h3 id="day29-compare-title">13 вопросов · полный прогон</h3><button id="day29-compare" class="day29-btn day29-btn--go" type="button" data-compare-url="/days/29/api/compare" {% if not state.ready or not ollama.ok %}disabled{% endif %}>Сравнить все</button></header>
+      <p class="day29-note">10 вопросов по базе и 3 вне её. Ответы идут по очереди; прогон займёт несколько минут. Засчитан ответ с ⅔ ожидаемых фактов, цитаты проверяются отдельно.</p>
+      <div class="day29-progress"><progress id="day29-progress" value="0" max="{{ probes|length }}" aria-label="Готовых вопросов"></progress><span id="day29-compare-status" role="status">Прогон ещё не запускался</span></div>
+      <p class="day29-note" data-compare-caption></p>
+      <table class="day29-table" data-compare-table>
+        <thead><tr><th scope="col">Вопрос</th><th scope="col">До</th><th scope="col">После</th></tr></thead>
+        <tbody>{% for probe in probes %}
+          <tr data-probe-row="{{ probe.index }}"><th scope="row"><button class="day29-expand" type="button" data-expand aria-expanded="false" aria-controls="day29-detail-{{ probe.index }}"><span>{{ '%02d'|format(probe.index) }}</span>{{ probe.question }}{% if probe.negative %} <em>вне базы</em>{% endif %}</button></th><td data-verdict="before" data-label="До">—</td><td data-verdict="after" data-label="После">—</td></tr>
+          <tr class="day29-detail" id="day29-detail-{{ probe.index }}" data-probe-detail="{{ probe.index }}" hidden><td colspan="3"><div class="day29-answers">{% for mode, title in [('before', 'До'), ('after', 'После')] %}<div><p class="day29-label">{{ title }}</p><div data-detail="{{ mode }}"></div></div>{% endfor %}</div></td></tr>
+        {% endfor %}</tbody>
+      </table>
+      <div class="day29-summary" data-summary hidden>
+        <table class="day29-table day29-summary-table"><thead><tr><th scope="col">Итоги</th><th scope="col">До</th><th scope="col">После</th></tr></thead><tbody>
+          {% for key, title in [('passed', 'Ответы по ожиданию'), ('facts', 'Ожидаемые факты'), ('quotes', 'Подтверждённые цитаты'), ('refused', '«Не знаю» вне базы'), ('broken_json', 'Ошибки формата JSON'), ('errors', 'Ошибки запроса'), ('avg_s', 'Среднее время ответа'), ('generation_tps', 'Генерация'), ('memory_bytes', 'Память модели · максимум замеров'), ('actual_ctx', 'Фактическое окно контекста'), ('load_s', 'Загрузка модели · среднее'), ('warm_s', 'Ответ без загрузки · среднее')] %}<tr data-summary-row="{{ key }}"><th scope="row">{{ title }}</th><td data-summary-cell="before" data-label="До">—</td><td data-summary-cell="after" data-label="После">—</td></tr>{% endfor %}
+        </tbody></table>
+        <p class="day29-note">Время ответа включает загрузку модели; генерация — только скорость выпуска токенов. Память — размер загруженной модели по Ollama, без общей памяти компьютера.</p>
+      </div>
+    </section>
+
+    <section class="day29-panel" aria-labelledby="day29-runs-title"><header class="day29-panel__head"><h3 id="day29-runs-title">Сохранённые прогоны</h3><span class="day29-panel__meta">выберите, чтобы открыть ответы и итоги</span></header><ol class="day29-runs" data-runs data-runs-url="/days/29/api/runs"></ol></section>
+    <script id="day29-initial" type="application/json">{{ {'ready': state.ready and ollama.ok, 'runs': runs, 'latest': latest | default(none)} | tojson }}</script>
+
+  </section>
+{% endblock %}
+
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/custom-select.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day29.js') }}"></script>
+{% endblock %}

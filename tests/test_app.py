@@ -28,6 +28,8 @@ class AdventAppTestCase(unittest.TestCase):
             "TESTING": True, "OLLAMA_CLIENT": OfflineOllama(),
             "AGENT_STORE_DIR": str(folder / "agents"),
             "DAY21_INDEX_PATH": str(folder / "index.sqlite3"),
+            "DAY28_RUNS_PATH": str(folder / "day28" / "runs.json"),
+            "DAY29_RUNS_PATH": str(folder / "day29" / "runs.json"),
             "DAY18_DIR": str(folder / "day18"),
             "DAY19_REPORTS_DIR": str(folder / "day19"),
             "DAY20_REPORTS_DIR": str(folder / "day20"),
@@ -387,7 +389,7 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn('class="homework-divider"', html)
 
     def test_every_day_collapses_its_homework_block_by_default(self):
-        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28):
+        for number in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29):
             with self.subTest(day=number):
                 response = self.client.get(f"/days/{number}/")
                 html = response.get_data(as_text=True)
@@ -3656,6 +3658,30 @@ class AdventAppTestCase(unittest.TestCase):
             self.assertEqual(client.post("/days/28/api/ask", json={"question": " "}).status_code, 400)
             self.assertEqual(client.post("/days/28/api/compare", json={"modes": "local"}).status_code, 400)
 
+    def test_day_twenty_nine_renders_the_optimization_homework(self):
+        response = self.client.get("/days/29/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 29.", html)
+        self.assertIn("Оптимизация локальной LLM", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Оптимизируйте локальную модель под свою задачу", html)
+        self.assertIn("настройте параметры (temperature, max tokens, context window)", html)
+        self.assertIn("попробуйте квантование (если доступно)", html)
+        self.assertIn("измените prompt-шаблон под конкретный кейс", html)
+        self.assertIn("качество ответов до оптимизации", html)
+        self.assertIn("скорость и потребление ресурсов", html)
+        self.assertIn("Оптимизированная локальная LLM под конкретную задачу", html)
+        self.assertIn("супер крутая модель и не нужна", html)
+        self.assertEqual(html.count('class="day29-rule"'), 4)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day29.css", html)
+        self.assertIn('href="/days/29/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_empty_prompt_is_rejected_on_day_one_api(self):
         response = self.client.post("/days/1/api/chat", json={"prompt": "  "})
 
@@ -4007,6 +4033,161 @@ class LocalChatDay27TestCase(unittest.TestCase):
         self.assertIn('js/day27.js', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertNotIn('<details class="homework-brief" open', html)
+
+
+class OptimizationDay29AppTestCase(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from unittest.mock import Mock
+        from advent.rag import HashingEmbedder, RagIndex, collect
+
+        temporary=tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.folder=pathlib.Path(temporary.name)
+        self.options=[]
+        self.inputs=[]
+        self.down=False
+
+        owner=self
+
+        class FakeOllama:
+            url="http://ollama.test"
+            timeout=5
+
+            def version(self): return "0.32.1"
+
+            def models(self):
+                return [{"name":"gpt-oss:20b", "chat":True, "quantization":"MXFP4"}]
+
+            def loaded(self):
+                context=owner.options[-1]["num_ctx"]
+                return [{"name":"gpt-oss:20b", "size":2_000_000_000+context*1024,
+                         "vram":2_000_000_000, "context":context}]
+
+        self.cloud=Mock()
+        self.cloud.send.side_effect=AssertionError("Unexpected cloud model")
+        self.config={
+            "TESTING":True, "RAG_EMBEDDER":HashingEmbedder(), "OLLAMA_CLIENT":FakeOllama(),
+            "AGENT_TRANSPORT":self.cloud, "AGENT_STORE_DIR":str(self.folder/"agents"),
+            "DAY21_INDEX_PATH":str(self.folder/"index.sqlite3"),
+            "DAY28_RUNS_PATH":str(self.folder/"day28"/"runs.json"),
+            "DAY29_RUNS_PATH":str(self.folder/"day29"/"runs.json"),
+            "DAY18_DIR":str(self.folder/"day18"), "DAY19_REPORTS_DIR":str(self.folder/"day19"),
+            "DAY20_REPORTS_DIR":str(self.folder/"day20"),
+        }
+        self.index=RagIndex(self.config["DAY21_INDEX_PATH"])
+        self.index.build(collect(),self.config["RAG_EMBEDDER"])
+        self.client=create_app(self.config).test_client()
+
+        def post(url, **kwargs):
+            import requests
+            from unittest.mock import Mock
+            self.assertEqual(url,"http://ollama.test/api/chat")
+            payload=kwargs["json"]
+            self.options.append(payload["options"])
+            self.inputs.append(payload["messages"][1]["content"])
+            if self.down: raise requests.ConnectionError("refused")
+            content=payload["messages"][1]["content"]
+            if any(word in content for word in ("Kubernetes","погода","Stripe")):
+                answer={"status":"unknown", "quotes":[], "answer":"Не знаю", "clarify":"Уточните вопрос"}
+            else:
+                lines=content.split("Фрагменты:\n\n",1)[1].split("\n\n---\n\n")[0].splitlines()[1:]
+                answer={"status":"answer", "quotes":[{"n":1,"text":max(lines,key=len)}],
+                        "answer":"Три слоя: chat, task и user [1].", "clarify":""}
+            body={"done":True,"done_reason":"stop","message":{"content":json.dumps(answer,ensure_ascii=False)},
+                  "prompt_eval_count":100,"eval_count":20,"load_duration":100_000_000,
+                  "prompt_eval_duration":50_000_000,"eval_duration":1_000_000_000,"total_duration":1_150_000_000}
+            return Mock(status_code=200,json=lambda:body)
+
+        mocked=patch("advent.local.optimization.requests.post",side_effect=post)
+        mocked.start(); self.addCleanup(mocked.stop)
+        network=patch("requests.sessions.Session.request",side_effect=AssertionError("Unexpected real network"))
+        network.start(); self.addCleanup(network.stop)
+
+    def events(self,response):
+        self.assertEqual(response.status_code,200)
+        return [json.loads(line) for line in response.get_data(as_text=True).splitlines()]
+
+    def test_single_question_sends_real_options_to_same_local_model_and_same_hits(self):
+        events=self.events(self.client.post("/days/29/api/ask",json={"question":"Какие слои памяти есть?",
+                       "settings":{"temperature":0,"max_tokens":1500,"num_ctx":8192,"prompt":"precise"}}))
+        self.assertEqual(events[0]["type"],"retrieved")
+        answers=[event for event in events if event["type"]=="answer"]
+        self.assertEqual([item["mode"] for item in answers],["before","after"])
+        self.assertEqual(self.inputs[0],self.inputs[1])
+        self.assertEqual([item["num_ctx"] for item in self.options],[4096,8192])
+        self.assertEqual([item["seed"] for item in self.options],[42,42])
+        self.assertEqual(answers[1]["generation_tps"],20.0)
+        self.assertEqual(answers[1]["actual_ctx"],8192)
+        self.assertTrue(answers[1]["context_verified"])
+        self.assertEqual(events[-1]["type"],"done")
+        self.cloud.send.assert_not_called()
+
+    def test_full_run_is_saved_and_restored_without_touching_day28(self):
+        old=pathlib.Path(self.config["DAY28_RUNS_PATH"])
+        old.parent.mkdir(parents=True); old.write_text("existing day 28 results")
+        events=self.events(self.client.post("/days/29/api/compare",json={}))
+        rows=[event for event in events if event["type"]=="compare_row"]
+        self.assertEqual(len(rows),13)
+        summary=events[-1]
+        self.assertEqual(summary["type"],"compare_summary")
+        self.assertEqual(summary["summary"]["before"]["on_topic"],10)
+        self.assertEqual(summary["summary"]["after"]["off_topic"],3)
+        runs=self.client.get("/days/29/api/runs").get_json()
+        self.assertEqual(len(runs),1)
+        detail=self.client.get(f"/days/29/api/runs/{runs[0]['id']}").get_json()
+        self.assertEqual(len(detail["rows"]),13)
+        self.assertEqual(detail["baseline"]["num_ctx"],4096)
+        self.assertEqual(detail["settings"]["seed"],42)
+        self.assertEqual(detail["experiment_version"],2)
+        self.assertEqual(detail["format_version"],{"before":"json","after":"source_lines_schema-v1"})
+        self.assertEqual(runs[0]["format_version"],detail["format_version"])
+        self.assertIn("дослов",detail["prompts"]["after"])
+        self.assertEqual(detail["rows"][0]["modes"]["after"]["prompt_text"],detail["prompts"]["after"])
+        self.assertEqual(old.read_text(),"existing day 28 results")
+        restored=create_app(self.config).test_client()
+        self.assertEqual(restored.get("/days/29/api/runs").get_json(),runs)
+        self.assertIn(runs[0]["id"],restored.get("/days/29/").get_data(as_text=True))
+        self.assertEqual(self.client.get("/days/29/api/runs/missing").status_code,404)
+        self.cloud.send.assert_not_called()
+
+    def test_invalid_options_and_bad_questions_are_rejected_before_inference(self):
+        for settings in ({"temperature":True},{"temperature":float('nan')},{"temperature":3},
+                         {"max_tokens":2},{"num_ctx":32768},{"num_ctx":4096,"max_tokens":4096},
+                         {"prompt":"unknown"},{"model":"gpt-oss:20b-cloud"},[],{"seed":17}):
+            with self.subTest(settings=settings):
+                self.assertEqual(self.client.post("/days/29/api/compare",json={"settings":settings}).status_code,400)
+        for payload in ([],{"question":3},{"question":" "},{"question":"x"*501}):
+            self.assertEqual(self.client.post("/days/29/api/ask",json=payload).status_code,400)
+        self.assertEqual(self.options,[])
+
+    def test_unbuilt_index_returns_conflict_without_model_request(self):
+        self.client.application.config["DAY21_INDEX_PATH"]=str(self.folder/"missing.sqlite3")
+        self.assertEqual(self.client.post("/days/29/api/compare",json={}).status_code,409)
+        self.assertEqual(self.options,[])
+
+    def test_errors_do_not_keep_experiment_lock_or_call_cloud(self):
+        self.down=True
+        events=self.events(self.client.post("/days/29/api/ask",json={"question":"Слои памяти?"}))
+        answers=[item for item in events if item["type"]=="answer"]
+        self.assertEqual(len(answers),2)
+        self.assertTrue(all("error" in answer for answer in answers))
+        self.down=False
+        self.assertEqual(self.events(self.client.post("/days/29/api/ask",json={"question":"Ещё раз"}))[-1]["type"],"done")
+        self.cloud.send.assert_not_called()
+
+    def test_busy_run_is_rejected_and_save_failure_keeps_completed_result(self):
+        from threading import Lock
+        lock=Lock(); lock.acquire()
+        self.client.application.extensions["day29_experiment_lock"]=lock
+        self.assertEqual(self.client.post("/days/29/api/compare",json={}).status_code,409)
+        lock.release()
+        with patch("advent.local.rag.RunStore.add",side_effect=OSError("disk full")):
+            events=self.events(self.client.post("/days/29/api/compare",json={}))
+        self.assertEqual(events[-1]["type"],"compare_summary")
+        self.assertIn("disk full",events[-1]["save_error"])
+        self.assertEqual(len([item for item in events if item["type"]=="compare_row"]),13)
+        self.assertTrue(lock.acquire(blocking=False));lock.release()
 
 
 if __name__ == "__main__":

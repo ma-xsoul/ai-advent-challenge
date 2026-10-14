@@ -235,6 +235,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=29,
+        title="Оптимизация локальной LLM",
+        description="Параметры, квантование, промпт",
+        endpoint="day29.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 
