@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}День 30. Приватный сервис на локальной LLM · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day30.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 30</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Local LLM · HTTP API · Private service</span>
+    </div>
+    <h1>День 30.<br><span>Приватный сервис на локальной LLM</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тридцатого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Разверните локальную LLM как сервис:</p>
+      <ul class="homework-brief__steps">
+        <li>на VPS или домашнем сервере</li>
+        <li>с HTTP API</li>
+        <li>с возможностью чата</li>
+      </ul>
+      <p class="homework-brief__lead">Проверьте:</p>
+      <ul class="homework-brief__steps">
+        <li>доступ к модели по сети</li>
+        <li>стабильность при нескольких запросах</li>
+        <li>базовые ограничения (rate limit / max context)</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Приватный AI-сервис на базе локальной LLM.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day30-lab" aria-labelledby="day30-lab-title">
+    <div class="day30-lab__intro">
+      <p class="day30-kicker">Практика</p>
+      <h2 id="day30-lab-title">Своя модель — для других людей</h2>
+      <p>Всю неделю gpt-oss отвечала только нам: Ollama слушает <code>localhost</code>, и снаружи к ней не достучаться. Сегодня мак становится домашним сервером. Наружу выходит не сама Ollama, а наша обёртка: она проверяет ключ, ставит запросы в очередь и следит за лимитами. Через неё к модели можно обратиться из интернета — по HTTP API или из чата с телефона.</p>
+    </div>
+
+    <blockquote class="day30-curator">
+      <p>Нужно здесь проверить клиент сервер. Да, нужно сэмулировать хотя бы два коннекта условно. Желательно с двух устройств.</p>
+      <p>Значит надо сделать обвязку. Какую-нибудь очередь повесить.</p>
+      <p>Рекомендую все же сделать доступным именно в интернет.</p>
+      <cite>Алексей Гладков, 9–10.10 — что проверять в задании: Ollama считает один ответ за раз, поэтому нужна очередь; адрес — из интернета, не только из домашней сети</cite>
+    </blockquote>
+
+    <ol class="day30-rules">
+      <li class="day30-rule">
+        <span class="day30-rule__rank">01</span>
+        <h3>Сервис на маке</h3>
+        <p>Мак — домашний сервер: на нём модель и наше HTTP API. Ollama по-прежнему слушает только <code>localhost</code>, к ней обращается одна обёртка.</p>
+        <p class="day30-rule__formula">клиент → API → Ollama</p>
+      </li>
+      <li class="day30-rule">
+        <span class="day30-rule__rank">02</span>
+        <h3>Доступ из интернета</h3>
+        <p>Туннель даёт маку публичный https-адрес без белого IP и настройки роутера. Без ключа сервис не отвечает.</p>
+        <p class="day30-rule__formula">https-адрес · ключ доступа</p>
+      </li>
+      <li class="day30-rule">
+        <span class="day30-rule__rank">03</span>
+        <h3>Очередь</h3>
+        <p>Модель на маке одна и считает один ответ за раз. Остальные запросы ждут своей очереди и знают своё место в ней — ничего не падает.</p>
+        <p class="day30-rule__formula">два устройства · одна модель</p>
+      </li>
+      <li class="day30-rule">
+        <span class="day30-rule__rank">04</span>
+        <h3>Ограничения</h3>
+        <p>Rate limit — сколько запросов в минуту можно одному ключу. Max context — сколько текста можно прислать за раз. Лишнее получает понятный отказ.</p>
+        <p class="day30-rule__formula">rate limit · max context</p>
+      </li>
+    </ol>
+
+    <section class="day30-panel" aria-labelledby="day30-service-title">
+      <header class="day30-panel__head">
+        <h3 id="day30-service-title">Сервис · что где работает</h3>
+        <span class="day30-panel__meta">наружу — только обёртка, Ollama остаётся на localhost</span>
+      </header>
+      <ol class="day30-chain">
+        <li class="{{ 'is-ok' if ollama.ok else 'is-bad' }}">
+          <span class="day30-chain__step">1 · модель</span>
+          <strong>{{ model }} · Ollama{% if ollama.version %} {{ ollama.version }}{% endif %}</strong>
+          <small>{% if ollama.ok %}{{ ollama.url }} · только этот мак{% else %}{{ ollama.error }}{% endif %}</small>
+        </li>
+        <li data-chain="service">
+          <span class="day30-chain__step">2 · сервис</span>
+          <strong>HTTP API и чат · {{ service_url | replace("http://", "") }}</strong>
+          <small data-service-state>проверяем…</small>
+        </li>
+        <li data-chain="public">
+          <span class="day30-chain__step">3 · интернет</span>
+          <strong data-public-url>туннель</strong>
+          <small data-public-state>проверяем…</small>
+        </li>
+      </ol>
+      <div class="day30-howto">
+        <p>Запуск: <code>.venv/bin/python service.py</code> — сервис и туннель cloudflared, адрес появится здесь. Свой туннель: <code>--no-tunnel --public-url https://…</code></p>
+        <p>Чат для людей — по адресу сервиса, API — <code>POST /api/chat</code>:</p>
+        <pre class="day30-code" data-curl></pre>
+      </div>
+    </section>
+
+    <div class="day30-grid">
+      <section class="day30-panel" aria-labelledby="day30-keys-title">
+        <header class="day30-panel__head">
+          <h3 id="day30-keys-title">Ключи · кому можно</h3>
+          <span class="day30-panel__meta">data/day30/keys.json · отзыв — сразу</span>
+        </header>
+        <table class="day30-table">
+          <thead><tr><th scope="col">Кто</th><th scope="col">Ключ</th><th scope="col">За минуту</th><th scope="col"><span class="sr-only">Действия</span></th></tr></thead>
+          <tbody data-keys>
+            {% for item in keys %}
+              <tr data-key-row="{{ item.name }}">
+                <td>{{ item.name }}</td>
+                <td><code>{{ item.key }}</code></td>
+                <td data-key-used>—</td>
+                <td class="day30-actions"><button class="day30-link" type="button" data-copy="{{ item.key }}">копировать</button> <button class="day30-link day30-link--danger" type="button" data-revoke="{{ item.name }}">отозвать</button></td>
+              </tr>
+            {% endfor %}
+            <tr class="day30-empty" data-keys-empty {% if keys %}hidden{% endif %}><td colspan="4">Ключей пока нет — выдайте первый</td></tr>
+          </tbody>
+        </table>
+        <form class="day30-key-form" data-key-form>
+          <label class="sr-only" for="day30-key-name">Кому ключ</label>
+          <input id="day30-key-name" name="name" maxlength="32" required placeholder="телефон, ноутбук, друг…" autocomplete="off">
+          <button class="day30-btn" type="submit">Выдать ключ</button>
+        </form>
+        <p class="day30-error" data-key-error role="alert" hidden></p>
+      </section>
+
+      <section class="day30-panel" aria-labelledby="day30-limits-title">
+        <header class="day30-panel__head">
+          <h3 id="day30-limits-title">Ограничения · что и чем ответит</h3>
+        </header>
+        <ul class="day30-limits">
+          <li><span>без ключа или ключ неверный</span><b>401</b></li>
+          <li><span>больше <strong data-limit="rate_per_minute">{{ limits.rate_per_minute }}</strong> запросов в минуту на ключ</span><b>429</b></li>
+          <li><span>сообщение длиннее <strong data-limit="max_message_chars">{{ limits.max_message_chars }}</strong> символов, диалог — <strong data-limit="max_context_chars">{{ limits.max_context_chars }}</strong>, больше <strong data-limit="max_messages">{{ limits.max_messages }}</strong> сообщений</span><b>413</b></li>
+          <li><span>в очереди уже ждут <strong data-limit="queue_size">{{ limits.queue_size }}</strong></span><b>503</b></li>
+          <li><span>окно модели <strong data-limit="num_ctx">{{ limits.num_ctx }}</strong> токенов, ответ до <strong data-limit="max_answer_tokens">{{ limits.max_answer_tokens }}</strong> — параметры Ollama</span><b>—</b></li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="day30-panel" aria-labelledby="day30-queue-title">
+      <header class="day30-panel__head">
+        <h3 id="day30-queue-title">Очередь и журнал · сейчас</h3>
+        <span class="day30-panel__meta" data-counts>—</span>
+      </header>
+      <div class="day30-queue" data-queue>
+        <p class="day30-muted">Сервис не запущен</p>
+      </div>
+      <div class="day30-table-wrap">
+        <table class="day30-table day30-events">
+          <thead><tr><th scope="col">Время</th><th scope="col">Кто</th><th scope="col">Откуда</th><th scope="col">Что случилось</th></tr></thead>
+          <tbody data-events>
+            <tr class="day30-empty" data-events-empty><td colspan="4">Запросов пока не было</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="day30-panel" aria-labelledby="day30-load-title">
+      <header class="day30-panel__head">
+        <h3 id="day30-load-title">Проверка нагрузки · 10 запросов сразу</h3>
+        <div class="day30-load-controls">
+          <fieldset class="day30-target" data-target>
+            <legend class="sr-only">Куда слать</legend>
+            <label><input type="radio" name="target" value="local" checked> localhost</label>
+            <label><input type="radio" name="target" value="public" disabled> интернет</label>
+          </fieldset>
+          <button class="day30-btn" type="button" data-load disabled>[▶] Запустить</button>
+        </div>
+      </header>
+      <p class="day30-note">Два клиента — как два устройства — шлют запросы почти одновременно. Клиент А: шесть вопросов, шестой — сверх лимита. Клиент Б: два вопроса и слишком длинное сообщение. Последний — без ключа. Ключи А и Б создаются на время проверки и удаляются. <span data-load-status aria-live="polite"></span></p>
+      <div class="day30-table-wrap">
+        <table class="day30-table day30-load">
+          <thead><tr><th scope="col">#</th><th scope="col">Кто</th><th scope="col">Запрос</th><th scope="col">Очередь</th><th scope="col">Итог</th></tr></thead>
+          <tbody data-load-rows>
+            <tr class="day30-empty"><td colspan="5">Нажмите «Запустить» — строки заполнятся по мере ответов</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="day30-summary" data-load-summary hidden></p>
+    </section>
+
+    <script id="day30-initial" type="application/json">{{ {"service_url": service_url, "limits": limits} | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/day30.js') }}"></script>
+{% endblock %}

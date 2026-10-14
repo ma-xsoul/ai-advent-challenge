@@ -24,12 +24,19 @@ class AdventAppTestCase(unittest.TestCase):
             def models(self):
                 raise OllamaError("Ollama отключена в тесте")
 
+        class OfflineHttp:
+            def get(self, *args, **kwargs):
+                import requests
+                raise requests.ConnectionError("сервис дня 30 отключён в тесте")
+
         app = create_app({
             "TESTING": True, "OLLAMA_CLIENT": OfflineOllama(),
             "AGENT_STORE_DIR": str(folder / "agents"),
             "DAY21_INDEX_PATH": str(folder / "index.sqlite3"),
             "DAY28_RUNS_PATH": str(folder / "day28" / "runs.json"),
             "DAY29_RUNS_PATH": str(folder / "day29" / "runs.json"),
+            "DAY30_KEYS_PATH": str(folder / "day30" / "keys.json"),
+            "DAY30_HTTP": OfflineHttp(),
             "DAY18_DIR": str(folder / "day18"),
             "DAY19_REPORTS_DIR": str(folder / "day19"),
             "DAY20_REPORTS_DIR": str(folder / "day20"),
@@ -3679,6 +3686,32 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn("css/homework.css", html)
         self.assertIn("css/day29.css", html)
         self.assertIn('href="/days/29/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_thirty_renders_the_private_service_homework(self):
+        response = self.client.get("/days/30/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 30.", html)
+        self.assertIn("Приватный сервис на локальной LLM", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Разверните локальную LLM как сервис", html)
+        self.assertIn("на VPS или домашнем сервере", html)
+        self.assertIn("с HTTP API", html)
+        self.assertIn("с возможностью чата", html)
+        self.assertIn("доступ к модели по сети", html)
+        self.assertIn("стабильность при нескольких запросах", html)
+        self.assertIn("базовые ограничения (rate limit / max context)", html)
+        self.assertIn("Приватный AI-сервис на базе локальной LLM", html)
+        self.assertIn("Какую-нибудь очередь повесить", html)
+        self.assertIn("сделать доступным именно в интернет", html)
+        self.assertEqual(html.count('class="day30-rule"'), 4)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day30.css", html)
+        self.assertIn('href="/days/30/"', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 

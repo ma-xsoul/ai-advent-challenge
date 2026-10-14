@@ -243,6 +243,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=30,
+        title="Приватный сервис на локальной LLM",
+        description="Своя модель по сети для других",
+        endpoint="day30.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

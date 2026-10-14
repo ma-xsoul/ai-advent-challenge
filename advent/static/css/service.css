@@ -1,0 +1,250 @@
+/* Чат приватного сервиса дня 30 — отдельная страница, в основном для телефона. */
+
+/* У блоков ниже свой display — без этого атрибут hidden их не прячет. */
+.svc [hidden] {
+  display: none !important;
+}
+
+.svc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+}
+
+.svc-head {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.svc-brand {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.svc-head h1 {
+  margin: 0;
+  color: var(--text-bright);
+  font-size: 18px;
+}
+
+.svc-head h1 span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.svc-health {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.svc-health::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  background: var(--muted);
+  content: "";
+}
+
+.svc-health.is-free::before { background: var(--ok); }
+.svc-health.is-busy::before { background: var(--accent); }
+.svc-health.is-down::before { background: var(--error); }
+
+.svc-key,
+.svc-who,
+.svc-form {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+.svc-key label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.svc-key__row {
+  display: flex;
+  gap: 8px;
+}
+
+.svc-key input,
+.svc-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 9px 10px;
+  color: var(--text-bright);
+  font-size: 16px; /* меньше 16px — iOS приближает страницу при фокусе */
+}
+
+.svc-key input:focus,
+.svc-form textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.svc-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.svc-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.svc-who strong {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.svc-btn {
+  flex: none;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  padding: 8px 16px;
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.svc-btn:disabled {
+  border-color: var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
+.svc-link {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  color: var(--muted-bright);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.svc-link:hover {
+  color: var(--accent);
+}
+
+/* Диалог растёт вместе со страницей — прокрутка одна. */
+.svc-log {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.svc-empty {
+  margin: 0;
+  border: 1px dashed var(--line-strong);
+  padding: 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.svc-msg {
+  max-width: 100%;
+  border: 1px solid var(--line);
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+}
+
+.svc-msg--user {
+  align-self: flex-end;
+  max-width: 88%;
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  color: var(--text-bright);
+  white-space: pre-wrap;
+}
+
+.svc-msg--assistant {
+  background: var(--surface);
+}
+
+.svc-msg--failed {
+  border-color: var(--error);
+  opacity: 0.7;
+}
+
+.svc-msg__meta {
+  margin: 8px 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.svc-msg .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.svc-status {
+  min-height: 1.6em;
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.svc-status.is-queue { color: var(--accent); }
+.svc-status.is-error { color: var(--error); }
+
+/* Поле ввода прилипает к низу экрана: на телефоне всегда под рукой. */
+.svc-form {
+  position: sticky;
+  bottom: 0;
+  margin: 0 -1px;
+  box-shadow: 0 -12px 18px var(--bg);
+}
+
+.svc-form textarea {
+  display: block;
+  resize: vertical;
+}
+
+.svc-form__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.svc-count {
+  flex: 1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.svc-count.is-over {
+  color: var(--error);
+}
+
+.svc-limits {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
