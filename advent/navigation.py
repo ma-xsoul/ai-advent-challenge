@@ -251,6 +251,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=31,
+        title="Ассистент разработчика",
+        description="RAG по проекту, MCP для git, /help",
+        endpoint="day31.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

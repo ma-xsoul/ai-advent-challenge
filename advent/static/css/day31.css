@@ -1,0 +1,585 @@
+/* День 31: ассистент разработчика. */
+
+.day31-lab {
+  margin-top: 36px;
+}
+
+.day31-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day31-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day31-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day31-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day31-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day31-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day31-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day31-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day31-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day31-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day31-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day31-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day31-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day31-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day31-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day31-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day31-rule__formula::before {
+  content: "> ";
+}
+
+.day31-curator p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .day31-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day31-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Практика: панели, кнопки, таблицы ──────────────────────────────── */
+
+.day31-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day31-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day31-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day31-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day31-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day31-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day31-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day31-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day31-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day31-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day31-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day31-table th,
+.day31-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day31-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+/* ── Цепочка: модель → сервис → интернет ──────────────────────────── */
+
+.day31-chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+}
+
+.day31-chain li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.day31-chain li.is-ok {
+  border-left-color: var(--ok);
+}
+
+.day31-chain li.is-bad {
+  border-left-color: var(--error);
+}
+
+.day31-chain__step {
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day31-chain strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day31-chain small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day31-chain a {
+  color: var(--text-bright);
+}
+
+/* ── День 31: цепочка, терминал, ответы ───────────────────────────── */
+
+.day31-panel {
+  margin-top: 14px;
+}
+
+.day31-chain li .day31-btn {
+  justify-self: start;
+  margin-top: 6px;
+}
+
+.day31-docs {
+  color: var(--muted-bright) !important;
+}
+
+.day31-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.day31-link:hover {
+  color: var(--accent);
+}
+
+.day31-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day31-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 16px;
+}
+
+.day31-chip {
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 4px 9px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.day31-chip:hover {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day31-chip--cmd {
+  color: var(--accent);
+}
+
+.day31-log {
+  display: grid;
+  gap: 14px;
+  min-height: 140px;
+  background: var(--surface-deep);
+  padding: 14px 16px;
+  font-size: 12.5px;
+}
+
+.day31-log code,
+.day31-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+.day31-entry {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.day31-entry__cmd {
+  margin: 0;
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day31-entry__cmd span {
+  color: var(--accent);
+}
+
+.day31-entry__body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border-left: 1px solid var(--line-strong);
+  padding-left: 14px;
+}
+
+.day31-line {
+  min-width: 0;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.day31-line--muted,
+.day31-line--meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day31-line--error {
+  color: var(--error);
+}
+
+.day31-line--tool {
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day31-line--answer {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 14px;
+}
+
+.day31-line--answer > :last-child {
+  margin-bottom: 0;
+}
+
+.day31-tag {
+  margin-right: 6px;
+  border: 1px solid var(--info);
+  padding: 0 5px;
+  color: var(--info);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+}
+
+.day31-tag.is-bad {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.day31-fold summary {
+  color: var(--muted-bright);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.day31-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day31-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day31-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day31-fold summary em {
+  color: var(--ok);
+  font-style: normal;
+}
+
+.day31-fold pre,
+.day31-pre {
+  max-height: 360px;
+  margin: 6px 0 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 8px 10px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.day31-hits {
+  margin: 6px 0 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 11.5px;
+}
+
+.day31-hits li {
+  border-left: 2px solid var(--line-strong);
+  padding: 2px 8px;
+  color: var(--muted);
+}
+
+.day31-hits li b {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day31-hits li span {
+  float: right;
+  color: var(--muted);
+}
+
+.day31-hits li.is-cited {
+  border-left-color: var(--ok);
+  color: var(--text);
+}
+
+.day31-hits li.is-cited b {
+  color: var(--ok);
+}
+
+.day31-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.day31-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 14px;
+  margin: 0;
+}
+
+.day31-kv dt {
+  color: var(--muted);
+}
+
+.day31-kv dd {
+  margin: 0;
+}
+
+.day31-kv b {
+  color: var(--accent);
+}
+
+.day31-state {
+  display: inline-block;
+  min-width: 10ch;
+  color: var(--accent);
+}
+
+.day31-add,
+.day31-diff--add {
+  color: var(--ok);
+}
+
+.day31-del,
+.day31-diff--del {
+  color: var(--error);
+}
+
+.day31-diff--hunk {
+  color: var(--info);
+}
+
+.day31-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 10px 16px;
+}
+
+.day31-prompt__mark {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.day31-prompt input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 6px 0;
+  color: var(--text-bright);
+  font-size: 13px;
+}
+
+.day31-prompt input:focus {
+  outline: none;
+}
+
+.day31-prompt:focus-within {
+  background: var(--surface-soft);
+}
+
+@media (max-width: 720px) {
+  .day31-chain {
+    grid-template-columns: 1fr;
+  }
+}

@@ -115,7 +115,17 @@ RATES_SERVER = McpServer(
     env=("ADVENT_RATES_DB",),
 )
 
-OWN_SERVERS = (GITHUB_SERVER, RATES_SERVER)
+GIT_SERVER = McpServer(
+    key="git",
+    title="Git · наш сервер",
+    transport="stdio",
+    target=f"{shlex.quote(sys.executable)} -m advent.mcp.servers.git",
+    note="Свой MCP-сервер над репозиторием проекта: ветка, изменённые файлы, diff, история, список файлов. Только чтение.",
+    cwd=str(PROJECT_ROOT),
+    env=("ADVENT_GIT_ROOT",),
+)
+
+OWN_SERVERS = (GITHUB_SERVER, RATES_SERVER, GIT_SERVER)
 
 
 # Для дня 20: публичный сервер документации любого GitHub-репозитория. Своей

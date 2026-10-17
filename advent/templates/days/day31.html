@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}День 31. Ассистент разработчика · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day31.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 31</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>RAG · MCP · Developer assistant</span>
+    </div>
+    <h1>День 31.<br><span>Ассистент разработчика</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тридцать первого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Используйте RAG для подключения к документации вашего проекта:</p>
+      <ul class="homework-brief__steps">
+        <li>README</li>
+        <li>project/docs</li>
+        <li>схемы данных или API-описания</li>
+      </ul>
+      <p class="homework-brief__lead">Через MCP подключите ассистента к проекту:</p>
+      <ul class="homework-brief__steps">
+        <li>минимум — получение текущей git-ветки</li>
+        <li>по желанию — список файлов или diff</li>
+      </ul>
+      <p class="homework-brief__lead">Реализуйте команду:</p>
+      <ul class="homework-brief__steps">
+        <li>/help — ассистент отвечает на вопросы о проекте</li>
+        <li>использует документацию и контекст проекта</li>
+      </ul>
+      <p class="homework-brief__lead">Минимальный результат:</p>
+      <ul class="homework-brief__steps">
+        <li>README + папка docs в RAG</li>
+        <li>MCP — хотя бы git branch</li>
+        <li>/help отвечает на вопросы о структуре проекта</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Ассистент разработчика, понимающий проект.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day31-lab" aria-labelledby="day31-lab-title">
+    <div class="day31-lab__intro">
+      <p class="day31-kicker">Практика</p>
+      <h2 id="day31-lab-title">Ассистент, который знает наш проект</h2>
+      <p>Неделя 8 — последняя: собираем всё, что умеем, в рабочие инструменты. Первый — ассистент разработчика для этого же проекта. RAG знает README, docs и код — это индекс дня 21. MCP-сервер видит git: текущую ветку, изменённые файлы, diff. Команда <code>/help</code> отвечает на вопросы о проекте с источниками и с учётом того, над чем идёт работа прямо сейчас.</p>
+    </div>
+
+    <blockquote class="day31-curator">
+      <p>Под проектом подразумевается любой проект с документацией. На этой неделе мы учимся гонять наш сетап и всё, что мы умеем, в более-менее реальных условиях.</p>
+      <p>Отступление от задания тут норм, главное соединить RAG и MCP и дать юзерам команды подёргать.</p>
+      <p>RAG для документации, MCP для гита, ядро — агент.</p>
+      <cite>Алексей Гладков, 13 и 16.10 — что считать проектом и как устроить ассистента</cite>
+    </blockquote>
+
+    <ol class="day31-rules">
+      <li class="day31-rule">
+        <span class="day31-rule__rank">01</span>
+        <h3>RAG по документации</h3>
+        <p>README, docs и код проекта — индекс дня 21 с векторами bge-m3. Ответ опирается на найденные куски и цитирует их.</p>
+        <p class="day31-rule__formula">README · docs · код</p>
+      </li>
+      <li class="day31-rule">
+        <span class="day31-rule__rank">02</span>
+        <h3>MCP для git</h3>
+        <p>Свой MCP-сервер над репозиторием: текущая ветка, изменённые файлы, diff. Ассистент видит, над чем идёт работа сейчас.</p>
+        <p class="day31-rule__formula">git branch · status · diff</p>
+      </li>
+      <li class="day31-rule">
+        <span class="day31-rule__rank">03</span>
+        <h3>Ядро — агент</h3>
+        <p>Агент сам решает, что ему нужно: поискать в документации, спросить git или и то и другое — и собирает ответ.</p>
+        <p class="day31-rule__formula">агент = RAG + MCP</p>
+      </li>
+      <li class="day31-rule">
+        <span class="day31-rule__rank">04</span>
+        <h3>Команды</h3>
+        <p><code>/help</code> — вопрос о проекте и его структуре. Короткие команды — ветка и изменения без модели, прямо из git.</p>
+        <p class="day31-rule__formula">/help · /branch · /diff</p>
+      </li>
+    </ol>
+
+    <section class="day31-panel" aria-labelledby="day31-chain-title">
+      <header class="day31-panel__head">
+        <h3 id="day31-chain-title">Ассистент · из чего собран</h3>
+        <span class="day31-panel__meta">поиск top-{{ top_k }} · нарезка structure · ответ {{ model }}</span>
+      </header>
+      <ol class="day31-chain">
+        <li class="{{ 'is-ok' if state.ready else 'is-bad' }}" data-index-card>
+          <span class="day31-chain__step">1 · RAG</span>
+          <strong>индекс проекта · bge-m3</strong>
+          <small data-index-state>{% if state.ready %}{{ state.chunks }} кусков · {{ state.documents }} файлов: документация, {{ state.code }} модулей кода, {{ state.pages }} страниц{% else %}{{ state.reason }}{% endif %}</small>
+          {% if state.ready %}<small class="day31-docs" data-index-docs>{{ state.docs | join(" · ") }}</small>{% endif %}
+          <button class="day31-btn" type="button" data-rebuild>{{ "Пересобрать индекс" if state.ready else "Собрать индекс" }}</button>
+        </li>
+        <li class="is-ok">
+          <span class="day31-chain__step">2 · MCP</span>
+          <strong>{{ server.title }}</strong>
+          <small>stdio · git_branch · git_status · git_diff · git_log · list_files — только чтение</small>
+        </li>
+        <li class="is-ok">
+          <span class="day31-chain__step">3 · агент</span>
+          <strong>{{ model }} · DeepSeek</strong>
+          <small>видит куски документации и сам решает, звать ли git</small>
+        </li>
+      </ol>
+    </section>
+
+    <section class="day31-panel" aria-labelledby="day31-term-title">
+      <header class="day31-panel__head">
+        <h3 id="day31-term-title">Терминал ассистента</h3>
+        <button class="day31-link" type="button" data-clear>очистить</button>
+      </header>
+      <div class="day31-chips" aria-label="Команды и примеры">
+        <button type="button" class="day31-chip day31-chip--cmd" data-run="/help">/help</button>
+        {% for item in commands %}
+          <button type="button" class="day31-chip day31-chip--cmd" data-run="{{ item.name }}" title="{{ item.title }}">{{ item.name }}</button>
+        {% endfor %}
+        {% for example in examples %}
+          <button type="button" class="day31-chip" data-fill="/help {{ example }}">{{ example }}</button>
+        {% endfor %}
+      </div>
+      <div class="day31-log" data-log aria-live="polite">
+        <p class="day31-muted" data-log-empty>Напишите <code>/help</code> и вопрос о проекте или выберите пример выше. <code>/branch</code>, <code>/files</code>, <code>/diff</code>, <code>/log</code> отвечают прямо из git, без модели.</p>
+      </div>
+      <form class="day31-prompt" data-prompt>
+        <label class="sr-only" for="day31-input">Команда</label>
+        <span class="day31-prompt__mark" aria-hidden="true">&gt;</span>
+        <input id="day31-input" name="command" autocomplete="off" spellcheck="false" maxlength="510" placeholder="/help как устроен проект?">
+        <button class="day31-btn day31-btn--go" type="submit">Выполнить</button>
+      </form>
+    </section>
+
+    <script id="day31-initial" type="application/json">{{ {"commands": commands, "examples": examples, "ready": state.ready} | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day31.js') }}"></script>
+{% endblock %}
