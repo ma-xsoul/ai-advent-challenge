@@ -267,6 +267,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=33,
+        title="Ассистент поддержки",
+        description="FAQ в RAG, CRM через MCP, тикеты",
+        endpoint="day33.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

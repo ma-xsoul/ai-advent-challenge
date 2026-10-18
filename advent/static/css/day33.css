@@ -1,0 +1,639 @@
+/* День 33: ассистент поддержки пользователей. */
+
+.day33-lab {
+  margin-top: 36px;
+}
+
+.day33-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day33-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day33-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day33-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day33-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day33-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day33-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day33-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day33-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day33-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day33-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day33-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day33-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day33-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day33-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day33-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day33-rule__formula::before {
+  content: "> ";
+}
+
+.day33-curator p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .day33-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day33-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Практика: панели, кнопки, таблицы ──────────────────────────────── */
+
+.day33-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day33-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day33-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day33-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day33-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day33-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day33-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day33-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day33-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day33-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day33-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day33-table th,
+.day33-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day33-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+/* ── Цепочка: модель → сервис → интернет ──────────────────────────── */
+
+.day33-chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+}
+
+.day33-chain li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.day33-chain li.is-ok {
+  border-left-color: var(--ok);
+}
+
+.day33-chain li.is-bad {
+  border-left-color: var(--error);
+}
+
+.day33-chain__step {
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day33-chain strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day33-chain small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day33-chain a {
+  color: var(--text-bright);
+}
+
+/* ── День 33: тикеты, карточка клиента, чат ───────────────────────── */
+
+.day33-panel {
+  margin-top: 14px;
+}
+
+.day33-link {
+  margin-left: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.day33-link:hover {
+  color: var(--accent);
+}
+
+.day33-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day33-label {
+  margin: 0 0 8px;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day33-lab .day33-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day33-desk {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.32fr) minmax(0, 1fr);
+}
+
+.day33-tickets {
+  border-right: 1px solid var(--line);
+  padding: 12px;
+}
+
+.day33-tickets ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day33-ticket {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+}
+
+.day33-ticket:hover {
+  border-color: var(--line-strong);
+}
+
+.day33-ticket.is-active {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.day33-ticket__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.day33-ticket__top b {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day33-ticket__subject {
+  color: var(--text-bright);
+}
+
+.day33-ticket__client {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.day33-status {
+  font-size: 10.5px;
+  font-style: normal;
+  letter-spacing: 0.06em;
+}
+
+.day33-status--open { color: var(--accent); }
+.day33-status--answered { color: var(--ok); }
+.day33-status--closed { color: var(--muted); }
+
+.day33-case {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 16px 16px;
+}
+
+.day33-case__head h4 {
+  margin: 0 0 2px;
+  color: var(--text-bright);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.day33-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 3px 14px;
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.day33-kv dt {
+  color: var(--muted);
+}
+
+.day33-kv dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.day33-kv b {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day33-key--revoked,
+.day33-key--expired {
+  color: var(--error) !important;
+}
+
+.day33-key--active {
+  color: var(--ok) !important;
+}
+
+.day33-fold summary {
+  color: var(--muted-bright);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.day33-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day33-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day33-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day33-events,
+.day33-thread {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+}
+
+.day33-events li {
+  color: var(--muted-bright);
+}
+
+.day33-events li span {
+  color: var(--muted);
+}
+
+.day33-events li b {
+  color: var(--ok);
+  font-weight: 500;
+}
+
+.day33-events li.is-bad b {
+  color: var(--error);
+}
+
+.day33-thread li {
+  border-left: 2px solid var(--line-strong);
+  padding: 4px 10px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.day33-thread li span {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.day33-thread__support {
+  border-left-color: var(--ok) !important;
+}
+
+.day33-chat {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.day33-chat__log {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.day33-msg {
+  min-width: 0;
+  border: 1px solid var(--line);
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day33-msg--client {
+  justify-self: end;
+  max-width: 85%;
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  color: var(--text-bright);
+  white-space: pre-wrap;
+}
+
+.day33-msg--assistant {
+  background: var(--surface-deep);
+}
+
+.day33-msg .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.day33-msg__actions {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.day33-tool {
+  color: var(--muted-bright);
+  font-size: 11.5px;
+}
+
+.day33-tool span {
+  margin-right: 6px;
+  border: 1px solid var(--info);
+  padding: 0 5px;
+  color: var(--info);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.day33-tool.is-bad span {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.day33-sources ol {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+}
+
+.day33-sources li {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 8px;
+  color: var(--muted);
+}
+
+.day33-sources li.is-cited {
+  border-left-color: var(--ok);
+  color: var(--text);
+}
+
+.day33-sources li b {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+.day33-chat__form {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.day33-chat__form textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 10px;
+  color: var(--text-bright);
+  font-size: 12.5px;
+}
+
+.day33-chat__form textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day33-error[hidden] {
+  display: none;
+}
+
+.day33-chat .day33-error {
+  margin: 10px 0 0;
+}
+
+@media (max-width: 900px) {
+  .day33-desk {
+    grid-template-columns: 1fr;
+  }
+
+  .day33-tickets {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}

@@ -73,6 +73,7 @@
 | `github` | `search_repositories(query, …)`, `get_repository(owner, repo)`, `list_user_repositories(user, …)`, `compare_repositories(full_names)`, `save_report(…)` |
 | `rates` | `collect_rate()`, `rate_summary(minutes)`, `rate_history(minutes, limit)` |
 | `git` | `git_branch()`, `git_status()`, `git_diff(scope=working\|branch, path)`, `git_log(limit, path)`, `list_files(path, pattern, limit)` |
+| `crm` | `list_tickets(status)`, `get_ticket(ticket_id)`, `get_client(client)`, `client_events(client, limit)`, `service_status()`, `reply_to_ticket(ticket_id, text, status)` |
 
 ## Форматы файлов в `data/`
 

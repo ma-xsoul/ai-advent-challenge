@@ -3689,6 +3689,29 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_thirty_three_renders_the_support_assistant_homework(self):
+        response = self.client.get("/days/33/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 33.", html)
+        self.assertIn("Ассистент поддержки пользователей", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Сделайте мини-сервис для поддержки пользователей", html)
+        self.assertIn("использовать RAG (FAQ, документация)", html)
+        self.assertIn("учитывать контекст пользователя или тикета", html)
+        self.assertIn("или JSON с пользователями / тикетами", html)
+        self.assertIn("«Почему не работает авторизация?»", html)
+        self.assertIn("AI-ассистент для поддержки пользователей", html)
+        self.assertIn("Типа своей CRM", html)
+        self.assertEqual(html.count('class="day33-rule"'), 4)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day33.css", html)
+        self.assertIn('href="/days/33/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_day_thirty_two_renders_the_code_review_homework(self):
         response = self.client.get("/days/32/")
         html = response.get_data(as_text=True)

@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}День 33. Ассистент поддержки пользователей · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day33.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 33</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Support · RAG · CRM via MCP</span>
+    </div>
+    <h1>День 33.<br><span>Ассистент поддержки пользователей</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тридцать третьего дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Сделайте мини-сервис для поддержки пользователей.</p>
+      <p class="homework-brief__lead">Ассистент должен:</p>
+      <ul class="homework-brief__steps">
+        <li>отвечать на вопросы о продукте</li>
+        <li>использовать RAG (FAQ, документация)</li>
+        <li>учитывать контекст пользователя или тикета</li>
+      </ul>
+      <p class="homework-brief__lead">Через MCP:</p>
+      <ul class="homework-brief__steps">
+        <li>подключите CRM</li>
+        <li>или JSON с пользователями / тикетами</li>
+      </ul>
+      <p class="homework-brief__lead">Пример:</p>
+      <ul class="homework-brief__steps">
+        <li>«Почему не работает авторизация?»</li>
+        <li>ассистент отвечает с учётом данных тикета</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>AI-ассистент для поддержки пользователей.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day33-lab" aria-labelledby="day33-lab-title">
+    <div class="day33-lab__intro">
+      <p class="day33-kicker">Практика</p>
+      <h2 id="day33-lab-title">Поддержка нашего же сервиса</h2>
+      <p>Продукт берём свой — приватный AI-сервис дня 30. Вопросы к поддержке у него настоящие: ключ не подходит, сервис отвечает 429 или 413, запрос висит в очереди, адрес из интернета не открывается. Ассистент отвечает по FAQ и документации сервиса (RAG), а через MCP заглядывает в CRM: кто пишет, какой у него ключ и тариф, что уже написано в тикете. Поэтому на один и тот же вопрос «почему не работает доступ?» разные клиенты получают разные ответы.</p>
+    </div>
+
+    <blockquote class="day33-curator">
+      <p>Нужно развернуть условно AI-first сервис. На коленке. Типа своей CRM.</p>
+      <p>Тут не особо принципиально, но раз мы делаем ИИ, то чат логичнее выглядит.</p>
+      <p>Доменная область и решение конкретной проблемы и создание рабочего чего-то имеет радикальное значение. MCP и RAG, вероятно, будут уметь многие. А вот сделать из этого рабочий продукт — это прям отдельная задача.</p>
+      <cite>Алексей Гладков, 14.10 — каким должен быть ассистент поддержки и зачем эта неделя продуктовая</cite>
+    </blockquote>
+
+    <ol class="day33-rules">
+      <li class="day33-rule">
+        <span class="day33-rule__rank">01</span>
+        <h3>Продукт и FAQ</h3>
+        <p>FAQ и документация приватного сервиса: ключи, лимиты, очередь, коды ошибок, доступ из интернета. Всё это — база RAG ассистента.</p>
+        <p class="day33-rule__formula">FAQ · docs → RAG</p>
+      </li>
+      <li class="day33-rule">
+        <span class="day33-rule__rank">02</span>
+        <h3>CRM через MCP</h3>
+        <p>Свой MCP-сервер над JSON: клиенты, их ключи и тарифы, тикеты с перепиской. Ассистент сам решает, что ему нужно посмотреть.</p>
+        <p class="day33-rule__formula">клиент · тикет → MCP</p>
+      </li>
+      <li class="day33-rule">
+        <span class="day33-rule__rank">03</span>
+        <h3>Контекст тикета</h3>
+        <p>Ответ учитывает, кто спрашивает и что с ним происходит: отозванный ключ, исчерпанный лимит или длинный диалог — у каждого своя причина.</p>
+        <p class="day33-rule__formula">вопрос + тикет + FAQ</p>
+      </li>
+      <li class="day33-rule">
+        <span class="day33-rule__rank">04</span>
+        <h3>Чат поддержки</h3>
+        <p>Мини-сервис: выбрал тикет — переписка с ассистентом. Ответ со ссылками на FAQ и с тем, что ассистент увидел в CRM.</p>
+        <p class="day33-rule__formula">тикет → чат → ответ</p>
+      </li>
+    </ol>
+
+    <section class="day33-panel" aria-labelledby="day33-desk-title">
+      <header class="day33-panel__head">
+        <h3 id="day33-desk-title">Поддержка · {{ service.name }}</h3>
+        <span class="day33-panel__meta">RAG: {{ docs | join(", ") }} · MCP: {{ server.title }} · {{ model }} <button class="day33-link" type="button" data-crm-reset>сбросить CRM</button></span>
+      </header>
+      <div class="day33-desk">
+        <nav class="day33-tickets" aria-label="Тикеты">
+          <p class="day33-label">Тикеты</p>
+          <ol data-tickets>
+            {% for item in tickets %}
+              <li><button type="button" class="day33-ticket{% if loop.first %} is-active{% endif %}" data-ticket="{{ item.id }}">
+                <span class="day33-ticket__top"><b>{{ item.id }}</b> <em class="day33-status day33-status--{{ item.status }}">{{ item.status }}</em></span>
+                <span class="day33-ticket__subject">{{ item.subject }}</span>
+                <span class="day33-ticket__client">{{ item.client_name }}</span>
+              </button></li>
+            {% endfor %}
+          </ol>
+        </nav>
+
+        <div class="day33-case" data-case>
+          <header class="day33-case__head">
+            <h4 data-subject>—</h4>
+            <p class="day33-muted" data-ticket-meta></p>
+          </header>
+          <div class="day33-client" data-client></div>
+          <details class="day33-fold">
+            <summary>Журнал запросов клиента <span data-events-summary></span></summary>
+            <ol class="day33-events" data-events></ol>
+          </details>
+          <details class="day33-fold" open>
+            <summary>Переписка в тикете</summary>
+            <ol class="day33-thread" data-thread></ol>
+          </details>
+
+          <div class="day33-chat">
+            <p class="day33-label">Ассистент поддержки <button class="day33-link" type="button" data-chat-reset>новый диалог</button></p>
+            <div class="day33-chat__log" data-chat aria-live="polite"></div>
+            <form class="day33-chat__form" data-chat-form>
+              <label class="sr-only" for="day33-message">Сообщение клиента</label>
+              <textarea id="day33-message" name="message" rows="2" maxlength="1000" placeholder="Сообщение клиента"></textarea>
+              <button class="day33-btn day33-btn--go" type="submit">Спросить ассистента</button>
+            </form>
+            <p class="day33-error" data-error role="alert" hidden></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <script id="day33-initial" type="application/json">{{ {"first": tickets[0].id if tickets else None} | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day33.js') }}"></script>
+{% endblock %}

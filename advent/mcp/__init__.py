@@ -1,6 +1,7 @@
 """MCP: клиент на официальном SDK (день 16), свои серверы (день 17+) и вызов инструмента без модели (день 18)."""
 
 from .client import (
+    CRM_SERVER,
     GIT_SERVER,
     GITHUB_SERVER,
     GITMCP_SERVER,
@@ -19,6 +20,7 @@ from .client import (
 )
 
 __all__ = [
+    "CRM_SERVER",
     "GIT_SERVER",
     "GITHUB_SERVER",
     "GITMCP_SERVER",
