@@ -52,6 +52,7 @@ PER_QUERY = 3
 SOURCES = 8
 DOC_SOURCES = 2
 MARKER = "<!-- ai-review -->"
+MAX_TOKENS = 6000
 
 # Чем ниже — тем раньше файл попадает в бюджет.
 PRIORITY = (
@@ -76,6 +77,7 @@ SYSTEM_PROMPT = """Ты — строгий ревьюер кода проект�
 - Каждый пункт привязан к месту: file — путь, line — номер строки из пронумерованного файла (или 0, если про файл целиком).
 - Пиши по-русски, конкретно: что не так, почему это плохо, как исправить. Без общих советов и без похвалы.
 - Не выдумывай проблем: если в разделе нечего сказать — пустой список. Лучше три настоящих пункта, чем десять натянутых.
+- В каждом разделе не больше 5 самых важных пунктов; why и fix — по одному-два предложения.
 - Если пункт опирается на документацию или соседний код — укажи номера фрагментов в sources.
 - severity: high — сломает работу или безопасность, medium — заметный риск, low — мелочь.
 - Файлы из списка «не вошли в ревью» существуют, ты их просто не видишь: не делай выводов об их содержимом или отсутствии (например, «нет тестов»).
@@ -344,7 +346,7 @@ def generate(review: ReviewInput, sources: list[dict[str, Any]], transport: Tran
         "model": model,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt(review, sources)}],
         "temperature": 0.2,
-        "max_tokens": 4000,
+        "max_tokens": MAX_TOKENS,
         "thinking": {"type": "disabled"},
         "stream": False,
         "response_format": {"type": "json_object"},
@@ -357,6 +359,8 @@ def generate(review: ReviewInput, sources: list[dict[str, Any]], transport: Tran
     try:
         data = json.loads(text[text.find("{"): text.rfind("}") + 1])
     except ValueError as error:
+        if choices[0].get("finish_reason") == "length":
+            raise ReviewError(f"Ответ модели обрезан лимитом {MAX_TOKENS} токенов — JSON не дописан") from error
         raise ReviewError(f"Модель вернула не JSON: {text[:200]}") from error
     usage = response.get("usage") or {}
     return {

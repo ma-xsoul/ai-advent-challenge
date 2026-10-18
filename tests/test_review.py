@@ -134,6 +134,11 @@ class ReviewCoreTest(unittest.TestCase):
         self.assertIn("[1] README.md", payload["messages"][1]["content"])
         with self.assertRaisesRegex(ReviewError, "не JSON"):
             generate(review, [], Model("извините"))
+        cut = Model('{"summary": "PR добавляет', )
+        cut.send = lambda payload: {"choices": [{"finish_reason": "length", "message": {"content": '{"summary": "PR добавляет'}}], "usage": {}}
+        with self.assertRaisesRegex(ReviewError, "обрезан лимитом"):
+            generate(review, [], cut)
+        self.assertIn("не больше 5 самых важных пунктов", model.payloads[0]["messages"][0]["content"])
 
     def test_run_emits_steps_and_markdown_has_sections_and_links(self):
         events = []
