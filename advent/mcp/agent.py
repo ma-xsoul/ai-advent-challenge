@@ -63,6 +63,10 @@ MAX_ROUNDS = 4
 RESULT_CHARS = 6000
 PREVIEW_CHARS = 1500
 
+# Последний круг: инструменты запрещены, и модели прямо говорится, что пора
+# отвечать. Без этого она иногда отвечает пустотой — хотела вызвать ещё.
+FINAL_ROUND = "Вызовы инструментов кончились. Ответь сейчас — по тем данным, что уже собраны; чего не успел проверить — так и скажи."
+
 # «сервер__инструмент» — так модель видит инструменты нескольких серверов.
 ROUTE_SEPARATOR = "__"
 
@@ -353,7 +357,8 @@ async def _loop(
 ) -> None:
     for round_number in range(1, max_rounds + 1):
         last = round_number == max_rounds
-        payload = _payload(config, system, dialog.messages, specs, tool_choice="none" if last else "auto")
+        messages = dialog.messages + ([{"role": "user", "content": FINAL_ROUND}] if last and round_number > 1 else [])
+        payload = _payload(config, system, messages, specs, tool_choice="none" if last else "auto")
         response = await anyio.to_thread.run_sync(transport.send, payload)
         message, finish_reason, usage = _parse(response)
         stats["llm_calls"] += 1

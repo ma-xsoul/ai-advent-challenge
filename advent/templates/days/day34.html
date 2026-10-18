@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}День 34. Ассистент для работы с файлами · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day34.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 34</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Files · MCP tools · Diff</span>
+    </div>
+    <h1>День 34.<br><span>Ассистент для работы с файлами проекта</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тридцать четвёртого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Сделайте ассистента, который активно работает с файлами, а не просто отвечает текстом.</p>
+      <p class="homework-brief__lead">Через MCP или доступный вам tooling ассистент должен уметь:</p>
+      <ul class="homework-brief__steps">
+        <li>читать файлы проекта</li>
+        <li>искать информацию по нескольким файлам</li>
+        <li>анализировать содержимое</li>
+        <li>создавать или изменять файлы</li>
+      </ul>
+      <p class="homework-brief__lead">Примеры сценариев (реализуйте минимум 2):</p>
+      <ul class="homework-brief__steps">
+        <li>найти все места, где используется определённый компонент / API</li>
+        <li>обновить документацию на основе изменений в коде</li>
+        <li>сгенерировать новый файл (README / ADR / changelog)</li>
+        <li>проверить соответствие файлов правилам или инвариантам</li>
+        <li>подготовить diff или список изменений</li>
+      </ul>
+      <p class="homework-brief__lead">Важно:</p>
+      <ul class="homework-brief__steps">
+        <li>ассистент сам инициирует работу с файлами</li>
+        <li>вы задаёте задачу на уровне цели, а не “открой файл X”</li>
+      </ul>
+      <p class="homework-brief__lead">Минимальный результат:</p>
+      <ul class="homework-brief__steps">
+        <li>ассистент работает минимум с 2–3 файлами</li>
+        <li>изменения сохраняются или выводятся как diff</li>
+        <li>результат можно воспроизвести повторно</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>AI-ассистент, который выполняет реальные операции с файлами проекта.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day34-lab" aria-labelledby="day34-lab-title">
+    <div class="day34-lab__intro">
+      <p class="day34-kicker">Практика</p>
+      <h2 id="day34-lab-title">Не отвечает, а делает</h2>
+      <p>До сих пор ассистенты отвечали текстом. Сегодняшний сам работает с файлами проекта: вы ставите цель — «найди, где используется <code>ndjson_stream</code>», «проверь, что у каждого дня есть всё нужное», «обнови документацию под новый код», — а он сам ищет по файлам, открывает нужные, разбирается и готовит изменения. Вслепую ничего не пишется: страница показывает diff, применяете кнопкой.</p>
+    </div>
+
+    <blockquote class="day34-curator">
+      <p>Вообще вся эта неделя нужна для того, чтобы пособирать разные решения. Эта неделя она более продуктовая.</p>
+      <p>Ну типа подумайте, куда это можно применить. Вот эти ваши знания. Пособирайте пайпы.</p>
+      <cite>Алексей Гладков, 14.10 — зачем нужна последняя неделя челленджа</cite>
+    </blockquote>
+
+    <ol class="day34-rules">
+      <li class="day34-rule">
+        <span class="day34-rule__rank">01</span>
+        <h3>Инструменты для файлов</h3>
+        <p>Свой MCP-сервер над файлами проекта: список, поиск по нескольким файлам, чтение кусками, запись. Какие файлы открыть — решает ассистент.</p>
+        <p class="day34-rule__formula">list · search · read · write</p>
+      </li>
+      <li class="day34-rule">
+        <span class="day34-rule__rank">02</span>
+        <h3>Задача на уровне цели</h3>
+        <p>Вы пишете, что нужно получить, а не какой файл открыть. Ассистент сам строит план: где искать, что прочитать, что сравнить.</p>
+        <p class="day34-rule__formula">цель → поиск → файлы</p>
+      </li>
+      <li class="day34-rule">
+        <span class="day34-rule__rank">03</span>
+        <h3>Изменения как diff</h3>
+        <p>Правки сначала копятся как черновик и показываются diff'ом. Применить или выбросить — решает человек. Ту же задачу можно запустить снова и сравнить.</p>
+        <p class="day34-rule__formula">черновик → diff → применить</p>
+      </li>
+      <li class="day34-rule">
+        <span class="day34-rule__rank">04</span>
+        <h3>Сценарии</h3>
+        <p>Найти все использования API, проверить файлы на правила проекта, обновить документацию или собрать changelog — по одной кнопке на сценарий.</p>
+        <p class="day34-rule__formula">найти · проверить · сгенерировать</p>
+      </li>
+    </ol>
+
+    <section class="day34-panel" aria-labelledby="day34-goal-title">
+      <header class="day34-panel__head">
+        <h3 id="day34-goal-title">Цель · ассистент сам работает с файлами</h3>
+        <span class="day34-panel__meta">MCP: {{ server.title }} · {{ model }} · запись — только docs/*.md и .md в корне, в черновик</span>
+      </header>
+      <div class="day34-scenarios">
+        {% for item in scenarios %}
+          <button type="button" class="day34-scenario" data-goal="{{ item.goal }}"><b>{{ loop.index }}</b> {{ item.title }}</button>
+        {% endfor %}
+      </div>
+      <form class="day34-goal" data-goal-form>
+        <label class="sr-only" for="day34-goal">Цель</label>
+        <textarea id="day34-goal" name="goal" rows="3" maxlength="1500" placeholder="Например: найди все места, где используется ndjson_stream"></textarea>
+        <button class="day34-btn day34-btn--go" type="submit">[▶] Выполнить</button>
+      </form>
+      <p class="day34-error" data-error role="alert" hidden></p>
+
+      <div class="day34-work" data-work hidden>
+        <div class="day34-trace">
+          <p class="day34-label">След работы <span class="day34-muted" data-trace-meta></span></p>
+          <ol class="day34-calls" data-calls></ol>
+        </div>
+        <div class="day34-report">
+          <p class="day34-label">Отчёт</p>
+          <div class="day34-answer markdown-body" data-answer><p class="day34-muted">ассистент работает…</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="day34-panel" aria-labelledby="day34-changes-title">
+      <header class="day34-panel__head">
+        <h3 id="day34-changes-title">Изменения · черновик</h3>
+        <span class="day34-actions">
+          <button class="day34-btn day34-btn--go" type="button" data-apply {% if not changes %}disabled{% endif %}>Применить всё</button>
+          <button class="day34-btn" type="button" data-discard {% if not changes %}disabled{% endif %}>Выбросить</button>
+        </span>
+      </header>
+      <div class="day34-changes" data-changes>
+        {% if not changes %}<p class="day34-muted">Черновик пуст. Изменения появятся, если цель просит создать или поправить файл.</p>{% endif %}
+      </div>
+    </section>
+
+    <section class="day34-panel" aria-labelledby="day34-runs-title">
+      <header class="day34-panel__head">
+        <h3 id="day34-runs-title">Прогоны · повторить и сравнить</h3>
+        <span class="day34-panel__meta">data/day34/runs.json · последние 8</span>
+      </header>
+      <ol class="day34-runs" data-runs></ol>
+    </section>
+
+    <script id="day34-initial" type="application/json">{{ {"runs": runs, "changes": changes} | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day34.js') }}"></script>
+{% endblock %}

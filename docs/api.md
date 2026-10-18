@@ -23,6 +23,7 @@
 | 26–29 | `POST /days/<N>/api/ask`, `POST /days/<N>/api/compare`, `GET /days/<N>/api/runs` | локальная модель: запросы, RAG, оптимизация, прогоны |
 | 30 | `GET /days/30/api/status`, `POST /days/30/api/keys`, `DELETE /days/30/api/keys/<имя>`, `POST /days/30/api/load` | пульт приватного сервиса |
 | 31 | `POST /days/31/api/help`, `POST /days/31/api/command`, `POST /days/31/api/index` | ассистент разработчика |
+| 34 | `POST /days/34/api/run`, `GET /days/34/api/changes`, `POST /days/34/api/changes/apply`, `POST /days/34/api/changes/discard`, `GET /days/34/api/runs`, `GET /days/34/api/runs/<run_id>` | ассистент по файлам проекта: цель, черновик правок, прогоны |
 
 ### День 31: ассистент разработчика
 
@@ -37,6 +38,29 @@
 
 `POST /days/31/api/command` — `{"command": "/branch"}`, `/files`, `/diff`
 или `/log`: ответ прямо из MCP-сервера git, без модели.
+
+### День 34: файлы проекта
+
+`POST /days/34/api/run` — `{"goal": "Обнови docs/api.md под код дня 34"}`.
+Цель не пустая и не длиннее 1500 символов (`MAX_GOAL`), иначе 400
+`{"error": "Напишите цель"}` / `{"error": "Цель длиннее 1500 символов"}`.
+Ответ — поток `application/x-ndjson`; событие `run` отдаётся кратко
+(`id`, `started_at`, `goal`, `changes`, `stats`, `files_read`) и
+сохраняется в `data/day34/runs.json`.
+
+`GET /days/34/api/changes` — `{"files": [...]}`: что лежит в черновике
+(`data/day34/draft`), с полями `path`, `new`, `added`, `removed`, `diff`.
+
+`POST /days/34/api/changes/apply` — `{"paths": ["docs/api.md"]}` или пустое
+тело (тогда применяется весь черновик). `paths` — список строк, иначе 400
+`{"error": "paths — список путей"}`; ошибка пути — 400 с текстом ошибки.
+Ответ: `{"applied": [...], "files": [...]}`.
+
+`POST /days/34/api/changes/discard` — `{"discarded": <сколько файлов>, "files": []}`.
+
+`GET /days/34/api/runs` — список прогонов, новые первыми, в кратком виде.
+`GET /days/34/api/runs/<run_id>` — прогон целиком; если такого нет — 404
+`{"error": "Такого прогона нет"}`.
 
 ## Приватный сервис (день 30)
 
@@ -74,6 +98,14 @@
 | `rates` | `collect_rate()`, `rate_summary(minutes)`, `rate_history(minutes, limit)` |
 | `git` | `git_branch()`, `git_status()`, `git_diff(scope=working\|branch, path)`, `git_log(limit, path)`, `list_files(path, pattern, limit)` |
 | `crm` | `list_tickets(status)`, `get_ticket(ticket_id)`, `get_client(client)`, `client_events(client, limit)`, `service_status()`, `reply_to_ticket(ticket_id, text, status)` |
+| `files` | `list_files(path, pattern, limit)`, `search(query, path, glob, regex, limit)`, `read_file(path, start, end)`, `write_file(path, content)`, `edit_file(path, old, new)`, `draft_diff()` |
+
+`files` (`advent/mcp/servers/files.py`, имя сервера `advent-files`, версия 34,
+запуск `python -m advent.mcp.servers.files`, stdio) видит только текстовые
+файлы; `.git`, `data/`, `.venv`, `.env` и служебные папки скрыты. Правки
+`write_file` и `edit_file` идут в черновик `data/day34/draft`, а не в проект;
+писать можно только в `docs/*.md` и `.md` в корне. Корень — `ADVENT_FILES_ROOT`,
+черновик — `ADVENT_FILES_DRAFT`.
 
 ## Форматы файлов в `data/`
 

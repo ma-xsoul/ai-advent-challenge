@@ -3689,6 +3689,31 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_thirty_four_renders_the_files_assistant_homework(self):
+        response = self.client.get("/days/34/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 34.", html)
+        self.assertIn("Ассистент для работы с файлами проекта", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Сделайте ассистента, который активно работает с файлами", html)
+        self.assertIn("искать информацию по нескольким файлам", html)
+        self.assertIn("создавать или изменять файлы", html)
+        self.assertIn("проверить соответствие файлов правилам или инвариантам", html)
+        self.assertIn("ассистент сам инициирует работу с файлами", html)
+        self.assertIn("изменения сохраняются или выводятся как diff", html)
+        self.assertIn("результат можно воспроизвести повторно", html)
+        self.assertIn("AI-ассистент, который выполняет реальные операции с файлами проекта", html)
+        self.assertIn("Пособирайте пайпы", html)
+        self.assertEqual(html.count('class="day34-rule"'), 4)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day34.css", html)
+        self.assertIn('href="/days/34/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_day_thirty_three_renders_the_support_assistant_homework(self):
         response = self.client.get("/days/33/")
         html = response.get_data(as_text=True)

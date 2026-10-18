@@ -275,6 +275,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=34,
+        title="Ассистент для работы с файлами",
+        description="Читает, ищет, меняет — diff",
+        endpoint="day34.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

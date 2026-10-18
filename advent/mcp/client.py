@@ -135,7 +135,17 @@ CRM_SERVER = McpServer(
     env=("ADVENT_CRM_PATH",),
 )
 
-OWN_SERVERS = (GITHUB_SERVER, RATES_SERVER, GIT_SERVER, CRM_SERVER)
+FILES_SERVER = McpServer(
+    key="files",
+    title="Файлы проекта · наш сервер",
+    transport="stdio",
+    target=f"{shlex.quote(sys.executable)} -m advent.mcp.servers.files",
+    note="Свой MCP-сервер над файлами проекта: список, поиск, чтение; запись и правка — в черновик, только docs и .md в корне.",
+    cwd=str(PROJECT_ROOT),
+    env=("ADVENT_FILES_ROOT", "ADVENT_FILES_DRAFT"),
+)
+
+OWN_SERVERS = (GITHUB_SERVER, RATES_SERVER, GIT_SERVER, CRM_SERVER, FILES_SERVER)
 
 
 # Для дня 20: публичный сервер документации любого GitHub-репозитория. Своей
