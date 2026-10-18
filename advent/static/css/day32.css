@@ -1,0 +1,602 @@
+/* День 32: автоматизация ревью кода. */
+
+.day32-lab {
+  margin-top: 36px;
+}
+
+.day32-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day32-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day32-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day32-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day32-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day32-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day32-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day32-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day32-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day32-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day32-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day32-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day32-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day32-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day32-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day32-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day32-rule__formula::before {
+  content: "> ";
+}
+
+.day32-curator p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .day32-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day32-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Практика: панели, кнопки, таблицы ──────────────────────────────── */
+
+.day32-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day32-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day32-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day32-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day32-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day32-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day32-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day32-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day32-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day32-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day32-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day32-table th,
+.day32-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day32-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+/* ── Цепочка: модель → сервис → интернет ──────────────────────────── */
+
+.day32-chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+}
+
+.day32-chain li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.day32-chain li.is-ok {
+  border-left-color: var(--ok);
+}
+
+.day32-chain li.is-bad {
+  border-left-color: var(--error);
+}
+
+.day32-chain__step {
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day32-chain strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day32-chain small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day32-chain a {
+  color: var(--text-bright);
+}
+
+/* ── День 32: пайплайн, запуски, ревью ─────────────────────────────── */
+
+.day32-panel {
+  margin-top: 14px;
+}
+
+.day32-panel a.day32-panel__meta {
+  color: var(--accent);
+}
+
+.day32-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+.day32-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.day32-link:hover {
+  color: var(--accent);
+}
+
+.day32-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day32-label {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day32-label .day32-link {
+  margin-left: 8px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.day32-note,
+.day32-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.day32-pipe {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding: 12px 16px 14px;
+}
+
+.day32-fold summary {
+  color: var(--muted-bright);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.day32-fold summary::-webkit-details-marker {
+  display: none;
+}
+
+.day32-fold summary::before {
+  content: "[+] ";
+  white-space: pre;
+}
+
+.day32-fold[open] > summary::before {
+  content: "[−] ";
+}
+
+.day32-fold[hidden] {
+  display: none;
+}
+
+.day32-pre {
+  max-height: 420px;
+  margin: 8px 0 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 10px 12px;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.day32-runs__list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.day32-runs__list li {
+  border-left: 2px solid var(--line-strong);
+  padding: 2px 10px;
+  color: var(--muted-bright);
+}
+
+.day32-runs__list li.is-ok { border-left-color: var(--ok); }
+.day32-runs__list li.is-bad { border-left-color: var(--error); }
+.day32-runs__list li.is-wait { border-left-color: var(--accent); }
+
+.day32-runs__list li.is-ok b { color: var(--ok); font-weight: 500; }
+.day32-runs__list li.is-bad b { color: var(--error); font-weight: 500; }
+.day32-runs__list li.is-wait b { color: var(--accent); font-weight: 500; }
+
+.day32-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  padding: 12px 16px;
+  color: var(--muted-bright);
+  font-size: 12px;
+}
+
+.day32-form select {
+  margin-left: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 5px 8px;
+  color: var(--text-bright);
+  font: inherit;
+}
+
+.day32-arrow {
+  color: var(--accent);
+}
+
+.day32-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.day32-target label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.day32-target input {
+  accent-color: var(--accent);
+}
+
+.day32-target label:has(input:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.day32-result {
+  display: grid;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-deep);
+  padding: 14px 16px;
+}
+
+.day32-result[hidden],
+.day32-error[hidden] {
+  display: none;
+}
+
+.day32-step {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.day32-files,
+.day32-sources,
+.day32-queries {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.day32-files li,
+.day32-sources li {
+  padding: 1px 0;
+  color: var(--text);
+}
+
+.day32-files li.is-skipped {
+  color: var(--muted);
+}
+
+.day32-files em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.day32-state {
+  display: inline-block;
+  min-width: 9ch;
+  color: var(--accent);
+}
+
+.day32-add { color: var(--ok); }
+.day32-del { color: var(--error); }
+
+.day32-sources li {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 8px;
+  color: var(--muted-bright);
+}
+
+.day32-sources li.is-doc b {
+  color: var(--info);
+}
+
+.day32-sources li.is-used {
+  border-left-color: var(--ok);
+  color: var(--text-bright);
+}
+
+.day32-queries code {
+  white-space: normal;
+}
+
+.day32-summary {
+  margin: 0;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  color: var(--text-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day32-section h4 {
+  margin: 6px 0 6px;
+  color: var(--muted-bright);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day32-section ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day32-item {
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--muted);
+  background: var(--surface);
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.day32-item.is-high { border-left-color: var(--error); }
+.day32-item.is-medium { border-left-color: var(--accent); }
+
+.day32-item p {
+  margin: 0 0 3px;
+  color: var(--muted-bright);
+}
+
+.day32-item p b {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.day32-item__title {
+  color: var(--text-bright) !important;
+  font-weight: 500;
+}
+
+.day32-item__title span {
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day32-item.is-high .day32-item__title span { color: var(--error); }
+.day32-item.is-medium .day32-item__title span { color: var(--accent); }
+
+@media (max-width: 720px) {
+  .day32-chain {
+    grid-template-columns: 1fr;
+  }
+}

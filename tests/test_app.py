@@ -3689,6 +3689,29 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
+    def test_day_thirty_two_renders_the_code_review_homework(self):
+        response = self.client.get("/days/32/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 32.", html)
+        self.assertIn("Автоматизация ревью кода", html)
+        self.assertIn("Домашнее задание", html)
+        self.assertIn("Настройте пайплайн, в котором ассистент анализирует новый PR", html)
+        self.assertIn("получать diff и изменённые файлы", html)
+        self.assertIn("использовать RAG (документация + код)", html)
+        self.assertIn("пайплайн (например GitHub Action) запускается на PR", html)
+        self.assertIn("возвращает: потенциальные баги, архитектурные проблемы, рекомендации", html)
+        self.assertIn("Автоматическое AI-ревью кода", html)
+        self.assertIn("можно свою машинку прикрутить", html)
+        self.assertEqual(html.count('class="day32-rule"'), 4)
+        self.assertIn("css/day01.css", html)
+        self.assertIn("css/homework.css", html)
+        self.assertIn("css/day32.css", html)
+        self.assertIn('href="/days/32/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
     def test_day_thirty_one_renders_the_developer_assistant_homework(self):
         response = self.client.get("/days/31/")
         html = response.get_data(as_text=True)
