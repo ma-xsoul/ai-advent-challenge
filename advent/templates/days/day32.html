@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}День 32. Автоматизация ревью кода · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day32.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 32</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Pull request · RAG · AI review</span>
+    </div>
+    <h1>День 32.<br><span>Автоматизация ревью кода</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тридцать второго дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Настройте пайплайн, в котором ассистент анализирует новый PR.</p>
+      <p class="homework-brief__lead">Ассистент должен:</p>
+      <ul class="homework-brief__steps">
+        <li>получать diff и изменённые файлы</li>
+        <li>использовать RAG (документация + код)</li>
+        <li>выдавать текст ревью</li>
+      </ul>
+      <p class="homework-brief__lead">Минимальный результат:</p>
+      <ul class="homework-brief__steps">
+        <li>пайплайн (например GitHub Action) запускается на PR</li>
+        <li>ассистент получает diff</li>
+        <li>возвращает: потенциальные баги, архитектурные проблемы, рекомендации</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Автоматическое AI-ревью кода.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day32-lab" aria-labelledby="day32-lab-title">
+    <div class="day32-lab__intro">
+      <p class="day32-kicker">Практика</p>
+      <h2 id="day32-lab-title">Ревьюер, который приходит сам</h2>
+      <p>Вчерашний ассистент отвечал, когда его спрашивали. Сегодняшний срабатывает сам: открыли pull request — пайплайн забирает diff и изменённые файлы, ищет в документации и коде проекта, какие правила и соседние места задевает правка, и оставляет в PR ревью: что может сломаться, что нарушает устройство проекта и что стоит поправить.</p>
+    </div>
+
+    <blockquote class="day32-curator">
+      <p>Ну в целом уже ответили, можно свою машинку прикрутить.</p>
+      <p>Опять же не обязательно делать через GitHub Actions, это скорее как пример.</p>
+      <cite>Алексей Гладков, 13.10 — на вопрос, где брать эмбеддинги для RAG, если в раннере GitHub Actions нет Ollama</cite>
+    </blockquote>
+
+    <ol class="day32-rules">
+      <li class="day32-rule">
+        <span class="day32-rule__rank">01</span>
+        <h3>Пайплайн на PR</h3>
+        <p>Workflow GitHub Actions запускается сам, когда PR открыли или дополнили новыми коммитами. Руками ничего нажимать не нужно.</p>
+        <p class="day32-rule__formula">pull_request → workflow</p>
+      </li>
+      <li class="day32-rule">
+        <span class="day32-rule__rank">02</span>
+        <h3>Diff и файлы</h3>
+        <p>Ассистент получает diff ветки относительно базы и изменённые файлы — чтобы видеть не только строки правки, но и то, что вокруг них.</p>
+        <p class="day32-rule__formula">git diff base...head</p>
+      </li>
+      <li class="day32-rule">
+        <span class="day32-rule__rank">03</span>
+        <h3>RAG: документация и код</h3>
+        <p>По изменённым местам ищутся правила проекта из README и docs и связанный код — ревью опирается на то, как здесь принято, а не на общие советы.</p>
+        <p class="day32-rule__formula">diff → поиск → куски</p>
+      </li>
+      <li class="day32-rule">
+        <span class="day32-rule__rank">04</span>
+        <h3>Текст ревью</h3>
+        <p>Три раздела со ссылками на файлы и строки: потенциальные баги, архитектурные проблемы, рекомендации. Ревью приходит комментарием в PR.</p>
+        <p class="day32-rule__formula">баги · архитектура · рекомендации</p>
+      </li>
+    </ol>
+
+    <section class="day32-panel" aria-labelledby="day32-pipe-title">
+      <header class="day32-panel__head">
+        <h3 id="day32-pipe-title">Пайплайн · что происходит на каждый PR</h3>
+        {% if repo %}<a class="day32-panel__meta" href="https://github.com/{{ repo }}/pulls" target="_blank" rel="noopener">{{ repo }} · pull requests ↗</a>{% endif %}
+      </header>
+      <ol class="day32-chain">
+        <li class="is-ok">
+          <span class="day32-chain__step">1 · GitHub Actions</span>
+          <strong>on: pull_request</strong>
+          <small>открыли PR или дописали коммит — запуск сам; checkout со всей историей</small>
+        </li>
+        <li class="is-ok">
+          <span class="day32-chain__step">2 · ревьюер</span>
+          <strong>scripts/ai_review.py</strong>
+          <small>diff base...head и файлы → поиск по словам в docs и коде → {{ model }}</small>
+        </li>
+        <li class="is-ok">
+          <span class="day32-chain__step">3 · результат</span>
+          <strong>комментарий в PR</strong>
+          <small>баги · архитектура · рекомендации; новый коммит обновляет тот же комментарий</small>
+        </li>
+      </ol>
+      <div class="day32-pipe">
+        <details class="day32-fold">
+          <summary>{{ workflow_path }}{% if not workflow %} · файла нет{% endif %}</summary>
+          {% if workflow %}<pre class="day32-pre">{{ workflow }}</pre>{% endif %}
+        </details>
+        <p class="day32-note">Секрет <code>DEEPSEEK_API_KEY</code> — в Settings → Secrets and variables → Actions. В раннере GitHub нет Ollama, поэтому RAG там ищет по словам (BM25); свой мак раннером не делаем — репозиторий публичный, и PR из чужого форка выполнил бы код на маке.</p>
+        <div class="day32-runs">
+          <p class="day32-label">Последние запуски в GitHub <button class="day32-link" type="button" data-runs-refresh>обновить</button></p>
+          <ol class="day32-runs__list" data-runs><li class="day32-muted">загружаем…</li></ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="day32-panel" aria-labelledby="day32-run-title">
+      <header class="day32-panel__head">
+        <h3 id="day32-run-title">Ревью ветки · тот же ревьюер здесь</h3>
+        <span class="day32-panel__meta">diff head относительно base, как в PR</span>
+      </header>
+      <form class="day32-form" data-review-form>
+        <label>head <select name="head">{% for name in branches %}<option{% if name == head %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+        <span class="day32-arrow" aria-hidden="true">→</span>
+        <label>base <select name="base">{% for name in branches %}<option{% if name == base %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+        <fieldset class="day32-target">
+          <legend class="sr-only">Поиск</legend>
+          <label><input type="radio" name="retriever" value="lexical" checked> по словам, как в GitHub</label>
+          <label><input type="radio" name="retriever" value="vector" {% if not vector_ready %}disabled{% endif %}> векторный · bge-m3{% if not vector_ready %} (нет индекса дня 31){% endif %}</label>
+        </fieldset>
+        <button class="day32-btn day32-btn--go" type="submit">[▶] Ревью</button>
+      </form>
+      <p class="day32-error" data-error role="alert" hidden></p>
+      <div class="day32-result" data-result hidden>
+        <div class="day32-step" data-step="diff">
+          <p class="day32-label">1 · diff</p>
+          <div data-diff></div>
+        </div>
+        <div class="day32-step" data-step="rag">
+          <p class="day32-label">2 · RAG</p>
+          <div data-rag><p class="day32-muted">ждём diff…</p></div>
+        </div>
+        <div class="day32-step" data-step="review">
+          <p class="day32-label">3 · ревью</p>
+          <div data-review><p class="day32-muted">ждём…</p></div>
+        </div>
+        <details class="day32-fold" data-markdown-wrap hidden>
+          <summary>комментарий для PR · markdown <button class="day32-link" type="button" data-copy>копировать</button></summary>
+          <pre class="day32-pre" data-markdown></pre>
+        </details>
+      </div>
+    </section>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/day32.js') }}"></script>
+{% endblock %}

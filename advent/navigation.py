@@ -259,6 +259,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=32,
+        title="Автоматизация ревью кода",
+        description="AI-ревью каждого PR",
+        endpoint="day32.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 
