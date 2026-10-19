@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}День 35. Реальная задача · AI Advent{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day01.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/homework.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/day35.css') }}">
+{% endblock %}
+
+{% block content %}
+  <header class="day-hero">
+    <div class="day-hero__eyebrow">
+      <span class="day-pill">Day 35</span>
+      <span class="eyebrow-separator" aria-hidden="true"></span>
+      <span>Real task · Course tutor</span>
+    </div>
+    <h1>День 35.<br><span>Реальная задача: конспект и тренажёр курса</span></h1>
+
+    <details class="homework-brief" aria-label="Домашнее задание тридцать пятого дня">
+      <summary class="homework-brief__title">
+        <h2>Домашнее задание</h2>
+      </summary>
+      <p class="homework-brief__lead">Придумайте реальную задачу, которую вы действительно хотите автоматизировать.</p>
+      <p class="homework-brief__lead">Примеры:</p>
+      <ul class="homework-brief__steps">
+        <li>выложить приложение в стор</li>
+        <li>подготовить релиз</li>
+        <li>завести инфраструктуру</li>
+        <li>автоматизировать рабочий процесс</li>
+      </ul>
+      <p class="homework-brief__lead">Сделайте приложение или сервис, который:</p>
+      <ul class="homework-brief__steps">
+        <li>использует AI</li>
+        <li>работает в реальном окружении</li>
+        <li>может быть не полностью рабочим (ключи / доступы)</li>
+      </ul>
+      <p class="homework-brief__lead">Важно:</p>
+      <ul class="homework-brief__steps">
+        <li>опишите, какую задачу вы решаете</li>
+        <li>покажите, как AI участвует в процессе</li>
+      </ul>
+      <dl class="homework-brief__details">
+        <div>
+          <dt>Ожидаемый результат</dt>
+          <dd>Реальное AI-приложение или пайплайн под конкретную задачу.</dd>
+        </div>
+        <div>
+          <dt>Формат</dt>
+          <dd>Видео + код. При сдаче укажите, какую задачу вы решали.</dd>
+        </div>
+      </dl>
+    </details>
+
+    <hr class="homework-divider">
+  </header>
+
+  <section class="day35-lab" aria-labelledby="day35-lab-title">
+    <div class="day35-lab__intro">
+      <p class="day35-kicker">Какую задачу решаю</p>
+      <h2 id="day35-lab-title">Вернуться к любому дню курса — и не утонуть</h2>
+      <p>За 35 дней накопились сотни сообщений в чате, 35 веток кода и длинные разговоры с ассистентом, где я переспрашивал «чему меня учил этот урок». Через месяц из этого ничего не найти. AI превращает этот архив в учебник: сам пишет конспект каждого дня по всем источникам, отвечает на вопросы со ссылками на первоисточник и гоняет меня по вопросам на понимание — а не на память.</p>
+    </div>
+
+    <blockquote class="day35-curator">
+      <p>Это абсолютно творческое задание. Из серии «придумайте что-нибудь».</p>
+      <p>Ну то есть это задача из AI PDLC, а не SDLC.</p>
+      <p>Реализация может быть очень простая, главное идея. Потом доточите.</p>
+      <cite>Алексей Гладков, 16.10 — каким должно быть последнее задание</cite>
+    </blockquote>
+
+    <ol class="day35-rules">
+      <li class="day35-rule">
+        <span class="day35-rule__rank">01</span>
+        <h3>Источники</h3>
+        <p>Страницы дней и README из проекта, посты заданий и реплики куратора из чата, мои вопросы и ответы ассистента — день берётся из git-ветки разговора.</p>
+        <p class="day35-rule__formula">проект · чат · разговоры</p>
+      </li>
+      <li class="day35-rule">
+        <span class="day35-rule__rank">02</span>
+        <h3>Конспект</h3>
+        <p>AI сам пишет главу на каждый день: суть, главные идеи, что построено, что уточнял куратор. Глава пересобирается, только если её источники поменялись.</p>
+        <p class="day35-rule__formula">35 дней → 35 глав</p>
+      </li>
+      <li class="day35-rule">
+        <span class="day35-rule__rank">03</span>
+        <h3>Вопрос</h3>
+        <p>RAG по всем источникам: спросить по всему курсу или по одному дню — ответ со ссылками на страницу, чат или наш разговор.</p>
+        <p class="day35-rule__formula">вопрос → куски → ответ [n]</p>
+      </li>
+      <li class="day35-rule">
+        <span class="day35-rule__rank">04</span>
+        <h3>Тренажёр</h3>
+        <p>Вопрос на понимание, ответ своими словами, разбор: верно, частично или мимо — и чего не хватило. Счёт по дням копится.</p>
+        <p class="day35-rule__formula">вопрос → ответ → разбор</p>
+      </li>
+    </ol>
+
+    <section class="day35-panel" aria-labelledby="day35-course-title">
+      <header class="day35-panel__head">
+        <h3 id="day35-course-title">Курс · конспект по дням</h3>
+        <span class="day35-panel__meta" data-course-meta>{% if course.built_at %}собран {{ course.built_at[:16] | replace("T", " ") }} · источников {{ course.sources }} · {{ course.model }}{% else %}ещё не собран{% endif %}</span>
+        <button class="day35-btn day35-btn--go" type="button" data-build>{{ "Пересобрать" if days else "Собрать курс" }}</button>
+      </header>
+      <p class="day35-build" data-build-status hidden></p>
+      <div class="day35-book">
+        <nav class="day35-days" aria-label="Дни курса">
+          <ol data-days>
+            {% for item in days %}
+              <li><button type="button" class="day35-day{% if loop.first %} is-active{% endif %}" data-day="{{ item.day }}">
+                <b>{{ "%02d" | format(item.day) }}</b> <span>{{ item.title }}</span>
+                <em data-score="{{ item.day }}">{% if item.progress.answers %}{{ item.progress.correct }}/{{ item.progress.answers }}{% endif %}</em>
+              </button></li>
+            {% else %}
+              <li class="day35-muted">Нажмите «Собрать курс» — AI соберёт главы по всем источникам.</li>
+            {% endfor %}
+          </ol>
+        </nav>
+        <article class="day35-chapter" data-chapter>
+          <p class="day35-muted">Выберите день.</p>
+        </article>
+      </div>
+    </section>
+
+    <div class="day35-grid">
+      <section class="day35-panel" aria-labelledby="day35-ask-title">
+        <header class="day35-panel__head">
+          <h3 id="day35-ask-title">Спросить</h3>
+          <label class="day35-scope">по <select data-scope><option value="">всему курсу</option>{% for item in days %}<option value="{{ item.day }}">дню {{ item.day }}</option>{% endfor %}</select></label>
+        </header>
+        <form class="day35-form" data-ask-form>
+          <label class="sr-only" for="day35-question">Вопрос</label>
+          <textarea id="day35-question" rows="2" maxlength="1500" placeholder="Например: чем RAG отличается от MCP?"></textarea>
+          <button class="day35-btn day35-btn--go" type="submit">Спросить</button>
+        </form>
+        <div class="day35-answer" data-answer hidden></div>
+      </section>
+
+      <section class="day35-panel" aria-labelledby="day35-quiz-title">
+        <header class="day35-panel__head">
+          <h3 id="day35-quiz-title">Тренажёр</h3>
+          <span class="day35-actions"><button class="day35-link" type="button" data-quiz-day>по выбранному дню</button> <button class="day35-link" type="button" data-quiz-any>случайный по курсу</button></span>
+        </header>
+        <div class="day35-quiz" data-quiz>
+          <p class="day35-muted" data-quiz-question>Нажмите «случайный по курсу» или выберите день.</p>
+          <form class="day35-form" data-quiz-form hidden>
+            <label class="sr-only" for="day35-reply">Ваш ответ</label>
+            <textarea id="day35-reply" rows="3" maxlength="1500" placeholder="Ответьте своими словами"></textarea>
+            <button class="day35-btn day35-btn--go" type="submit">Проверить</button>
+          </form>
+          <div class="day35-verdict" data-verdict hidden></div>
+        </div>
+      </section>
+    </div>
+    <p class="day35-error" data-error role="alert" hidden></p>
+
+    <script id="day35-initial" type="application/json">{{ {"days": days, "kinds": kinds} | tojson }}</script>
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/markdown.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/day35.js') }}"></script>
+{% endblock %}

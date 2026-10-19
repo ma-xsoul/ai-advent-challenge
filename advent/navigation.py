@@ -283,6 +283,14 @@ DAYS = (
         status="Готово",
         visible=True,
     ),
+    AdventDay(
+        number=35,
+        title="Реальная задача",
+        description="Конспект и тренажёр курса",
+        endpoint="day35.index",
+        status="Готово",
+        visible=True,
+    ),
 )
 
 

@@ -41,6 +41,7 @@ from .days.day31.routes import bp as day31_blueprint
 from .days.day32.routes import bp as day32_blueprint
 from .days.day33.routes import bp as day33_blueprint
 from .days.day34.routes import bp as day34_blueprint
+from .days.day35.routes import bp as day35_blueprint
 from .agent import Agent, AgentConfig, AgentRegistry, JsonStore
 from .navigation import DAYS
 from .local import OllamaTransport
@@ -146,6 +147,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.register_blueprint(day32_blueprint)
     app.register_blueprint(day33_blueprint)
     app.register_blueprint(day34_blueprint)
+    app.register_blueprint(day35_blueprint)
 
     # Сохраняем старый адрес, чтобы существующие клиенты Day 1 не сломались.
     app.add_url_rule(

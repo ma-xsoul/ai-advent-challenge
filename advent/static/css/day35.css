@@ -1,0 +1,567 @@
+/* День 35: реальная задача — конспект и тренажёр курса. */
+
+.day35-lab {
+  margin-top: 36px;
+}
+
+.day35-lab__intro {
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.day35-kicker {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day35-lab__intro h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
+}
+
+.day35-lab__intro > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day35-lab code {
+  border: 1px solid var(--line-strong);
+  padding: 0 4px;
+  color: var(--accent);
+  font-size: 0.92em;
+}
+
+/* Уточнение куратора — оно сужает задание, поэтому стоит до правил. */
+.day35-curator {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-soft);
+  padding: 12px 18px;
+}
+
+.day35-curator p {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day35-curator p::before {
+  color: var(--accent);
+  content: "« ";
+}
+
+.day35-curator p::after {
+  color: var(--accent);
+  content: " »";
+}
+
+.day35-curator cite {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+}
+
+/* Четыре части дня — четыре карточки в ряд. */
+.day35-rules {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day35-rule {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 16px 18px;
+}
+
+.day35-rule__rank {
+  display: block;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.day35-rule h3 {
+  margin: 8px 0 6px;
+  color: var(--text-bright);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.day35-rule p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* Формула — как это выглядит в коде. */
+.day35-rule__formula {
+  margin-top: auto !important;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  color: var(--accent) !important;
+  font-size: 11.5px !important;
+  letter-spacing: 0.04em;
+}
+
+.day35-rule__formula::before {
+  content: "> ";
+}
+
+.day35-curator p + p {
+  margin-top: 6px;
+}
+
+@media (max-width: 1100px) {
+  .day35-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .day35-rules {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Практика: панели, кнопки, таблицы ──────────────────────────────── */
+
+.day35-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.day35-panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 9px 16px;
+}
+
+.day35-panel__head h3 {
+  margin: 0;
+  color: var(--muted-bright);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.day35-panel__meta {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day35-muted {
+  margin: 0;
+  color: var(--muted);
+}
+
+.day35-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 6px 11px;
+  color: var(--muted-bright);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--speed) var(--ease), border-color var(--speed) var(--ease), color var(--speed) var(--ease);
+}
+
+.day35-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-bright);
+}
+
+.day35-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.day35-error {
+  margin: 0 16px 12px;
+  border: 1px solid var(--error);
+  background: var(--error-soft);
+  padding: 10px 16px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+
+.day35-table-wrap {
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.day35-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.day35-table th,
+.day35-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.day35-table thead th {
+  color: var(--muted-bright);
+  font-weight: 500;
+}
+
+/* ── Цепочка: модель → сервис → интернет ──────────────────────────── */
+
+.day35-chain {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+}
+
+.day35-chain li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.day35-chain li.is-ok {
+  border-left-color: var(--ok);
+}
+
+.day35-chain li.is-bad {
+  border-left-color: var(--error);
+}
+
+.day35-chain__step {
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.day35-chain strong {
+  color: var(--text-bright);
+  font-weight: 500;
+}
+
+.day35-chain small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.day35-chain a {
+  color: var(--text-bright);
+}
+
+/* ── День 35: книга дней, вопрос, тренажёр ────────────────────────── */
+
+.day35-panel {
+  margin-top: 14px;
+}
+
+.day35-panel__head .day35-btn {
+  margin-left: auto;
+}
+
+.day35-btn--go {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.day35-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--muted-bright);
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.day35-link:hover {
+  color: var(--accent);
+}
+
+.day35-label {
+  margin: 10px 0 4px;
+  color: var(--accent);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.day35-lab .day35-muted {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day35-build {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.day35-build[hidden],
+.day35-answer[hidden],
+.day35-verdict[hidden],
+.day35-form[hidden],
+.day35-error[hidden] {
+  display: none;
+}
+
+.day35-book {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+}
+
+.day35-days {
+  max-height: 560px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  padding: 10px;
+}
+
+.day35-days ol {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day35-day {
+  display: grid;
+  grid-template-columns: 2.4ch minmax(0, 1fr) auto;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid transparent;
+  background: none;
+  padding: 5px 8px;
+  color: var(--muted-bright);
+  font-size: 12px;
+  text-align: left;
+}
+
+.day35-day:hover {
+  border-color: var(--line-strong);
+}
+
+.day35-day.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text-bright);
+}
+
+.day35-day b {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.day35-day em {
+  color: var(--ok);
+  font-style: normal;
+}
+
+.day35-chapter {
+  min-width: 0;
+  padding: 14px 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day35-chapter h4 {
+  margin: 2px 0 8px;
+  color: var(--text-bright);
+  font-size: 16px;
+}
+
+.day35-summary {
+  margin: 0;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  color: var(--text);
+}
+
+.day35-chapter ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+}
+
+.day35-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.day35-chapter__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.day35-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.day35-scope select {
+  margin-left: 4px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 3px 6px;
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.day35-scope {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.day35-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.day35-form textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-deep);
+  padding: 8px 10px;
+  color: var(--text-bright);
+  font-size: 12.5px;
+}
+
+.day35-form textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.day35-answer,
+.day35-verdict {
+  border-top: 1px solid var(--line);
+  padding: 12px 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.day35-answer .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+
+.day35-sources {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11.5px;
+}
+
+.day35-sources li {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 8px;
+  color: var(--muted);
+}
+
+.day35-sources li.is-cited {
+  border-left-color: var(--ok);
+  color: var(--text);
+}
+
+.day35-quiz [data-quiz-question] {
+  margin: 0;
+  padding: 12px 16px 0;
+  color: var(--text-bright);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.day35-quiz .day35-kicker {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.day35-badge {
+  display: inline-block;
+  margin: 0 0 6px;
+  border: 1px solid currentColor;
+  padding: 1px 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.day35-badge--correct { color: var(--ok); }
+.day35-badge--partial { color: var(--accent); }
+.day35-badge--wrong { color: var(--error); }
+
+.day35-verdict p {
+  margin: 0 0 6px;
+}
+
+.day35-verdict summary {
+  color: var(--muted-bright);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.day35-error {
+  margin-top: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .day35-book,
+  .day35-grid,
+  .day35-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .day35-days {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}

@@ -37,6 +37,8 @@ class AdventAppTestCase(unittest.TestCase):
             "DAY29_RUNS_PATH": str(folder / "day29" / "runs.json"),
             "DAY30_KEYS_PATH": str(folder / "day30" / "keys.json"),
             "DAY30_HTTP": OfflineHttp(),
+            "DAY35_DATA": str(folder / "day35"),
+            "DAY35_TALKS": [],
             "DAY18_DIR": str(folder / "day18"),
             "DAY19_REPORTS_DIR": str(folder / "day19"),
             "DAY20_REPORTS_DIR": str(folder / "day20"),
@@ -3686,6 +3688,26 @@ class AdventAppTestCase(unittest.TestCase):
         self.assertIn("css/homework.css", html)
         self.assertIn("css/day29.css", html)
         self.assertIn('href="/days/29/"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertIn('class="homework-divider"', html)
+
+    def test_day_thirty_five_renders_the_real_task_homework(self):
+        response = self.client.get("/days/35/")
+        html = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("День 35.", html)
+        self.assertIn("Реальная задача", html)
+        self.assertIn("Придумайте реальную задачу, которую вы действительно хотите автоматизировать", html)
+        self.assertIn("может быть не полностью рабочим (ключи / доступы)", html)
+        self.assertIn("покажите, как AI участвует в процессе", html)
+        self.assertIn("Реальное AI-приложение или пайплайн под конкретную задачу", html)
+        self.assertIn("Какую задачу решаю", html)
+        self.assertIn("Реализация может быть очень простая, главное идея", html)
+        self.assertEqual(html.count('class="day35-rule"'), 4)
+        self.assertIn("Собрать курс", html)
+        self.assertIn("css/day35.css", html)
+        self.assertIn('href="/days/35/"', html)
         self.assertEqual(html.count('aria-current="page"'), 1)
         self.assertIn('class="homework-divider"', html)
 
